@@ -72,10 +72,9 @@
  *            構成（ComMNmVariant=FULL 相当）では中身は NOP のため、この周期
  *            自体に現状意味はない（詳細は ComM.c 参照）。BswM のタスク
  *            有効/無効制御（BswM_Cfg.h の BSWM_TASK_MASK_*）には含めていない
- *            （Task 19: App_GptDemo_Run と同じ扱い。NOP である以上、RUN/
- *            SHUTDOWN いずれの状態でも動いていて実害が無いため、既存の
- *            BSWM_TASK_MASK_ALL 等のビットマスクを手計算で拡張するリスクを
- *            負う理由がない）。
+ *            （App_GptDemo_Run と同じ扱い。NOP である以上、RUN/
+ *            SHUTDOWN いずれの状態でも動いていて実害が無いため、制御対象に
+ *            加える理由がない。BswM のタスクの一覧とマスクは BswM.json から生成される）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -132,31 +131,35 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 3  */ { Rte_ScheduleWarningIndicator,  500U },  /* 500 ms : 警告灯 Runnable */
     /* Task 4  */ { CanSM_MainFunction,             10U },  /* 10 ms : BusOff 回復タイマ監視 */
     /* Task 5  */ { Com_MainFunctionRx,            100U },  /* 100 ms : COM 受信デッドライン監視 */
+    /* Com_MainFunctionRouteSignals は、Com_MainFunctionRx の直後、Com_MainFunctionTx の前へ置く
+     * （Com_RxIndication() が立てた保留を処理し、転送先の TX シグナルの送信要求を、
+     * 同じティックの Com_MainFunctionTx() に拾わせるため。SecOC_MainFunctionTx も同じ理由で後ろに続く）。 */
+    /* Task 6  */ { Com_MainFunctionRouteSignals,  100U },  /* 100 ms : Signal Gateway の転送 */
     /* 2026-08、単体の Com_MainFunction は実仕様に存在しないため Rx/Tx へ分割した。
      * Com_MainFunctionRx の直後へ挿入したのは、SecOC_MainFunctionTx が同一パス内で Com のディスパッチ結果を
      * 同じティックで拾えるようにするため（末尾に追加すると 1 ティック分の遅延が生じる）。 */
-    /* Task 6  */ { Com_MainFunctionTx,            100U },  /* 100 ms : TX送信スケジューリング・送信確認監視 */
-    /* Task 7  */ { IoHwAb_MainFunction,            10U },  /* 10 ms : ボタンデバウンスサンプリング */
-    /* Task 8  */ { WdgM_MainFunction,            1000U },  /* 1000 ms : HW ウォッチドッグのリフレッシュ + Alive/Logical/Deadline 判定（6 回に 1 回） */
-    /* Task 9  */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
-    /* Task 10 */ { FiM_MainFunction,              100U },  /* 100 ms : 機能抑止状態の再評価 */
-    /* Task 11 */ { CanNm_MainFunction,           1000U },  /* 1000 ms : NM フレーム送信 */
-    /* Task 12 */ { NvM_MainFunction,               10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 */
-    /* Task 13 */ { Can_MainFunction_Write,          1U },  /* 1 ms : 保留中 TX 確認をドレイン */
-    /* Task 14 */ { Can_MainFunction_BusOff,         1U },  /* 1 ms : Bus-Off ポーリング */
-    /* Task 15 */ { Can_MainFunction_Wakeup,         1U },  /* 1 ms : ウェイクアップペンディングのドレイン */
-    /* Task 16 */ { SecOC_MainFunctionTx,          100U },  /* 100 ms : TX Secured I-PDU の Freshness/MAC 計算・送信 */
-    /* Task 17 */ { MemIf_MainFunction,             10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
-    /* Task 18 */ { App_GptDemo_Run,              2000U },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
+    /* Task 7  */ { Com_MainFunctionTx,            100U },  /* 100 ms : TX送信スケジューリング・送信確認監視 */
+    /* Task 8  */ { IoHwAb_MainFunction,            10U },  /* 10 ms : ボタンデバウンスサンプリング */
+    /* Task 9  */ { WdgM_MainFunction,            1000U },  /* 1000 ms : HW ウォッチドッグのリフレッシュ + Alive/Logical/Deadline 判定（6 回に 1 回） */
+    /* Task 10 */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
+    /* Task 11 */ { FiM_MainFunction,              100U },  /* 100 ms : 機能抑止状態の再評価 */
+    /* Task 12 */ { CanNm_MainFunction,           1000U },  /* 1000 ms : NM フレーム送信 */
+    /* Task 13 */ { NvM_MainFunction,               10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 */
+    /* Task 14 */ { Can_MainFunction_Write,          1U },  /* 1 ms : 保留中 TX 確認をドレイン */
+    /* Task 15 */ { Can_MainFunction_BusOff,         1U },  /* 1 ms : Bus-Off ポーリング */
+    /* Task 16 */ { Can_MainFunction_Wakeup,         1U },  /* 1 ms : ウェイクアップペンディングのドレイン */
+    /* Task 17 */ { SecOC_MainFunctionTx,          100U },  /* 100 ms : TX Secured I-PDU の Freshness/MAC 計算・送信 */
+    /* Task 18 */ { MemIf_MainFunction,             10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 (Fee 物理バイト書き込み) */
+    /* Task 19 */ { App_GptDemo_Run,              2000U },  /* 2000 ms : Gpt 実 HW タイマ通知カウンタのログ出力 (動作確認用) */
     /* 現状 NOP（ComMNmVariant=FULL では [SWS_ComM_00888] によりヒステリシスタイマ不要。ComM.c 参照）。 */
-    /* Task 19 */ { ComM_MainFunction,             100U },  /* 100 ms : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
+    /* Task 20 */ { ComM_MainFunction,             100U },  /* 100 ms : 現状 NOP（SWS_ComM_00888、ComM.c 参照） */
     /* 現状 NOP（SecOC_RxIndication() が受信の都度 Csm_MacVerify() を同期実行するため、保留中の RX ジョブが
      * 存在しない。SecOC.c 参照）。ComM_MainFunction と同じく、「宣言されたが一度もスケジューラに登録されない」
      * ギャップを避けるため配線のみ行う。 */
-    /* Task 20 */ { SecOC_MainFunctionRx,          100U },  /* 100 ms : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
-    /* Task 21 */ { App_Test_Run,                 1000U },  /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
-    /* Task 22 */ { CanTSyn_MainFunction,          100U },  /* 100 ms : 時刻同期メッセージ（SYNC/FUP）の周期送信と送信完了待ちの監視 */
-    /* Task 23 */ { StbM_MainFunction,             100U }   /* 100 ms : 同期時間ベースの同期喪失タイムアウトの監視 */
+    /* Task 21 */ { SecOC_MainFunctionRx,          100U },  /* 100 ms : 現状 NOP（RX 検証は同期実行済み、SecOC.c 参照） */
+    /* Task 22 */ { App_Test_Run,                 1000U },  /* 1000 ms : テスト用メッセージ TestMsg のカウンタ更新（信号追加の練習用） */
+    /* Task 23 */ { CanTSyn_MainFunction,          100U },  /* 100 ms : 時刻同期メッセージ（SYNC/FUP）の周期送信と送信完了待ちの監視 */
+    /* Task 24 */ { StbM_MainFunction,             100U }   /* 100 ms : 同期時間ベースの同期喪失タイムアウトの監視 */
 };
 /* @@GEN-END os-tasks */
 

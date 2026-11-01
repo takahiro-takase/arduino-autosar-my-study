@@ -145,6 +145,12 @@ static uint8 Com_TxEnabled = 1U;
 static uint8 Com_RxIPduStarted[COM_RX_IPDU_MAX];
 static uint8 Com_TxIPduStarted[COM_TX_IPDU_MAX];
 
+/* Signal Gateway の保留フラグ（[SWS_Com_00359]）。Com_RxIndication() が RX I-PDU の受信ごとに 1 を立て、
+ * 実際の転送は Com_MainFunctionRouteSignals() が行う（受信割り込みから重い処理を切り離すため）。
+ * I-PDU ごとに 1 つなので、MainFunction が回る前に同じ I-PDU を複数回受信しても、転送は 1 回で、
+ * そのときの RX バッファの最新値が転送される。Com_Init() で 0、Com_IpduGroupStop() で I-PDU ごとに 0。 */
+static uint8 Com_RxGwPending[COM_RX_IPDU_MAX];
+
 /* Com_EnableReceptionDM()/Com_DisableReceptionDM()（SRS_Com_00192、2026-08
  * 追加）用。Com_RxIPduStarted とは独立した軸で、I-PDU Group の起動/停止
  * （送受信処理そのもの）とは別に、受信デッドライン監視の評価だけを
@@ -385,6 +391,7 @@ void Com_Init(const Com_ConfigType* config)
                                      * 起動済みにしておき、下の実ループで
                                      * I-PDU Group 所属分のみ上書きする */
         Com_RxIPduIsGroup[i] = 0U;  /* 同上、下の実ループで実際の値を設定する */
+        Com_RxGwPending[i]   = 0U;  /* Signal Gateway の保留なし */
         Com_RxDmEnabled[i]   = 1U;  /* デッドライン監視は既定で有効
                                      * （Com_DisableReceptionDM() を明示的に
                                      * 呼ぶまで無効化されない） */
@@ -516,6 +523,7 @@ void Com_DeInit(void)
     for (uint8 i = 0U; i < COM_RX_IPDU_MAX; i++)
     {
         Com_RxIPduStarted[i] = 0U;
+        Com_RxGwPending[i]   = 0U;
     }
     for (uint8 i = 0U; i < COM_TX_IPDU_MAX; i++)
     {
@@ -736,6 +744,7 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
          * 無効化する。Com_RxTimedOut は意図的にクリアしない（Started==0 の間
          * Com_MainFunctionRx() 側の評価自体を止めるため、値は参照されない）。 */
         Com_RxIPduStarted[ipdu->IPduId] = 0U;
+        Com_RxGwPending[ipdu->IPduId]   = 0U;   /* 停止した I-PDU の、未処理の転送は捨てる */
 
         DET_LOGI(TAG, "IpduGroupStop grp=%u iPdu=%u(RX)",
                  (unsigned)IpduGroupId, (unsigned)ipdu->IPduId);
@@ -2633,9 +2642,13 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         }
 
         /* Signal Gateway（[SWS_Com_00872]: I-PDU callout の次の処理段階）。
-         * SWC/Rte を一切介さず、この I-PDU に紐づくゲートウェイ設定があれば
-         * 直接 TX シグナルへ転送する。 */
-        Com_GatewayRoute(ipdu->IPduId);
+         * 転送そのものは、受信割り込みから切り離して Com_MainFunctionRouteSignals() で行う
+         * （[SWS_Com_00359]）ので、ここでは保留を立てるだけにする。ゲートウェイの設定が 1 つも無いときは、
+         * 転送する先がないので、立てない。 */
+        if (Com_ConfigPtr->GwMappingCount != 0U)
+        {
+            Com_RxGwPending[ipdu->IPduId] = 1U;
+        }
 
         return;
     }
@@ -3219,7 +3232,56 @@ void Com_MainFunctionTx(void)
  * Com_MainFunctionRouteSignals
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Signal Gateway の転送を実行する（受信割り込みからの切り離し）。
+ *
+ * \details Com_RxIndication() が保留を立てた RX I-PDU（Com_RxGwPending[]）ごとに、保留を下ろして
+ *          Com_GatewayRoute() を呼び、RX バッファの最新値を、紐づく TX シグナルへ転送する
+ *          （[SWS_Com_00359]）。受信した I-PDU を、I-PDU の ID の昇順に処理する。
+ *
+ *          転送先の TX シグナルは、Com_SendSignal() で書く（SWC が直接呼ぶのと同じ経路）。TX I-PDU の
+ *          送信は、Com_SendSignal() が TX の保留（Com_TxPending[]）を立てるだけで、実際の
+ *          PduR_ComTransmit() は Com_MainFunctionTx() が行う。そのため、本関数が I-PDU を送信することは
+ *          なく、「1 回の呼び出しで、I-PDU を送るのは多くても 1 回」（[SWS_Com_00539]）は、自然に満たされる。
+ *          TRIGGERED のシグナルを含む TX I-PDU の送信は、Com_MainFunctionTx() で行う（[SWS_Com_00466] が
+ *          許す 2 通りのうちの 1 つ）。
+ *
+ *          保留は I-PDU ごとに 1 つなので、周期関数が回る前に同じ I-PDU を複数回受信すると、途中のフレームの値は
+ *          転送されず、最後の値だけが転送される（転送の遅れは、最大で本関数の周期 100 ms）。BswM が本タスクを
+ *          止めている間（SHUTDOWN など）は、保留が残り、タスクの再開後に転送される。
+ *
+ *          簡略化: [SWS_Com_00466] の 3 段階（1. シグナルのコピー、2. TMC の評価、3. TMS の評価）は、
+ *          シグナルごとに Com_SendSignal() の内部で行う（シグナルを 1 つずつ書くたびに、TMC と TMS を評価する）。
+ *          本関数は、Os のタスクとして、Com_MainFunctionRx() の直後、Com_MainFunctionTx() の前に置く
+ *          （転送の結果を、同じティックの Com_MainFunctionTx() が拾えるように。Os.json 参照）。
+ *
+ * \pre        Com_Init() が正常に完了していること。完了していないときは、何もせずに戻る
+ *             （[SWS_Com_00666]。DET へも報告しない）。
+ *
+ * \AUTOSARReq     {SWS_Com_00400, SWS_Com_00666, SWS_Com_00359, SWS_Com_00466, SWS_Com_00539}
+ * \ServiceID      {0x1A}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Com_MainFunctionRouteSignals(void)
+{
+    if (Com_ConfigPtr == NULL)
+    {
+        return;
+    }
+
+    for (uint8 i = 0U; i < Com_ConfigPtr->RxIPduCount; i++)
+    {
+        const Com_IPduIdType id = Com_ConfigPtr->RxIPdus[i].IPduId;
+        if (Com_RxGwPending[id] == 0U)
+        {
+            continue;
+        }
+
+        Com_RxGwPending[id] = 0U;
+        Com_GatewayRoute(id);
+    }
+}
 
 /* ======================================================================
  * Internal Functions

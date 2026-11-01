@@ -34,6 +34,10 @@
       "symbol": "COM_MAIN"
     },
     {
+      "task": "Com_MainFunctionRouteSignals",
+      "symbol": "COM_ROUTE_SIGNALS"
+    },
+    {
       "task": "Com_MainFunctionTx",
       "symbol": "COM_MAIN_TX",
       "note": [

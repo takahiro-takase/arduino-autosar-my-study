@@ -281,7 +281,7 @@ def gateway_table(cfg, ctx):
         "/* -----------------------------------------------------------------------",
         " * Signal Gateway ルーティングテーブル",
         " * DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping]",
-        " * Com_GatewayRoute() が RX I-PDU 受信の都度、この表を走査して転送する。",
+        " * Com_MainFunctionRouteSignals() が、RX I-PDU を受信した後の周期処理で、この表を走査して転送する。",
         " * 詳細は Com_Types.h の Com_GwMappingType コメント参照。",
         " * ----------------------------------------------------------------------- */",
         "static const Com_GwMappingType Com_GwMappingData[COM_GW_MAPPING_COUNT] = {",

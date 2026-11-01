@@ -42,6 +42,17 @@
       "summary": "COM 受信デッドライン監視"
     },
     {
+      "function": "Com_MainFunctionRouteSignals",
+      "periodMs": 100,
+      "header": "Com.h",
+      "summary": "Signal Gateway の転送",
+      "note": [
+        "Com_MainFunctionRouteSignals は、Com_MainFunctionRx の直後、Com_MainFunctionTx の前へ置く",
+        "（Com_RxIndication() が立てた保留を処理し、転送先の TX シグナルの送信要求を、",
+        "同じティックの Com_MainFunctionTx() に拾わせるため。SecOC_MainFunctionTx も同じ理由で後ろに続く）。"
+      ]
+    },
+    {
       "function": "Com_MainFunctionTx",
       "periodMs": 100,
       "header": "Com.h",
