@@ -314,7 +314,10 @@ EcuM_Init → ComM_RequestComMode(FULL_COM)   ← EcuM が ComM へ要求（上�
               └→ CanSM_RequestComMode(FULL_COM)（→ CanIf_SetControllerMode(CAN_CS_STARTED)）
                    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
                         ├→ EcuM_RequestRUN(ECUM_USER_COMM)
-                        └→ Nm_NetworkRequest() → CanNm_NetworkRequest()
+                        └→ Nm_NetworkRequest() → CanNm_NetworkRequest()   ← ユーザが FULL_COM を要求しているとき
+                           （起床のように、誰も要求していないときは Nm_PassiveStartUp() → CanNm_PassiveStartUp()。
+                             CanNm は Repeat Message → Ready Sleep へ進み、ユーザが後から FULL_COM を要求したら
+                             ComM が Nm_NetworkRequest() を呼ぶ）
 
 【Bus-Off 検出時（回復試行の前、SWS_CanSM_00521）】
 CanIf_ControllerBusOff → CanSM_ControllerBusOff

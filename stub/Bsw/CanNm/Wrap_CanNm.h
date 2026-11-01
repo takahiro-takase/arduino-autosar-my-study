@@ -7,9 +7,9 @@
  *          （「wrap 対象の関数が定義されている元の src ファイル 1 つにつき
  *          1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          `CanNm.h` が宣言する AUTOSAR IF 全14関数を wrap 対象とする。
+ *          `CanNm.h` が宣言する AUTOSAR IF 全15関数を wrap 対象とする。
  *
- *          戻り値を持つ8関数（NetworkRequest/NetworkRelease/
+ *          戻り値を持つ9関数（PassiveStartUp/NetworkRequest/NetworkRelease/
  *          RepeatMessageRequest/DisableCommunication/EnableCommunication/
  *          GetLocalNodeIdentifier/GetNodeIdentifier/GetState）には
  *          「指定した呼び出し回数以降は常に失敗を返す」という回数閾値方式の
@@ -56,10 +56,11 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（AUTOSAR IF 全14関数共通）
+ * 呼び出し回数（AUTOSAR IF 全15関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_CanNm_Init;
 extern uint32 CallCount_CanNm_DeInit;
+extern uint32 CallCount_CanNm_PassiveStartUp;
 extern uint32 CallCount_CanNm_NetworkRequest;
 extern uint32 CallCount_CanNm_NetworkRelease;
 extern uint32 CallCount_CanNm_DisableCommunication;
@@ -74,12 +75,13 @@ extern uint32 CallCount_CanNm_RxIndication;
 extern uint32 CallCount_CanNm_MainFunction;
 
 /* ----------------------------------------------------------------------
- * 回数閾値故障注入（戻り値を持つ8関数のみ）
+ * 回数閾値故障注入（戻り値を持つ9関数のみ）
  * ---------------------------------------------------------------------- */
 /** `WRAP_CANNM_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に対応する
  *  `__real_CanNm_Xxx()` へパススルー。それ以外の値を設定すると、対応する
  *  `CallCount_CanNm_Xxx` がこの値に達した回から（以降ずっと）
  *  対応する `ForcedReturn_CanNm_Xxx` を返す。 */
+extern uint32 FailFromCallCount_CanNm_PassiveStartUp;
 extern uint32 FailFromCallCount_CanNm_NetworkRequest;
 extern uint32 FailFromCallCount_CanNm_NetworkRelease;
 extern uint32 FailFromCallCount_CanNm_DisableCommunication;
@@ -90,8 +92,9 @@ extern uint32 FailFromCallCount_CanNm_RepeatMessageRequest;
 extern uint32 FailFromCallCount_CanNm_GetState;
 
 /* ----------------------------------------------------------------------
- * 閾値到達後の強制戻り値（戻り値を持つ8関数のみ）
+ * 閾値到達後の強制戻り値（戻り値を持つ9関数のみ）
  * ---------------------------------------------------------------------- */
+extern Std_ReturnType ForcedReturn_CanNm_PassiveStartUp;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_CanNm_NetworkRequest;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_CanNm_NetworkRelease;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_CanNm_DisableCommunication;    /**< 既定 E_NOT_OK */

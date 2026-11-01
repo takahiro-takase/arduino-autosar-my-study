@@ -87,6 +87,8 @@ protected:
         ForcedReturn_Nm_NetworkRequest      = E_OK;
         FailFromCallCount_Nm_NetworkRelease = 1U;
         ForcedReturn_Nm_NetworkRelease      = E_OK;
+        FailFromCallCount_Nm_PassiveStartUp = 1U;   // パッシブ起動も、実体を呼ばずに成功する
+        ForcedReturn_Nm_PassiveStartUp      = E_OK;
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
@@ -178,6 +180,7 @@ TEST_F(ComM_Nm_NetworkStartIndication_Test, ComM_Nm_NetworkStartIndication_OK_Ac
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     const uint32 requestsBefore = ArrangeSilentComWithReleasePending();
+    const uint32 passiveBefore  = CallCount_Nm_PassiveStartUp;
     FailFromCallCount_CanSM_RequestComMode = 1U;   // CanSM が、FULL_COM の要求を、受け付ける
     ForcedReturn_CanSM_RequestComMode      = E_OK;
 
@@ -191,7 +194,8 @@ TEST_F(ComM_Nm_NetworkStartIndication_Test, ComM_Nm_NetworkStartIndication_OK_Ac
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_CanSM_RequestComMode, 1U);
-    EXPECT_EQ(CallCount_Nm_NetworkRequest, requestsBefore + 1U);   // 協調スリープ待ちが解除されたので、CanNm のネットワークを要求する
+    EXPECT_EQ(CallCount_Nm_NetworkRequest, requestsBefore);        // 誰も通信を要求していないので、ネットワークの要求はしない
+    EXPECT_EQ(CallCount_Nm_PassiveStartUp, passiveBefore + 1U);    // 協調スリープ待ちが解除されたので、パッシブ起動で CanNm を起こす
 }
 
 }  // namespace

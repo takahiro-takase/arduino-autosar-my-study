@@ -116,27 +116,31 @@ INFO ComM: FULL_COM -> NO_COM requested: Nm_NetworkRelease() sent, awaiting Bus-
 INFO CanSM: ->NO_COM (physical sleep)   ← CanNm が Bus-Sleep Mode へ到達してから
 ```
 
-## ウェイクアップ時の User0 要求の再同期
+## ウェイクアップ時のパッシブ起動（READY_SLEEP）
 
-CanSM がウェイクアップ検証成功時に `ComM_BusSM_ModeIndication(FULL_COM)` を呼んで
-チャネル状態を更新するのは、どのユーザの要求でもない自動的な変化です。これを
-放置すると `ComM_UserRequest[COMM_USER_0]` がスリープ突入時の古い値（`NO_COM`）
-のまま残り、`App_EngineManager_Run()` がまだ 1 周期も再評価していない
-（Task 2 が次に実行されるのは最大3000ms後）わずかな間に Dcm の診断アクティブ
-通知（`ComM_DcmActiveDiagnostic[]`）が変化しただけで、User0 の古い要求と
-誤って再集約され、ウェイクアップ直後に意図せず即座に再スリープしてしまいます。
+CanSM がウェイクアップの検証成功（や、他ノードの NM フレームによる起床）で
+`ComM_BusSM_ModeIndication(FULL_COM)` を呼んでチャネルを FULL_COM にするのは、
+どのユーザの要求でもない自動的な変化です（2026-11 変更）。このとき ComM は、
+ユーザの要求の集約結果で、Nm の起こし方を変えます（[SWS_ComM_00665]/[SWS_ComM_00903]/[SWS_ComM_00869]）。
 
-これを防ぐため `ComM_BusSM_ModeIndication()` は `FULL_COM`/`NO_COM` を通知するとき、
-`ComM_UserRequest[COMM_USER_0]` もその値へ同期します。CanSM 側の自動的な状態変化を
-「User0 の暫定的な要求」とみなすことで、App_EngineManager が次に実際のエンジン
-状態に基づいて要求し直すまでの間、矛盾のない値を保持できます。Dcm の診断
-アクティブ通知はセッション状態に基づく独立した判断のため（そもそも
-`ComM_UserRequest[]` とは別の配列のため対象外）、これには同期させません
-（実機で発見された経緯は後述の
-「[開発の経緯](#ウェイクアップ直後の再集約による即座の再スリープ)」参照。
-発見当時は Dcm も `COMM_USER_1` として `ComM_UserRequest[]` に参加していたが、
-2026-08 のシグネチャ準拠サーベイで専用 API へ置き換えた後も、この非同期の
-方針自体は変わらない）。
+| FULL_COM へ入ったとき | Nm の呼び出し | CanNm | `ComM_NmRequested` |
+|---|---|---|---|
+| ユーザが FULL_COM を要求している | `Nm_NetworkRequest()` | Repeat Message → Normal Operation | 1（NETWORK_REQUESTED） |
+| 誰も要求していない（起床など） | `Nm_PassiveStartUp()` | Repeat Message → Ready Sleep → 誰も要求しなければスリープへ | 0（READY_SLEEP） |
+
+READY_SLEEP のあとで、ユーザが FULL_COM を要求したら、`ComM_ApplyAggregatedRequest()` が
+`Nm_NetworkRequest()` を呼んで、NETWORK_REQUESTED へ戻します（CanNm は Ready Sleep → Normal Operation）。
+NO_COM の要求は、従来どおり `Nm_NetworkRelease()` を送って、CanNm の協調スリープに任せます。
+
+以前は、`ComM_BusSM_ModeIndication()` が `ComM_UserRequest[COMM_USER_0]` を FULL_COM へ同期して
+（起床 = User0 の暫定的な要求とみなして）、常に `Nm_NetworkRequest()` を呼んでいました。
+ウェイクアップ直後に、Dcm の診断アクティブ通知が変化しただけで、User0 の古い NO_COM 要求と
+再集約されて即座に再スリープする不具合（実機で発見、後述の
+「[開発の経緯](#ウェイクアップ直後の再集約による即座の再スリープ)」）を防ぐためでした。
+ユーザが要求していないのに、ComM が要求を作っていたため、同期は廃止しました。起床のあと、
+通信を続けるかどうかは、App_EngineManager が次に実際のエンジン状態に基づいて要求するまでは、
+CanNm の Ready Sleep の猶予（`CANNM_TIMEOUT_MS`）が保証します。NO_COM への同期（協調スリープが
+完了したとき）は、そのまま残しています。
 
 ## ComM 設定（`ComM_Cfg.h`）
 

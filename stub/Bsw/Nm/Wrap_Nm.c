@@ -31,6 +31,7 @@
  * ====================================================================== */
 
 uint32 CallCount_Nm_Init                     = 0U;
+uint32 CallCount_Nm_PassiveStartUp           = 0U;
 uint32 CallCount_Nm_NetworkRequest           = 0U;
 uint32 CallCount_Nm_NetworkRelease           = 0U;
 uint32 CallCount_Nm_DisableCommunication     = 0U;
@@ -45,6 +46,7 @@ uint32 CallCount_Nm_NetworkMode              = 0U;
 uint32 CallCount_Nm_BusSleepMode             = 0U;
 uint32 CallCount_Nm_PrepareBusSleepMode      = 0U;
 
+uint32 FailFromCallCount_Nm_PassiveStartUp         = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Nm_NetworkRequest         = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Nm_NetworkRelease         = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Nm_DisableCommunication   = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -54,6 +56,7 @@ uint32 FailFromCallCount_Nm_GetNodeIdentifier      = WRAP_NM_FAIL_FROM_CALL_COUN
 uint32 FailFromCallCount_Nm_GetLocalNodeIdentifier = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Nm_GetState               = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
 
+Std_ReturnType ForcedReturn_Nm_PassiveStartUp         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Nm_NetworkRequest         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Nm_NetworkRelease         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Nm_DisableCommunication   = E_NOT_OK;
@@ -64,12 +67,13 @@ Std_ReturnType ForcedReturn_Nm_GetLocalNodeIdentifier = E_NOT_OK;
 Std_ReturnType ForcedReturn_Nm_GetState               = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapNm_Reset — 14関数すべての状態を一括で初期化する（Wrap_Nm.h 参照）。
+ * WrapNm_Reset — 15関数すべての状態を一括で初期化する（Wrap_Nm.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapNm_Reset(void)
 {
     CallCount_Nm_Init                   = 0U;
+    CallCount_Nm_PassiveStartUp         = 0U;
     CallCount_Nm_NetworkRequest         = 0U;
     CallCount_Nm_NetworkRelease         = 0U;
     CallCount_Nm_DisableCommunication   = 0U;
@@ -84,6 +88,7 @@ void WrapNm_Reset(void)
     CallCount_Nm_BusSleepMode           = 0U;
     CallCount_Nm_PrepareBusSleepMode    = 0U;
 
+    FailFromCallCount_Nm_PassiveStartUp         = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Nm_NetworkRequest         = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Nm_NetworkRelease         = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Nm_DisableCommunication   = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -93,6 +98,7 @@ void WrapNm_Reset(void)
     FailFromCallCount_Nm_GetLocalNodeIdentifier = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Nm_GetState               = WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED;
 
+    ForcedReturn_Nm_PassiveStartUp         = E_NOT_OK;
     ForcedReturn_Nm_NetworkRequest         = E_NOT_OK;
     ForcedReturn_Nm_NetworkRelease         = E_NOT_OK;
     ForcedReturn_Nm_DisableCommunication   = E_NOT_OK;
@@ -125,7 +131,20 @@ void __wrap_Nm_Init(const Nm_ConfigType* ConfigPtr)
  * Nm_PassiveStartUp
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Nm_PassiveStartUp(NetworkHandleType Channel);
+Std_ReturnType __wrap_Nm_PassiveStartUp(NetworkHandleType Channel)
+{
+    CallCount_Nm_PassiveStartUp++;
+    Log_Write(LOG_T, TAG, "Nm_PassiveStartUp", "called %u times", CallCount_Nm_PassiveStartUp);
+
+    if (CallCount_Nm_PassiveStartUp >= FailFromCallCount_Nm_PassiveStartUp)
+    {
+        return ForcedReturn_Nm_PassiveStartUp;
+    }
+
+    return __real_Nm_PassiveStartUp(Channel);
+}
 
 /* ----------------------------------------------------------------------
  * Nm_NetworkRequest

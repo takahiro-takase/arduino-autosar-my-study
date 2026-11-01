@@ -72,6 +72,7 @@
 /** ApiId（値は 8.3/8.4 章の「Service ID[hex]」記載を実測して確認済み） */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define NM_API_ID_INIT                       0x00U
+#define NM_API_ID_PASSIVE_STARTUP            0x01U
 #define NM_API_ID_NETWORK_REQUEST            0x02U
 #define NM_API_ID_NETWORK_RELEASE            0x03U
 #define NM_API_ID_DISABLE_COMMUNICATION      0x04U

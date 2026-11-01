@@ -154,7 +154,50 @@ void CanNm_DeInit(void)
  * CanNm_PassiveStartUp
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   パッシブ起動。他ノードの通信による起床を、Network Mode へ反映する（[SWS_CanNm_00211]）。
+ *
+ * \details Bus-Sleep Mode / Prepare Bus-Sleep Mode から呼ばれたとき、Repeat Message State へ入る
+ *          （[SWS_CanNm_00128]）。CanNm_NetworkRequest() とは違い、ネットワークの要求は立てない
+ *          （CanNm_NetworkRequested は変えない）。そのため、Repeat Message Time が満了すると
+ *          Normal Operation State ではなく Ready Sleep State へ進み、誰も通信を要求しなければ、
+ *          そのままスリープへ向かう。既に Network Mode のときは何もせず、E_NOT_OK を返す
+ *          （[SWS_CanNm_00147]）。
+ *
+ * \param[in]  nmChannelHandle  NM チャネルハンドル（CANNM_MAIN_NETWORK_HANDLE 以外は拒否）。
+ *
+ * \retval  E_OK      Repeat Message State へ入った。
+ * \retval  E_NOT_OK  未初期化、チャネルが不正、または既に Network Mode。
+ *
+ * \AUTOSARReq     {SWS_CanNm_00211, SWS_CanNm_00128, SWS_CanNm_00147, SWS_CanNm_00254}
+ * \ServiceID      {0x01}
+ * \Reentrancy     {Reentrant (but not for the same NM-channel)}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType CanNm_PassiveStartUp(NetworkHandleType nmChannelHandle)
+{
+    if (!CanNm_Initialized)
+    {
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_PASSIVE_STARTUP, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (nmChannelHandle != CANNM_MAIN_NETWORK_HANDLE)
+    {
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_PASSIVE_STARTUP, CANNM_E_INVALID_CHANNEL);
+        return E_NOT_OK;
+    }
+
+    if ((CanNm_State != CANNM_STATE_BUS_SLEEP) && (CanNm_State != CANNM_STATE_PREPARE_BUS_SLEEP))
+    {
+        /* [SWS_CanNm_00147]: Network Mode では実行しない */
+        return E_NOT_OK;
+    }
+
+    DET_LOGI(TAG, "PassiveStartUp ok (state=%u)", (unsigned)CanNm_State);
+    CanNm_EnterRepeatMessage();
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanNm_NetworkRequest

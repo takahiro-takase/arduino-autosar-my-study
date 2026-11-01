@@ -7,9 +7,9 @@
  *          （「wrap 対象の関数が定義されている元の src ファイル 1 つにつき
  *          1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          `Nm.h` が宣言する公開API全14関数を wrap 対象とする。
+ *          `Nm.h` が宣言する公開API全15関数を wrap 対象とする。
  *
- *          戻り値を持つ8関数（NetworkRequest/NetworkRelease/
+ *          戻り値を持つ9関数（PassiveStartUp/NetworkRequest/NetworkRelease/
  *          DisableCommunication/EnableCommunication/RepeatMessageRequest/
  *          GetNodeIdentifier/GetLocalNodeIdentifier/GetState）には
  *          「指定した呼び出し回数以降は常に失敗を返す」という回数閾値方式の
@@ -56,9 +56,10 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（公開API全14関数共通）
+ * 呼び出し回数（公開API全15関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_Nm_Init;
+extern uint32 CallCount_Nm_PassiveStartUp;
 extern uint32 CallCount_Nm_NetworkRequest;
 extern uint32 CallCount_Nm_NetworkRelease;
 extern uint32 CallCount_Nm_DisableCommunication;
@@ -74,12 +75,13 @@ extern uint32 CallCount_Nm_BusSleepMode;
 extern uint32 CallCount_Nm_PrepareBusSleepMode;
 
 /* ----------------------------------------------------------------------
- * 回数閾値故障注入（戻り値を持つ8関数のみ）
+ * 回数閾値故障注入（戻り値を持つ9関数のみ）
  * ---------------------------------------------------------------------- */
 /** `WRAP_NM_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に対応する
  *  `__real_Nm_Xxx()` へパススルー。それ以外の値を設定すると、対応する
  *  `CallCount_Nm_Xxx` がこの値に達した回から（以降ずっと）
  *  対応する `ForcedReturn_Nm_Xxx` を返す。 */
+extern uint32 FailFromCallCount_Nm_PassiveStartUp;
 extern uint32 FailFromCallCount_Nm_NetworkRequest;
 extern uint32 FailFromCallCount_Nm_NetworkRelease;
 extern uint32 FailFromCallCount_Nm_DisableCommunication;
@@ -90,8 +92,9 @@ extern uint32 FailFromCallCount_Nm_GetLocalNodeIdentifier;
 extern uint32 FailFromCallCount_Nm_GetState;
 
 /* ----------------------------------------------------------------------
- * 閾値到達後の強制戻り値（戻り値を持つ8関数のみ）
+ * 閾値到達後の強制戻り値（戻り値を持つ9関数のみ）
  * ---------------------------------------------------------------------- */
+extern Std_ReturnType ForcedReturn_Nm_PassiveStartUp;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Nm_NetworkRequest;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Nm_NetworkRelease;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Nm_DisableCommunication;    /**< 既定 E_NOT_OK */
