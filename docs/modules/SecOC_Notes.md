@@ -200,6 +200,32 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
 （`SecOC_IfTransmit()` と `SecOC_MainFunctionTx()`）も、`SecOC_TriggerTransmit_test.cpp` で、実際に通ります
 （Csm のジョブは、本番にある検証用のジョブを指すだけなので、MAC の値は確認していません）。
 
+## TX の Csm の失敗時の扱い（2026-11）
+
+`SecOC_MainFunctionTx()` は、以前は、`Csm_MacGenerate()` の戻り値を見ずに、MAC が未設定のまま（作業用の配列の
+中身のまま）の Secured I-PDU を、下位層へ送っていました。仕様（[SWS_SecOC_00155]/[SWS_SecOC_00166]、
+[SWS_SecOC_00225]〜[SWS_SecOC_00228]）に沿って、次のようにしました。
+
+- **失敗したとき**: MAC が未設定の Secured I-PDU は、送らず、保持もしません（トリガ送信でも渡しません）。
+  Freshness Value も進めません（失敗した試行で進めると、受信側の期待とずれていくため）。
+- **回復可能なエラー**（`CRYPTO_E_BUSY`、`CRYPTO_E_QUEUE_FULL`。[SWS_SecOC_00227]）: 認証の組み立ての試行の回数
+  （送信要求ごと。`SecOC_IfTransmit()` の新しい送信要求で 0。[SWS_SecOC_00226]）を増やし、
+  `SecOC_TxPduConfigType.AuthenticationBuildAttempts`（`SecOCAuthenticationBuildAttempts`。0 は 1 回だけ試す）に
+  達していなければ、次の周期で、Freshness Value と MAC の計算をやり直します（[SWS_SecOC_00228]）。
+- **回復可能でない失敗**（`E_NOT_OK` など）、または、試行の回数が上限に達したとき: Authentic I-PDU を内部のバッファから
+  捨てて、送信要求を取り消し（[SWS_SecOC_00229]）、`SECOC_E_CRYPTO_FAILURE`（`SecOC_MainFunctionTx` の API ID）を DET へ
+  報告します（[SWS_SecOC_00155]/[SWS_SecOC_00166]）。上位層（Com）へは、送信の失敗（`E_NOT_OK`）を、送信確認として通知します
+  （`SecOC_TxConfirmation()` が失敗の結果を中継するのと同じ経路。仕様に明記はありませんが、通知しないと、上位層は、送信の確認を、
+  タイムアウトまで待ち続けます）。
+- 組み立て中の Secured I-PDU は、作業用の配列に作り、MAC の計算が成功してから、保持するバッファ
+  （`SecOC_TxSecuredBuffer`）へ移します。保持するバッファには、MAC が付いた完全な Secured I-PDU だけが置かれます。
+- 試行の回数は、認証の成功でも 0 に戻ります（成功の後の、トリガ送信の確認による再認証を、新しい送信要求として扱うため。
+  [SWS_SecOC_00069]）。
+- 本プロジェクトの Crypto/CryIf/Csm は、常に同期・単一ジョブ処理で、`CRYPTO_E_BUSY` と `CRYPTO_E_QUEUE_FULL` を返しません
+  （`Crypto_Types.h` 参照）。そのため、再試行の経路は、実機では通りません。値の定義だけを `Crypto_Types.h` に足し、
+  単体テストでは、`Csm_MacGenerate()` を wrap（`stub/Bsw/Csm/Wrap_Csm.h`）で制御して確認します。
+- 本番の設定は、TX 方向で SecOC を使わない（`SECOC_TX_PDU_COUNT=0`）ので、実機の動作は変わりません。
+
 ## 検証結果の通知とオーバーライド
 
 **検証ステータスの通知（`VerificationStatusCallout`、[SWS_SecOC_00048]/[SWS_SecOC_00119]）**:

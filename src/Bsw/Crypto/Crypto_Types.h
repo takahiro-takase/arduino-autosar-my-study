@@ -52,15 +52,17 @@
  *              （Crypto_KeyElementSet()/KeyElementGet()）。以前は
  *              「この戻り値種別は導入せずE_NOT_OKに統一する」という意図的な
  *              簡略化だったが、ユーザー承認の上で是正。
- *          `CRYPTO_E_BUSY`(0x02、ジョブが処理中で拒否)は本プロジェクトが
- *          常に同期・単一ジョブ処理（キューイングや並行処理を持たない）で
- *          原理的にこの状態が発生しないため未対応（対応する実装ポイントが
- *          存在しない）。他の拡張値（CRYPTO_E_ENTROPY_EXHAUSTION等）も
- *          対応する機能自体が本プロジェクトに無いため未対応。
+ *          `CRYPTO_E_BUSY`(0x02、ジョブが処理中で拒否)と `CRYPTO_E_QUEUE_FULL`(0x05)は、
+ *          本プロジェクトの Crypto/CryIf/Csm が、常に同期・単一ジョブ処理（キューイングや
+ *          並行処理を持たない）で、原理的にこの状態を返さない。値の定義は、呼び出し側の SecOC が、
+ *          「回復可能なエラー」（[SWS_SecOC_00227]）として扱うために持つ（SecOC_MainFunctionTx() 参照）。
+ *          他の拡張値（CRYPTO_E_ENTROPY_EXHAUSTION等）は、対応する機能自体が本プロジェクトに無いため未対応。
  *          値は`pdftotext -table`（開発エラーコード表等の抽出に強い）で
  *          実測して確認済み。
  */
+#define CRYPTO_E_BUSY              ((Std_ReturnType)0x02U)
 #define CRYPTO_E_SMALL_BUFFER      ((Std_ReturnType)0x03U)
+#define CRYPTO_E_QUEUE_FULL        ((Std_ReturnType)0x05U)
 #define CRYPTO_E_KEY_NOT_VALID     ((Std_ReturnType)0x09U)
 #define CRYPTO_E_KEY_SIZE_MISMATCH ((Std_ReturnType)0x0AU)
 
