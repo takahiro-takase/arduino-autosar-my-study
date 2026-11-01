@@ -193,4 +193,28 @@ TEST_F(CanIf_RxIndication_Test, CanIf_RxIndication_NG_NullSduDataPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
+
+TEST_F(CanIf_RxIndication_Test, CanIf_RxIndication_NG_UninitializedReportsDet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[1] = { 0 };
+    PduInfoType info = { sdu, 1U };
+    Can_HwType mailbox = { 0x200U, 0U, 0U };
+    CanIf_DeInit();   // 未初期化にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_RxIndication(&mailbox, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_RX_INDICATION);
+}
+
 }  // namespace

@@ -38,6 +38,14 @@
 
 static const CanIf_ConfigType* CanIf_ConfigPtr = NULL;
 
+/* 未初期化の API 呼び出しを DET へ報告する（[SWS_CANIF_00901]。CanIf_Init()/CanIf_GetVersionInfo() を除く全 API）。
+ * 呼び出し元は、続けて、API ごとの値（E_NOT_OK など）を返して、通常の動作を実行しない（[SWS_CANIF_00661]）。 */
+static void CanIf_ReportUninit(uint8 apiId)
+{
+    DET_LOGE(TAG, "E: API 0x%02X called before CanIf_Init", (unsigned)apiId);
+    (void)Det_ReportError(CANIF_MODULE_ID, 0U, apiId, CANIF_E_UNINIT);
+}
+
 /* CanIf_ReadRxPduData()（[SWS_CANIF_00194]、2026-08 追加）用の内部バッファ。
  * CanIf_RxPduConfigType.ReadRxPduDataEnabled=1 の RX PDU についてのみ、
  * CanIf_RxIndication() が受信データをここへ複製する。添字は
@@ -199,9 +207,8 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
 /**
  * \brief   CAN インタフェースモジュールを未初期化状態に戻す。
  *
- * \details 設定ポインタを NULL に戻す。CanIf の他 API 同様、未初期化状態
- *          チェックに Det_ReportError は用いない（本ファイル冒頭のコメント
- *          参照）。
+ * \details 設定ポインタを NULL に戻す。未初期化のときは、CANIF_E_UNINIT を
+ *          DET へ報告して何もしない（[SWS_CANIF_00661]/[SWS_CANIF_00901]）。
  *
  * \AUTOSARReq     {SWS_CANIF_91002}
  * \ServiceID      {0x02}
@@ -210,6 +217,12 @@ void CanIf_Init(const CanIf_ConfigType* ConfigPtr)
  */
 void CanIf_DeInit(void)
 {
+    if (CanIf_ConfigPtr == NULL)
+    {
+        CanIf_ReportUninit(CANIF_API_ID_DEINIT);
+        return;
+    }
+
     CanIf_ConfigPtr = NULL;
     DET_LOGI(TAG, "DeInit ok");
 }
@@ -254,6 +267,7 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
 
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_SET_CONTROLLER_MODE);
         return E_NOT_OK;
     }
 
@@ -330,6 +344,7 @@ Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateTy
 
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_GET_CONTROLLER_MODE);
         return E_NOT_OK;
     }
 
@@ -376,6 +391,7 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_GET_CONTROLLER_ERROR_STATE);
         return E_NOT_OK;
     }
 
@@ -427,6 +443,7 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_TRANSMIT);
         return E_NOT_OK;
     }
 
@@ -514,6 +531,7 @@ Std_ReturnType CanIf_CancelTransmit(PduIdType TxPduId)
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_CANCEL_TRANSMIT);
         return E_NOT_OK;
     }
 
@@ -593,7 +611,8 @@ Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxI
 {
     if (CanIf_ConfigPtr == NULL)
     {
-        return E_NOT_OK;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+        CanIf_ReportUninit(CANIF_API_ID_READ_RX_PDU_DATA);
+        return E_NOT_OK;
     }
 
     if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
@@ -670,7 +689,8 @@ CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
 {
     if (CanIf_ConfigPtr == NULL)
     {
-        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+        CanIf_ReportUninit(CANIF_API_ID_READ_TX_NOTIF_STATUS);
+        return CANIF_NO_NOTIFICATION;
     }
 
     if (CanIfTxSduId >= CanIf_ConfigPtr->TxPduCount)
@@ -719,7 +739,8 @@ CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId)
 {
     if (CanIf_ConfigPtr == NULL)
     {
-        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+        CanIf_ReportUninit(CANIF_API_ID_READ_RX_NOTIF_STATUS);
+        return CANIF_NO_NOTIFICATION;
     }
 
     if (CanIfRxSduId >= CanIf_ConfigPtr->RxPduCount)
@@ -773,6 +794,7 @@ Std_ReturnType CanIf_SetPduMode(uint8 ControllerId, CanIf_PduModeType PduModeReq
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_SET_PDU_MODE);
         return E_NOT_OK;
     }
 
@@ -815,6 +837,7 @@ Std_ReturnType CanIf_GetPduMode(uint8 ControllerId, CanIf_PduModeType* PduModePt
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_GET_PDU_MODE);
         return E_NOT_OK;
     }
 
@@ -945,7 +968,8 @@ Std_ReturnType CanIf_CheckValidation(EcuM_WakeupSourceType WakeupSource)
 {
     if (CanIf_ConfigPtr == NULL)
     {
-        return E_NOT_OK;  /* 未初期化時は DET 報告なし（本ファイルの他 API と同じ） */
+        CanIf_ReportUninit(CANIF_API_ID_CHECK_VALIDATION);
+        return E_NOT_OK;
     }
 
     if ((WakeupSource & ECUM_WKSOURCE_CAN) == 0U)
@@ -1013,7 +1037,8 @@ CanIf_NotifStatusType CanIf_GetTxConfirmationState(uint8 ControllerId)
 
     if (CanIf_ConfigPtr == NULL)
     {
-        return CANIF_NO_NOTIFICATION;  /* CanIf の他 API と同じ方針、CanIf_Cfg.h 冒頭コメント参照 */
+        CanIf_ReportUninit(CANIF_API_ID_GET_TX_CONFIRMATION_STATE);
+        return CANIF_NO_NOTIFICATION;
     }
 
     if (ControllerId >= CANIF_CONTROLLER_MAX)
@@ -1090,6 +1115,7 @@ Std_ReturnType CanIf_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_TRIGGER_TRANSMIT);
         return E_NOT_OK;
     }
 
@@ -1146,6 +1172,7 @@ void CanIf_TxConfirmation(PduIdType CanTxPduId)
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_TX_CONFIRMATION);
         return;
     }
 
@@ -1264,7 +1291,8 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
 {
     if (CanIf_ConfigPtr == NULL)
     {
-        return;  /* [SWS_CANIF_00421]: 未初期化時は黙って何もしない（DET 報告なし） */
+        CanIf_ReportUninit(CANIF_API_ID_RX_INDICATION);
+        return;
     }
 
     if ((Mailbox == NULL) || (PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
@@ -1390,6 +1418,12 @@ void CanIf_RxIndication(const Can_HwType* Mailbox, const PduInfoType* PduInfoPtr
  */
 void CanIf_ControllerBusOff(uint8 ControllerId)
 {
+    if (CanIf_ConfigPtr == NULL)
+    {
+        CanIf_ReportUninit(CANIF_API_ID_CONTROLLER_BUSOFF);
+        return;
+    }
+
     if (ControllerId != 0U)
     {
         (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CONTROLLER_BUSOFF, CANIF_E_PARAM_CONTROLLERID);
@@ -1428,9 +1462,7 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
  * \details CAN ドライバが、コントローラの状態遷移の完了を知らせるために呼ぶ。
  *          CanSM_ControllerModeIndication() へ、そのまま渡す（[SWS_CANIF_00711]）。
  *          CanIf が未初期化のときは、通知しない（[SWS_CANIF_00702]）。
- *          なお、仕様は別に、開発エラーの検出が有効なとき、未初期化の API 呼び出しを CANIF_E_UNINIT として
- *          DET へ報告するよう求める（7.28 章）。本プロジェクトの CanIf は、CANIF_E_UNINIT の定義も含めて、
- *          どの API でも未対応のため（CanIf_Transmit() など、未初期化では黙って戻る）、本関数も同じ扱いにする。
+ *          未初期化の API 呼び出しは、CANIF_E_UNINIT として DET へ報告する（[SWS_CANIF_00901]）。
  *          ControllerId が範囲外のときは、CANIF_E_PARAM_CONTROLLERID を報告し、通知しない
  *          （[SWS_CANIF_00700]）。
  *
@@ -1456,6 +1488,7 @@ void CanIf_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
 {
     if (CanIf_ConfigPtr == NULL)
     {
+        CanIf_ReportUninit(CANIF_API_ID_CONTROLLER_MODE_INDICATION);
         return;
     }
 

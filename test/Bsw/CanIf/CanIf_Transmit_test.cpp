@@ -195,4 +195,28 @@ TEST_F(CanIf_Transmit_Test, CanIf_Transmit_NG_PduModeNotOnline)
     EXPECT_EQ(CallCount_Can_Write, writeBefore);   // Can ドライバへ渡さない
 }
 
+
+TEST_F(CanIf_Transmit_Test, CanIf_Transmit_NG_UninitializedReportsDet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 8U };
+    CanIf_DeInit();   // 未初期化にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_Transmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_TRANSMIT);
+}
+
 }  // namespace

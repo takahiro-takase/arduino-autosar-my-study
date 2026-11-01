@@ -136,7 +136,7 @@ TEST_F(CanIf_ControllerModeIndication_Test, CanIf_ControllerModeIndication_NG_In
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);           // CanSM へは通知しない
 }
 
-TEST_F(CanIf_ControllerModeIndication_Test, CanIf_ControllerModeIndication_NG_UninitializedDoesNotNotify)
+TEST_F(CanIf_ControllerModeIndication_Test, CanIf_ControllerModeIndication_NG_UninitializedDoesNotNotifyAndReportsDet)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -155,7 +155,9 @@ TEST_F(CanIf_ControllerModeIndication_Test, CanIf_ControllerModeIndication_NG_Un
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);           // 通知しない（[SWS_CANIF_00702]）
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);                                  // DET へは報告しない（CanIf 全体の扱い。CanIf.c の Doxygen 参照）
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_CONTROLLER_MODE_INDICATION);
 }
 
 }  // namespace

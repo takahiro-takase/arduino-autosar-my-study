@@ -25,6 +25,23 @@ CAN ID ↔ 論理 PDU のマッピングを担う。上位層は CAN ID を知�
 DLC の値は `CanIf_PBCfg.c` の設定どおりです（RX の DLC は受信長チェックの基準でもある）。
 送信 PDU 数・受信 PDU 数の上限は `CANIF_TX_PDU_COUNT`（6）・`CANIF_RX_PDU_COUNT`（5）です。
 
+## 未初期化の API 呼び出し（`CANIF_E_UNINIT`）
+
+`CanIf_Init()` と `CanIf_GetVersionInfo()` 以外の全 API は、`CanIf_Init()` の前に呼ばれると、通常の動作を
+実行せずに戻り（[SWS_CANIF_00661]。戻り値のある API は、`E_NOT_OK` や `CANIF_NO_NOTIFICATION`）、
+DET へ `CANIF_E_UNINIT`（値 30）を報告します（[SWS_CANIF_00901]）。各 API の先頭の判定
+（`CanIf_ConfigPtr == NULL`）から、`CanIf_ReportUninit()` を呼びます。`CanIf_DeInit()` も対象で、
+すでに未初期化のときの呼び出しを報告します。以前は、DET へ報告せず黙って戻っていました。
+本番では、コールバック（`CanIf_RxIndication()`、`CanIf_TxConfirmation()`、`CanIf_ControllerBusOff()` など）が
+未初期化で呼ばれることはありません。理由は次のとおりです。
+
+- 呼び出し元の `Can_MainFunction_Read/Write/BusOff()` は、`EcuM_Init()` の完了後に、メインループ（`loop()`）の
+  タスクとして動きます。
+- コントローラが STARTED になるのは、`CanIf_SetControllerMode()`（`CanIf_Init()` の後に CanSM が呼ぶ）の
+  経由だけで、Bus-Off の検出と RX の読み出しは、STARTED のときだけ動きます。
+- `Can_Isr()`（`Can_Init()` で登録するハードウェア割り込み）は、フラグを立てるだけで、CanIf を呼びません。
+- 本番では `CanIf_DeInit()` を呼びません。
+
 ## 送受信の流れ
 
 - **TX（`CanIf_Transmit()`）**: TxPduId の範囲・ポインタ・長さ（設定 DLC を超える長さは拒否）を確認し、
@@ -36,8 +53,8 @@ DLC の値は `CanIf_PBCfg.c` の設定どおりです（RX の DLC は受信長
   HRH と CAN ID が一致する RX PDU を探し、設定 DLC 未満なら（`CANIF_E_INVALID_DATA_LENGTH` を
   ランタイムエラーとして報告して）棄却、足りていれば上位層の `RxIndicationFct`（PduR）へ渡します。
   一致する PDU が無いときは、HRH が一致していれば `CANIF_E_PARAM_CANID`、一致していなければ
-  `CANIF_E_PARAM_HOH` を報告します。未初期化のときは何も報告せず黙って何もしません
-  （[SWS_CANIF_00421]）。
+  `CANIF_E_PARAM_HOH` を報告します。未初期化のときは何もせず、`CANIF_E_UNINIT` を報告します
+  （[SWS_CANIF_00421]/[SWS_CANIF_00901]）。
 - **TX 確認（`CanIf_TxConfirmation()`）**: Can ドライバの `Can_MainFunction_Write()` から呼ばれ、
   その PDU の通知状態と、コントローラの TX 確認状態（STARTED のときだけ）を更新して、
   上位層の `TxConfirmFct`（PduR）を `E_OK` で呼びます。
@@ -72,7 +89,7 @@ CanSM が SILENT_COMMUNICATION で `CANIF_TX_OFFLINE`、FULL_COMMUNICATION で `
 ## CanIf_ControllerModeIndication（コントローラのモード遷移の通知）
 
 CAN ドライバがコントローラの遷移の完了を知らせるコールバックで、CanIf は `CanSM_ControllerModeIndication()` へ
-そのまま渡します（[SWS_CANIF_00711]）。CanIf が未初期化なら通知せず（[SWS_CANIF_00702]）、
+そのまま渡します（[SWS_CANIF_00711]）。CanIf が未初期化なら通知せず（[SWS_CANIF_00702]）、`CANIF_E_UNINIT` を報告し、
 `ControllerId` が範囲外なら `CANIF_E_PARAM_CONTROLLERID` を報告して通知しません（[SWS_CANIF_00700]）。
 
 **本番コードからは呼ばれません。** 本プロジェクトの `Can_SetControllerMode()` は要求の中で同期的に遷移を終え、
@@ -88,7 +105,7 @@ CAN ドライバが送信の直前にデータを取りに来たとき、TX PDU 
 PDU ID 付きで呼び、その戻り値をそのまま返します（[SWS_CANIF_00885]）。`TriggerTransmitFct` が NULL の
 TX PDU は、トリガ送信に対応しないので `E_NOT_OK` です（[SWS_CANIF_00888]。DET へは報告しません）。
 `TxPduId` が範囲外なら `CANIF_E_INVALID_TXPDUID`、NULL のポインタは `CANIF_E_PARAM_POINTER` を報告します。
-未初期化は、他の API と同じく、DET へ報告せず `E_NOT_OK` です。
+未初期化は、他の API と同じく、`CANIF_E_UNINIT` を報告して `E_NOT_OK` です。
 
 **本番コードからは呼ばれません**: 本プロジェクトの Can ドライバ（MCP2515）は、送信の直前にデータを
 取りに来ません。`Can_Write()` へデータを渡さずに送信を要求する経路もないので、`CanIf_Transmit()` が

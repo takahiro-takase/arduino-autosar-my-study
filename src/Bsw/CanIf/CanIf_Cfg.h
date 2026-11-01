@@ -35,11 +35,11 @@
  * （Release 4.3.1、docs/ 配下）の「List of Basic Software Modules」表で
  * CAN Interface (CanIf) に割り当てられた固定値 60 を使う。
  *
- * CanIf の「未初期化時」チェック（SWS_CANIF_00421/00412/00431 等）は、
- * Com/Can と異なり Det_ReportError を要求していない（「実行せず黙って
- * 戻る」とのみ規定）。そのため各関数の CanIf_ConfigPtr==NULL チェックは
- * 既存どおり DET 報告なしの早期 return のままとし、以下のパラメータ
- * 検証（範囲外 ID・NULL ポインタ）のみを Det_ReportError 対象とする。
+ * CanIf の「未初期化時」チェックは、CanIf_Init()/CanIf_GetVersionInfo() 以外の
+ * 全 API で、通常の動作を実行せずに戻り（SWS_CANIF_00661）、DET へ
+ * CANIF_E_UNINIT を報告する（SWS_CANIF_00901）。各 API の未初期化の判定
+ * （CanIf_ConfigPtr==NULL）では CanIf_ReportUninit()（CanIf.c）を呼ぶ。
+ * 以下のパラメータ検証（範囲外 ID・NULL ポインタ）も Det_ReportError 対象とする。
  * ----------------------------------------------------------------------- */
 /** AUTOSAR CAN Interface の ModuleId（AUTOSAR_TR_BSWModuleList 参照、固定値 60） */
 #define CANIF_MODULE_ID  60U
@@ -49,6 +49,8 @@
 #define CANIF_E_PARAM_HOH           12U  /* [SWS_CANIF_00416]: Mailbox->Hoh に一致する設定なし */
 #define CANIF_E_PARAM_CONTROLLERID  15U  /* [SWS_CANIF_00429 等]: ControllerId が範囲外 */
 #define CANIF_E_PARAM_WAKEUPSOURCE  16U  /* [SWS_CANIF_00404]: CanIf_CheckValidation() の WakeupSource が不正 */
+#define CANIF_E_UNINIT              30U  /* [SWS_CANIF_00901]: CanIf_Init() 前の API 呼び出し
+                                          *   （CanIf_Init()/CanIf_GetVersionInfo() を除く全 API） */
 #define CANIF_E_PARAM_POINTER       20U  /* [SWS_CANIF_00320/00419 等]: NULL ポインタチェック */
 #define CANIF_E_PARAM_LPDU          13U  /* [SWS_CANIF_00410]: CanTxPduId が範囲外 */
 #define CANIF_E_INVALID_TXPDUID     50U  /* [SWS_CANIF_00319]: TxPduId が範囲外 */
