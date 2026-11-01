@@ -245,8 +245,8 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_START_WAKEUP_SOURCE の
  *          トリガとして扱う（[SWS_CanSM_00616]/[SWS_CanSM_00607]）。トリガが効くのは NO_COM（ボランタリスリープ中）だけで、
  *          それ以外の状態では、何もしない（要求自体は受理する）。
- *          NO_COM のとき、CAN_T_WAKEUP（SLEEP→STOPPED、Listen-Only）だけを実行して CANSM_STATE_WAKEUP_VALIDATING へ入り、
- *          検証タイマを開始する。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
+ *          NO_COM のとき、CANSM_STATE_WAKEUP_VALIDATING へ入って検証タイマを開始し、コントローラを STOPPED
+ *          （SLEEP→STOPPED、Listen-Only）にする要求を出して、完了通知を待つ（来なければ繰り返す）。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
  *          FULL_COM へ確定するのは、有効な受信の確認後に ComM が CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、
  *          または CanSM_MainFunction() が検証のタイムアウトを検出して、再スリープするとき（検証失敗）。
  *

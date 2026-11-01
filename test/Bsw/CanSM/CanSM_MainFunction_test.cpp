@@ -246,6 +246,144 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_NG_RecoveryAttemptFails_StaysInBusO
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);  // まだ PASSED は報告しない
 }
 
+// ------------------------------------------------------------
+// 正常系: 回復の再起動（STARTED）の要求を出したら、完了通知を待つ（S_RESTART_CC_WAIT、[SWS_CanSM_00600]/[00604]）。
+// 通知を受け取るまでは、BUS_OFF のまま（ComM へも FULL_COM を通知しない）。受け取ったら、回復が完了する。
+// ------------------------------------------------------------
+
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RecoveryWaitsForStartedIndication)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();   // 再起動を要求する
+    ComM_ModeType modeWaiting = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &modeWaiting), E_OK);
+    const uint32 setModeWaiting = CallCount_CanIf_SetControllerMode;
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）
+    ComM_ModeType modeRecovered = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &modeRecovered), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(setModeWaiting, 1U);                                                       // 再起動の要求は 1 回
+    EXPECT_EQ(modeWaiting, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));      // 通知を待つ間は、回復していない
+    EXPECT_EQ(modeRecovered, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));      // 通知で、FULL_COM へ戻る
+}
+
+// 通知が来なければ、CANSM_MODEREQ_REPEAT_TIME_MS ごとに、再起動の要求を繰り返す（T_RESTART_CC_TIMEOUT、[SWS_CanSM_00602]）。
+// 通知が来たら、繰り返さない
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RecoveryRepeatsRestartRequestUntilIndication)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    CanSM_MainFunction();   // 再起動を要求する（通知は、まだ流さない）
+    const uint32 afterRequest = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();   // まだ繰り返しの時間が経っていない
+    const uint32 beforeRepeat = CallCount_CanIf_SetControllerMode;
+    FakeMillis_Value += CANSM_MODEREQ_REPEAT_TIME_MS + 1UL;
+    CanSM_MainFunction();   // 通知が来ないので、繰り返す
+    const uint32 afterRepeat = CallCount_CanIf_SetControllerMode;
+    Can_MainFunction_Mode();   // 通知（STARTED）
+    FakeMillis_Value += CANSM_MODEREQ_REPEAT_TIME_MS + 1UL;
+    CanSM_MainFunction();   // もう繰り返さない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(beforeRepeat, afterRequest);
+    EXPECT_EQ(afterRepeat, afterRequest + 1U);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterRepeat);
+}
+
+// 完了通知を待っている間に NO_COM が要求されたら、回復を取り消す。そのあとに、遅れて STARTED の通知が届いても、
+// FULL_COM へは戻らない。待ちの状態も残らないので、あとで、もう一度 FULL_COM へ入って Bus-Off になっても、普通に回復する
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_NoComWhileWaitingForStartedCancelsRecovery)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    CanSM_MainFunction();   // 再起動を要求する（通知は、まだ流さない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 遅れて届いた、再起動の完了通知
+    ComM_ModeType modeAfterCancel = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &modeAfterCancel), E_OK);
+
+    // NO_COM へ入り終えてから、もう一度 FULL_COM へ入って、Bus-Off になる
+    for (unsigned i = 0U; i < 4U; i++)
+    {
+        Can_MainFunction_Mode();
+    }
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    for (unsigned i = 0U; i < 4U; i++)
+    {
+        Can_MainFunction_Mode();
+    }
+    ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
+    CanSM_ControllerBusOff(0U);
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）
+    ComM_ModeType modeRecovered = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &modeRecovered), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(modeAfterCancel, COMM_FULL_COMMUNICATION);   // 回復は、取り消されている
+    EXPECT_EQ(modeRecovered, COMM_FULL_COMMUNICATION);     // 待ちの状態が残っていないので、普通に回復する
+}
+
+// 再起動（STARTED）の完了通知を待っている間に、また Bus-Off になったら、回復を最初からやり直す。
+// そのあとに届いた古い STARTED の通知では、回復しない。次の L1 の時間が経ったら、もう一度再起動して、回復する
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_BusOffWhileWaitingForStartedRestartsRecovery)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ArrangeBusOffPastL1Interval();
+    CanSM_MainFunction();   // 再起動を要求する（通知は、まだ流さない）
+    const uint32 afterFirstRestart = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerBusOff(0U);                           // 通知を待つ間に、また Bus-Off
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 古い通知
+    ComM_ModeType modeAfterStale = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &modeAfterStale), E_OK);
+    FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
+    CanSM_MainFunction();      // 次の再起動
+    const uint32 afterSecondRestart = CallCount_CanIf_SetControllerMode;
+    Can_MainFunction_Mode();   // STARTED の通知
+    ComM_ModeType modeRecovered = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &modeRecovered), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(modeAfterStale, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));   // 古い通知では、回復しない
+    EXPECT_GT(afterSecondRestart, afterFirstRestart);                                   // 回復を、やり直した
+    EXPECT_EQ(modeRecovered, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
+}
+
 // 以下の確定条件のテストは、TX 確認のポーリング（CANSM_BOR_TX_CONFIRMATION_POLLING=1、既定）を前提にする
 static_assert(CANSM_BOR_TX_CONFIRMATION_POLLING == 1U, "このテストは CANSM_BOR_TX_CONFIRMATION_POLLING=1 が前提");
 
@@ -360,6 +498,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RecoversOnNextAttemptAfterPriorF
     // 次の試行にも改めて L1 周期分の経過が必要。
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）を流す
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -440,6 +579,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_RetriesAccumulateWhenBusOffRepea
         CanSM_ControllerBusOff(0U);
         FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
         CanSM_MainFunction();
+        Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）を流す
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     }
     CanSM_ControllerBusOff(0U);
@@ -476,6 +616,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_DtcConfirmedAtBusOffDetectionAft
         CanSM_ControllerBusOff(0U);
         FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
         CanSM_MainFunction();   // 再起動できる。TX 確認が無いので、回復は確定しない
+        Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）を流す
     }
     Dem_MonitorStatusType beforeLast = 0U;
     ASSERT_EQ(Dem_GetMonitorStatus(DemConf_DemEventParameter_CAN_BUSOFF, &beforeLast), E_OK);
@@ -543,6 +684,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_TxConfirmationConfirmsRecoveryAn
         CanSM_ControllerBusOff(0U);
         FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
         CanSM_MainFunction();
+        Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）を流す
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     }
     WrapDem_Reset();
@@ -566,6 +708,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_TxConfirmationConfirmsRecoveryAn
     CanSM_ControllerBusOff(0U);
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）を流す
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 }
 
@@ -585,6 +728,7 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_SilentComRecoveryIsConfirmedByTi
     CanSM_ControllerBusOff(0U);
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();   // 再起動して SILENT_COM に戻る
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）を流す
     ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
     WrapDem_Reset();
 

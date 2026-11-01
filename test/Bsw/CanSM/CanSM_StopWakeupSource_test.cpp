@@ -23,6 +23,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Wrap_Dem.h"
 #include "Wrap_CanIf.h"
+#include "Wrap_ComM.h"
 }
 
 /* ======================================================================
@@ -123,7 +124,9 @@ TEST_F(CanSM_StopWakeupSource_Test, CanSM_StopWakeupSource_NG_InvalidNetwork)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
 }
 
-// 検証中なら、検証を止めて、コントローラを再スリープさせる。タイムアウトの再スリープは、重ねて要求しない
+// 検証中なら、検証を止めて、コントローラを再スリープさせる手順（S_PRE_NOCOM）を始める。
+// 検証のタイムアウトは、もう働かない（時間が過ぎても、検証の失敗として、重ねて打ち切らない）。
+// 入り終えても、ComM へ NO_COM を通知しない（ComM は、起床を知らされておらず、NO_COM のまま）
 TEST_F(CanSM_StopWakeupSource_Test, CanSM_StopWakeupSource_OK_StopsValidationAndSleepsAgain)
 {
     /* ----------------------- */
@@ -131,7 +134,11 @@ TEST_F(CanSM_StopWakeupSource_Test, CanSM_StopWakeupSource_OK_StopsValidationAnd
     /* ----------------------- */
     FailFromCallCount_CanIf_SetControllerMode = 0U;
     ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;   // 現在のモードは、不明（CanIf は未初期化のため、実体を呼ばない）
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
+    WrapComM_Reset();
     ASSERT_EQ(CanSM_StartWakeupSource(0U), E_OK);   // 検証中へ
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // Listen-Only になった
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */
@@ -139,15 +146,49 @@ TEST_F(CanSM_StopWakeupSource_Test, CanSM_StopWakeupSource_OK_StopsValidationAnd
     /* ----------------------- */
     const Std_ReturnType ret = CanSM_StopWakeupSource(0U);
     const uint32 afterStop = CallCount_CanIf_SetControllerMode;
-    FakeMillis_Value += CANSM_WAKEUP_VALIDATION_MS + 1UL;
-    CanSM_MainFunction();
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // 現在のモードは不明のため、STOPPED から始める
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);     // SLEEP へ入った
+    const uint32 afterSleep = CallCount_CanIf_SetControllerMode;
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(afterStop, setModeBefore + 1U);                          // SLEEP の要求
-    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterStop);           // 検証中ではないので、タイムアウトの要求は出ない
+    EXPECT_EQ(afterStop, setModeBefore + 1U);                          // 再スリープの手順の、最初の要求
+    EXPECT_EQ(afterSleep, afterStop + 1U);                             // STOPPED の通知で、SLEEP の要求
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);                            // NO_COM へ入り終えた
+    EXPECT_EQ(CallCount_ComM_BusSM_ModeIndication, 0U);                // ComM へは、通知しない
+}
+
+// 再スリープの最中に、ComM 自身が NO_COM を要求したら、入り終えたとき、ComM へ NO_COM を通知する
+// （通知しないのは、検証の失敗だけ。ComM は、その NO_COM の通知を待っている）
+TEST_F(CanSM_StopWakeupSource_Test, CanSM_StopWakeupSource_OK_ComMNoComRequestWhileSleepingAgainIsNotified)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
+    WrapComM_Reset();
+    ASSERT_EQ(CanSM_StartWakeupSource(0U), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    ASSERT_EQ(CanSM_StopWakeupSource(0U), E_OK);   // 再スリープへ
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_ComM_BusSM_ModeIndication, 1U);
 }
 
 // 検証中ではないとき（NO_COM）は、要求だけ受理して、何もしない

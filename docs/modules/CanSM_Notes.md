@@ -92,7 +92,7 @@ stateDiagram-v2
 | `StopWakeupSource()` | `WAKEUP_VALIDATING` のときだけ効く。`CanIf_SetControllerMode(SLEEP)` で再スリープして NO_COM へ（検証タイムアウトと共通の処理）。EcuM は、検証が期限切れになったときに、`EcuM_StopWakeupSources()` から呼ぶ（通常は、CanSM が先に再スリープしているので、何も起こらない） |
 | `ControllerModeIndication()`（コントローラのモード変更の完了通知。Can の `Can_MainFunction_Mode()` から、CanIf 経由） | `PRE_FULL_COM` / `PRE_NO_COM` で、待っているモードへ達した通知が、手順を次へ進める。それ以外は、何もしない（下の「コントローラのモード変更の手順」参照） |
 | `RequestComMode(FULL_COM)`（検証中に有効フレームを確認した後、`ComM_EcuM_WakeUpIndication()` から） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `ComM_BusSM_ModeIndication(FULL_COM)` |
-| `MainFunction()`（検証タイムアウト） | `CanIf_SetControllerMode(SLEEP)` で再スリープ（ウェイクアップ割り込みを再武装）し NO_COM へ戻る |
+| `MainFunction()`（検証タイムアウト） | 再スリープの手順（S_PRE_NOCOM。SLEEP の完了通知を待つ。ウェイクアップ割り込みは再武装される）で NO_COM へ戻る |
 
 `CanSM_MainFunction()` は Os Task 4（10ms 周期）です。設定値（`CanSM_Cfg.h`）:
 
@@ -127,7 +127,25 @@ FULL_COM へ入る、または NO_COM へ入るとき、CanSM は、コントロ
   `PRE_FULL_COM` の最中に NO_COM が要求されたら、`PRE_NO_COM` へ向きを変えます。
 - SILENT_COM から FULL_COM へ戻るときは、コントローラが既に STARTED のため、この手順を経ずに、PDU を ONLINE にするだけです。
 - `RequestComMode()` は、要求を受理した時点で `E_OK` を返します。ComM への通知は、手順が完了したとき（1〜数 ms 後）に出ます。
-- Bus-Off の回復と、起床の検証（`WAKEUP_VALIDATING` の出入り）は、まだ、この待ちの仕組みに載せていません（同期のまま）。
+
+### Bus-Off の回復と起床の検証での完了通知の待ち（2026-11）
+
+Bus-Off の回復と、起床の検証（`WAKEUP_VALIDATING` の出入り）も、同じ完了通知の仕組みに載せました。
+`PRE_FULL_COM` / `PRE_NO_COM` と違って、この 2 つの手順には T_REPEAT_MAX がありません（通知が来るまで、要求を繰り返します）。
+
+| 手順 | 要求 | 通知を受け取ったとき | 通知が来ないとき |
+|---|---|---|---|
+| 起床の検証の開始（`StartWakeupSource()`、S_CC_STOPPED） | STOPPED（SLEEP → STOPPED、Listen-Only）。現在のモードが STOPPED なら省く | Listen-Only になった。以降は、有効な受信を待つだけ（`CanSM_WakeupAwaitStopped` を下ろす） | `CANSM_MODEREQ_REPEAT_TIME_MS` ごとに繰り返す。検証のタイムアウト（`CANSM_WAKEUP_VALIDATION_MS`）が、最後に再スリープへ戻す |
+| Bus-Off の回復の再起動（S_RESTART_CC） | STARTED。L1 / L2 の時間が経ったとき | 回復が完了する（`CanSM_CompleteBusOffRecovery()`: 直前の状態へ戻り、ComM へ通知して、回復の確定待ちを始める） | `CANSM_MODEREQ_REPEAT_TIME_MS` ごとに繰り返す（`CanSM_BorAwaitStarted`） |
+| 起床の検証の失敗（タイムアウト、`StopWakeupSource()`） | S_PRE_NOCOM（STOPPED → SLEEP） | NO_COM へ入り終える。**ComM へは通知しない**（ComM は、起床を知らされておらず、NO_COM のままのため） | T_REPEAT_MAX（Dem へ報告して、あきらめて NO_COM へ） |
+
+- 検証の失敗で、通知を待っている間に FULL_COM が要求されたら、`PRE_NO_COM` と同じく、保留して、NO_COM へ入り終えたあとで始めます。
+- 起床の検証の最初の通知（STOPPED）を待っている間に FULL_COM が要求されたら、FULL_COM へ向かう手順（STOPPED → STARTED）へ進みます。
+- Bus-Off の再起動の通知を待っている間に NO_COM が要求されたら、回復を取り消します（待ちの状態も消します）。
+- 簡略化: 仕様の `WUVALIDATION` は、STOPPED のあと STARTED まで進めて、検証します（`S_CC_STARTED`）が、本プロジェクトは、
+  STOPPED（Listen-Only）のままで、受信を待ちます（FULL_COM へ入るときに、`PRE_FULL_COM` が STARTED へ進めます）。
+  また、検証の失敗でスリープへ戻るとき、仕様の E_NOCOM は ComM へ NO_COM を通知しますが、本プロジェクトの ComM は、
+  NO_COM の重ねての通知で、BswM のルールと Dcm の状態をもう一度動かしてしまうため、通知しません。
 
 ### Bus-Off 回復の確定（G_BUS_OFF_PASSIVE、2026-10 追加）
 

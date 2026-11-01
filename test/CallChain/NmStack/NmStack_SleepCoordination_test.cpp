@@ -728,6 +728,7 @@ TEST_F(NmStack_SleepCoordination_BusOff_Test, OK_ReRequestFullComDuringBusOffRes
     /* Bus-Off から回復させる（L1 周期経過） */
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）。ここで、回復が完了する
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -870,6 +871,7 @@ TEST_F(NmStack_SleepCoordination_BusOff_Test, OK_DuringRxCancelledPrepareBusSlee
     // Bus-Off から回復させる（L1 周期経過）
     FakeMillis_Value += CANSM_BUSOFF_RECOVERY_L1_MS + 1UL;
     CanSM_MainFunction();
+    Can_MainFunction_Mode();   // 再起動の完了通知（STARTED）。ここで、回復が完了する
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

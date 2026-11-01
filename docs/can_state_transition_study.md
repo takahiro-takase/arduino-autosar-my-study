@@ -35,9 +35,9 @@ CAN の通信モードが、どのきっかけで、どう変わり、その結�
 
 | 現在の状態 | きっかけ | 次の状態 | 行うこと |
 |---|---|---|---|
-| NO_COM | `CanSM_StartWakeupSource()`(バス活動の検知。EcuM から) | WAKEUP_VALIDATING | `CAN_CS_STOPPED` にして、検証タイマを開始 |
+| NO_COM | `CanSM_StartWakeupSource()`(バス活動の検知。EcuM から) | WAKEUP_VALIDATING | 検証タイマを開始。`CAN_CS_STOPPED`（Listen-Only）を要求して、完了通知を待つ（来なければ繰り返す） |
 | WAKEUP_VALIDATING | 有効な受信を確認し、ComM が `CanSM_RequestComMode(FULL_COM)` | PRE_FULL_COM → FULL_COM | 完了通知を待って、`CAN_CS_STARTED`（既に STOPPED なので、STOPPED は省く）→ FULL_COM に入り終えたとき、 `CAN_CS_STARTED`、`CANIF_ONLINE`、ComM へ FULL_COM(Dem の Bus-Off の PASSED は報告しない。回復の確定のときだけ) |
-| WAKEUP_VALIDATING | 検証タイムアウト(`CANSM_WAKEUP_VALIDATION_MS` = 2000 ms) | NO_COM | `CAN_CS_SLEEP` へ戻す |
+| WAKEUP_VALIDATING | 検証タイムアウト(`CANSM_WAKEUP_VALIDATION_MS` = 2000 ms)、または `CanSM_StopWakeupSource()` | PRE_NO_COM → NO_COM | `CAN_CS_SLEEP` へ戻す手順。入り終えても、ComM へは通知しない（ComM は NO_COM のまま） |
 | NO_COM | `RequestComMode(FULL_COM)` | PRE_FULL_COM → FULL_COM | `CAN_CS_STOPPED` → `CAN_CS_STARTED` の順に要求し、各完了通知を待つ。入り終えたら、`CANIF_ONLINE`、ComM へ FULL_COM |
 | PRE_FULL_COM | 完了通知が来ないまま、繰り返しが上限を超えた(T_REPEAT_MAX) | PRE_NO_COM | NO_COM へ戻る手順を始める |
 | PRE_FULL_COM | `RequestComMode(NO_COM)` | PRE_NO_COM | 向きを変える |
@@ -46,7 +46,7 @@ CAN の通信モードが、どのきっかけで、どう変わり、その結�
 | SILENT_COM | `RequestComMode(FULL_COM)` | FULL_COM | コントローラは既に STARTED のため、手順を経ずに、`CANIF_ONLINE`、ComM へ FULL_COM |
 | FULL_COM / SILENT_COM | `RequestComMode(NO_COM)` | PRE_NO_COM → NO_COM | `CAN_CS_STOPPED` → `CAN_CS_SLEEP` の順に要求し、各完了通知を待つ。入り終えたら、ComM へ NO_COM |
 | FULL_COM / SILENT_COM | `CanSM_ControllerBusOff()` | BUS_OFF | `CAN_CS_STOPPED`、直前の状態を覚える、ComM へ SILENT_COM |
-| BUS_OFF | `CanSM_MainFunction()` で、L1 / L2 の時間が経過 | 直前の状態(FULL_COM または SILENT_COM) | `CAN_CS_STARTED`、回復の確定待ちを開始、ComM へ通知 |
+| BUS_OFF | `CanSM_MainFunction()` で、L1 / L2 の時間が経過し、`CAN_CS_STARTED` の完了通知が届く | 直前の状態(FULL_COM または SILENT_COM) | `CAN_CS_STARTED` を要求して、完了通知を待つ（来なければ繰り返す）。届いたら、回復の確定待ちを開始、ComM へ通知 |
 | BUS_OFF | `RequestComMode(NO_COM)` | PRE_NO_COM → NO_COM | 受け付けて回復を取り消し、`CAN_CS_SLEEP`（既に STOPPED なので、STOPPED は省く）、入り終えたら、ComM へ NO_COM([SWS_CanSM_00182]) |
 | BUS_OFF | `RequestComMode(FULL_COM / SILENT_COM)` | 変わらない | 受け付けて(`E_OK`)、回復の後に戻る状態だけを要求どおりに変える。SILENT_COM は、回復を待たずに TX を止める([SWS_CanSM_00369]) |
 

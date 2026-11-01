@@ -183,6 +183,7 @@ protected:
     {
         FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;
         Can_MainFunction_Wakeup();
+        Can_MainFunction_Mode();   // STOPPED（Listen-Only）の完了通知を CanSM へ流す（検証の最初の要求が完了する）
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
         ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
         ASSERT_EQ(FakeEcuM_RequestRUNCount, 0U);

@@ -484,6 +484,7 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_FullComDuringBusOffRet
     SettleCanSmModeRequests();
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();   // 回復する
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 再起動の完了通知（STARTED）。ここで、回復が完了する
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -518,6 +519,7 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_SilentComDuringBusOffR
     const uint32 pduModeCallsAfterRequest = CallCount_CanIf_SetPduMode;               // TX を止める（1 回）
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();   // 回復する
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 再起動の完了通知（STARTED）。ここで、回復が完了する
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -555,6 +557,7 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_NG_SilentComDuringBusOffI
     ForcedReturn_CanIf_SetPduMode = E_OK;   // 回復の時の PDU モードの変更は、成功させる
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 再起動の完了通知（STARTED）。ここで、回復が完了する
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

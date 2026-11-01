@@ -124,7 +124,7 @@ TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_NG_InvalidNetwork)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_INVALID_NETWORK_HANDLE);
 }
 
-// NO_COM のとき、Listen-Only（STOPPED）への移行を要求して、検証中へ進む。検証がタイムアウトすれば、再スリープする
+// NO_COM のとき、Listen-Only（STOPPED）への移行を要求して、検証中へ進む。検証がタイムアウトすれば、再スリープを要求する
 TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_StartsValidationInNoCom)
 {
     /* ----------------------- */
@@ -132,6 +132,8 @@ TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_StartsValidation
     /* ----------------------- */
     FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
     ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;   // 現在のモードは、不明（CanIf は未初期化のため、実体を呼ばない）
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */
@@ -180,14 +182,110 @@ TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_IgnoredOutsideNo
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);       // コントローラへも何も要求しない
 }
 
-// コントローラが Listen-Only へ移れなければ、NO_COM のまま据え置く（検証のタイムアウトも、働かない）
-TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_NG_StaysInNoComWhenControllerCannotStop)
+// 完了通知が来なければ、CANSM_MODEREQ_REPEAT_TIME_MS ごとに、STOPPED の要求を繰り返す。通知が来たら、繰り返さない
+// （T_CC_STOPPED_TIMEOUT / T_CC_STOPPED_INDICATED、[SWS_CanSM_00629]/[00630]）
+TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_RepeatsStoppedRequestUntilIndication)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
+    ASSERT_EQ(CanSM_StartWakeupSource(0U), E_OK);
+    const uint32 afterStart = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_MainFunction();   // まだ、繰り返しの時間が経っていない
+    const uint32 beforeRepeat = CallCount_CanIf_SetControllerMode;
+    FakeMillis_Value += CANSM_MODEREQ_REPEAT_TIME_MS + 1UL;
+    CanSM_MainFunction();   // 通知が来ないので、繰り返す
+    const uint32 afterRepeat = CallCount_CanIf_SetControllerMode;
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // 通知が来た
+    FakeMillis_Value += CANSM_MODEREQ_REPEAT_TIME_MS + 1UL;
+    CanSM_MainFunction();   // もう繰り返さない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(beforeRepeat, afterStart);
+    EXPECT_EQ(afterRepeat, afterStart + 1U);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterRepeat);
+}
+
+// 検証の最初の通知（STOPPED）を待っている間に、FULL_COM が要求されたら、FULL_COM へ向かう手順（STOPPED → STARTED）へ進む
+TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_FullComRequestWhileWaitingForStoppedGoesToFullCom)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_StartWakeupSource(0U), E_OK);   // STOPPED の通知を待つ
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);
+}
+
+// 検証を止めて再スリープする最中に、FULL_COM が要求されたら、NO_COM へ入り終えたあとで、FULL_COM へ向かう手順を始める
+TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_FullComRequestWhileSleepingAgainStartsAfterNoCom)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
+    ASSERT_EQ(CanSM_StartWakeupSource(0U), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // Listen-Only になった
+    ASSERT_EQ(CanSM_StopWakeupSource(0U), E_OK);          // 検証を止めて、再スリープへ（現在のモードは不明のため、STOPPED から）
+    const uint32 afterStop = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // 保留される
+    const uint32 afterRequest = CallCount_CanIf_SetControllerMode;
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);   // STOPPED の通知で、SLEEP を要求
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);     // NO_COM へ入り終えて、保留した FULL_COM の手順を始める
+    const uint32 afterSleep = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterRequest, afterStop);          // 再スリープの最中は、FULL_COM の要求を、すぐには処理しない
+    EXPECT_EQ(afterSleep, afterStop + 2U);       // SLEEP の要求 + 保留した FULL_COM の手順の最初の要求
+}
+
+// 要求が失敗しても、検証中のまま、繰り返す（検証のタイムアウトが、最後に再スリープへ戻す）
+TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_KeepsRepeatingWhenControllerCannotStop)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
     ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
+    FailFromCallCount_CanIf_GetControllerMode = 0U;
+    ForcedReturn_CanIf_GetControllerMode      = E_OK;
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */
@@ -195,7 +293,7 @@ TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_NG_StaysInNoComWhen
     /* ----------------------- */
     const Std_ReturnType ret = CanSM_StartWakeupSource(0U);
     const uint32 afterStart = CallCount_CanIf_SetControllerMode;
-    FakeMillis_Value += CANSM_WAKEUP_VALIDATION_MS + 1UL;
+    FakeMillis_Value += CANSM_MODEREQ_REPEAT_TIME_MS + 1UL;
     CanSM_MainFunction();
 
     /* ----------------------- */
@@ -203,7 +301,7 @@ TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_NG_StaysInNoComWhen
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);                                              // 要求自体は受理する（[SWS_CanSM_00616]）
     EXPECT_EQ(afterStart, setModeBefore + 1U);                         // 停止を要求したが失敗した
-    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterStart);          // 検証中ではないので、タイムアウトの再スリープも要求しない
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterStart + 1U);     // 検証中のまま、通知が来ないので、繰り返す
 }
 
 }  // namespace
