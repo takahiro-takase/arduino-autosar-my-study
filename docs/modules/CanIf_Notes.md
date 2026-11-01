@@ -101,7 +101,7 @@ CAN ドライバがコントローラの遷移の完了を知らせるコール�
 ## CanIf_TriggerTransmit（送信データの要求の転送）
 
 CAN ドライバが送信の直前にデータを取りに来たとき、TX PDU 設定（`CanIf_TxPduConfigType`）の
-`TriggerTransmitFct`（PduR 経由なら `PduR_CanIfTriggerTransmit()`）を、`UpperLayerTxPduId` へ読み替えた
+`TriggerTransmitFct`（PduR 経由なら `PduR_CanIfTriggerTransmit()`、CanNm 宛てなら `CanNm_TriggerTransmit()`）を、`UpperLayerTxPduId` へ読み替えた
 PDU ID 付きで呼び、その戻り値をそのまま返します（[SWS_CANIF_00885]）。`TriggerTransmitFct` が NULL の
 TX PDU は、トリガ送信に対応しないので `E_NOT_OK` です（[SWS_CANIF_00888]。DET へは報告しません）。
 `TxPduId` が範囲外なら `CANIF_E_INVALID_TXPDUID`、NULL のポインタは `CANIF_E_PARAM_POINTER` を報告します。

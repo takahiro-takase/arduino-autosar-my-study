@@ -736,9 +736,15 @@ Std_ReturnType PduR_CanIfTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfo
         return E_NOT_OK;
     }
 
-    DET_LOGD(TAG, "TriggerTransmit src=%u dst=%u", (unsigned)TxPduId, (unsigned)path->ConfDestPduId);
+    /* 上位層の PDU ID: SecOC を経由する経路（TransmitOverrideFct あり）では、SecOC の TX PDU の ID
+     * （PduR_Transmit() が TransmitOverrideFct へ渡す ID。SecOC が Secured I-PDU を保持する。[SWS_SecOC_00068]）、
+     * それ以外は、送信確認の通知先と同じ ID（ConfDestPduId）。 */
+    const PduIdType upperPduId =
+        (path->TransmitOverrideFct != NULL) ? path->TransmitOverrideId : path->ConfDestPduId;
 
-    return path->TriggerTransmitFct(path->ConfDestPduId, PduInfoPtr);
+    DET_LOGD(TAG, "TriggerTransmit src=%u dst=%u", (unsigned)TxPduId, (unsigned)upperPduId);
+
+    return path->TriggerTransmitFct(upperPduId, PduInfoPtr);
 }
 
 /* ======================================================================

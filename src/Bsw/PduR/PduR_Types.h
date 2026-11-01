@@ -82,8 +82,12 @@ typedef struct
     PduR_TxTransmitFctType    TransmitOverrideFct;
     PduIdType                 TransmitOverrideId;
     /* 下位層（CanIf など）が PduR_CanIfTriggerTransmit() で送信データを要求してきたときの、上位層の
-     * <Up>_TriggerTransmit（SWS_PduR_00430）。引数の PDU ID は ConfDestPduId を使う。NULL（既定）なら、
-     * このパスはトリガ送信に対応しない（E_NOT_OK を返す）。末尾に追加したので、既存の初期化子は無変更。 */
+     * <Up>_TriggerTransmit（SWS_PduR_00430）。引数の PDU ID は、TransmitOverrideFct を持つ経路（SecOC を
+     * 経由する経路）では TransmitOverrideId、持たない経路では ConfDestPduId を使う（PduR_Transmit() が、
+     * 送信を渡す先と同じ上位層）。したがって、TransmitOverrideFct を持つ経路の TriggerTransmitFct は、その
+     * 中間モジュールのもの（SecOC_TriggerTransmit）でなければならない（コンフィギュレータが検査する）。
+     * NULL（既定）なら、このパスはトリガ送信に対応しない（E_NOT_OK を返す）。
+     * 末尾に追加したので、既存の初期化子は無変更。 */
     PduR_TxTriggerTransmitFctType TriggerTransmitFct;
 } PduR_TxRoutingPathType;
 

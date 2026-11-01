@@ -82,6 +82,7 @@ static unsigned long CanNm_StateTimerMs;
 
 static unsigned long CanNm_GetNowMs(void);
 
+static void CanNm_BuildPdu(uint8* pdu);
 static void CanNm_TransmitPdu(void);
 static void CanNm_EnterRepeatMessage(void);
 static void CanNm_EnterNormalOperation(void);
@@ -804,7 +805,65 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  * CanNm_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   NM フレームの送信データを、下位層（CanIf）へ複製する（トリガ送信）。
+ *
+ * \details CanIf が、送信の直前に、CanNm へ NM フレームの内容を取りに来る（[SWS_CanNm_00351]）。
+ *          CanNm_TransmitPdu() が CanIf_Transmit() へ渡すものと同じ NM フレーム（CBV と Source Node ID）を、
+ *          呼び出し元のバッファへ複製し、SduLength を CANNM_DLC へ更新する。
+ *          バッファが CANNM_DLC より小さいときは、何も複製せず E_NOT_OK を返し、PduInfoPtr を変えない。
+ *          TxPduId が CanNm の TX PDU（CanNmConf_CanNmTxPdu_CanNm_Tx）でないときは、CANNM_E_INVALID_PDUID を
+ *          報告して E_NOT_OK を返す（[SWS_CanNm_00195]）。
+ *
+ *          簡略化: CanNmComUserDataSupport（NM ユーザデータを Com から PduR_CanNmTriggerTransmit() で集める機能）は
+ *          持たないので、NM フレームは、CBV と Source Node ID だけで構成する。
+ *
+ * \param[in]     TxPduId     データを要求された CanNm の TX PDU の ID。
+ * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。
+ *                            NULL 禁止。SduDataPtr も NULL 禁止。
+ *
+ * \retval  E_OK      NM フレームを複製した。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、TxPduId が不正、またはバッファが小さい。何も複製していない。
+ *
+ * \pre        CanNm_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_CanNm_91001, SWS_CanNm_00351, SWS_CanNm_00195}
+ * \ServiceID      {0x41}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanNm_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    if (!CanNm_Initialized)
+    {
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_TRIGGER_TRANSMIT, CANNM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    {
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_TRIGGER_TRANSMIT, CANNM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    if (TxPduId != CanNmConf_CanNmTxPdu_CanNm_Tx)
+    {
+        DET_LOGE(TAG, "TriggerTransmit E: invalid TxPduId=%u", (unsigned)TxPduId);
+        (void)Det_ReportError(CANNM_MODULE_ID, 0U, CANNM_API_ID_TRIGGER_TRANSMIT, CANNM_E_INVALID_PDUID);
+        return E_NOT_OK;
+    }
+
+    if (PduInfoPtr->SduLength < CANNM_DLC)
+    {
+        DET_LOGW(TAG, "TriggerTransmit W: buffer too small (%u < %u)",
+                 (unsigned)PduInfoPtr->SduLength, (unsigned)CANNM_DLC);
+        return E_NOT_OK;
+    }
+
+    CanNm_BuildPdu(PduInfoPtr->SduDataPtr);
+    PduInfoPtr->SduLength = CANNM_DLC;
+    return E_OK;
+}
 
 /* ======================================================================
  * Scheduled Functions
@@ -948,6 +1007,28 @@ static unsigned long CanNm_GetNowMs(void)
 }
 
 /* ----------------------------------------------------------------------
+ * CanNm_BuildPdu
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   NM フレーム（CBV + Source Node ID）を組み立てる。
+ *
+ * \details CanNm_TransmitPdu()（CanIf_Transmit() へ渡す）と CanNm_TriggerTransmit()（CanIf へ複製する）が、
+ *          同じ内容の NM フレームを作るための共通部分。
+ *
+ * \param[out] pdu  組み立て先。CANNM_DLC バイト以上。NULL 禁止。
+ *
+ * \ServiceID      {0xF1}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void CanNm_BuildPdu(uint8* pdu)
+{
+    pdu[0] = CanNm_RepeatMessageBitSet ? CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST : 0x00U;
+    pdu[1] = CANNM_SOURCE_NODE_ID;
+}
+
+/* ----------------------------------------------------------------------
  * CanNm_TransmitPdu
  * ---------------------------------------------------------------------- */
 
@@ -967,8 +1048,7 @@ static unsigned long CanNm_GetNowMs(void)
 static void CanNm_TransmitPdu(void)
 {
     uint8 pdu[CANNM_DLC];
-    pdu[0] = CanNm_RepeatMessageBitSet ? CANNM_CBV_BIT_REPEAT_MESSAGE_REQUEST : 0x00U;
-    pdu[1] = CANNM_SOURCE_NODE_ID;
+    CanNm_BuildPdu(pdu);
 
     PduInfoType pduInfo = {
         .SduDataPtr = pdu,

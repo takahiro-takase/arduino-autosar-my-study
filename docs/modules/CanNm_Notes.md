@@ -80,6 +80,23 @@ Disable 中は NM フレームを**送信せず**、NM-Timeout Timer の判定�
 （受信でもタイマを再起動しません）。そのため Ready Sleep で Disable されるとスリープにも
 進まず、Enable した時点でタイマを起算し直して再開します。状態機械の状態自体は変わりません。
 
+## トリガ送信（`CanNm_TriggerTransmit()`、2026-11）
+
+下位層（CanIf）が、送信の直前に、NM フレームの内容を CanNm へ取りに来る経路です（[SWS_CanNm_00351]）。
+CanNm が組み立てる NM フレーム（CBV と Source Node ID。`CanNm_TransmitPdu()` が `CanIf_Transmit()` へ渡すものと
+同じ内容。共通の `CanNm_BuildPdu()` で作ります）を、呼び出し元のバッファへ複製し、`SduLength` を `CANNM_DLC` へ
+更新します。バッファが小さいときは、何も複製せず `E_NOT_OK`（`PduInfoPtr` を変えません）。`TxPduId` が CanNm の
+TX PDU でないときは `CANNM_E_INVALID_PDUID`（[SWS_CanNm_00195]）、NULL のポインタは `CANNM_E_PARAM_POINTER`、
+未初期化は `CANNM_E_UNINIT` を報告して `E_NOT_OK` です。
+
+CanNm は CanIf の直接の上位層なので、PduR は経由しません。`CanIf.json` の TX PDU に `triggerTransmit: true` を書くと、
+`CanIf_TriggerTransmit()` が `CanNm_TriggerTransmit()` へ転送します（`UpperLayerTxPduId` を CanNm の TX PDU の ID として渡します）。
+
+**簡略化**: `CanNmComUserDataSupport`（NM ユーザデータを Com から `PduR_CanNmTriggerTransmit()` で集める機能）は
+持たないので、NM フレームは、CBV と Source Node ID の 2 バイトだけです。
+**本番コードからは呼ばれません**: 本番の設定は、CanNm の TX PDU をトリガ送信に対応させません。
+3 層を実体で結んだ確認は、`test/CallChain/NmStack/NmStack_TriggerTransmit_test.cpp` にあります。
+
 ## MeterStatus との違い（なぜ Com を経由しないか）
 
 `MeterStatus` は ASW → RTE → Com → PduR → CanIf → Can という

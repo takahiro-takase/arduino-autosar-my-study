@@ -230,6 +230,42 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
 void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
 
 /**
+ * \brief   組み立て済みの Secured I-PDU を、下位層（PduR 経由で CanIf など）へ複製する（トリガ送信。[SWS_SecOC_00068]）。
+ *
+ * \details 下位層が、送信の直前に、PduR_<Lo>TriggerTransmit を通して、SecOC へ Secured I-PDU を取りに来る
+ *          （[7.4.2] 節 "Authentication during triggered transmission"）。SecOC は、上位層の役割を自分で持ち、
+ *          SecOC_MainFunctionTx() が組み立てて保持している Secured I-PDU（Authentic I-PDU、Freshness Value、
+ *          切り詰めた MAC）を、呼び出し元のバッファへ複製し、SduLength を Secured I-PDU の長さへ更新する。
+ *          TriggerTransmit の呼び出しを、上位層へは転送しない。
+ *
+ *          複製した Secured I-PDU は、下位層へ渡した時点で解放する（同じ Freshness Value の Secured I-PDU を
+ *          2 回送ると、受信側がリプレイとして棄却するため）。その送信が確認された（SecOC_TxConfirmation() が
+ *          E_OK で呼ばれた）ときに、保持している Authentic I-PDU を、新しく設定されたものとして扱い、次の
+ *          SecOC_MainFunctionTx() で再び認証する（[SWS_SecOC_00069]）。下位層が、上位層の更新を待たずに、
+ *          再び要求しても、新しい Freshness Value の Secured I-PDU を渡せる。
+ *
+ *          保持している Secured I-PDU が無い（まだ組み立てていない、複製済み、または、新しい Authentic I-PDU を
+ *          受け取って、組み立て直し待ち）ときは、何も複製せず E_NOT_OK を返す（[SWS_SecOC_00150]）。
+ *          バッファが Secured I-PDU の長さより小さいときも、何も複製せず、PduInfoPtr を変えずに E_NOT_OK を返す。
+ *
+ *          本番の設定は、TX 方向で SecOC を使う PDU を持たない（`SECOC_TX_PDU_COUNT` 参照）ので、本番コードからは呼ばれない。
+ *
+ * \param[in]     TxPduId     データを要求された SecOC TX Secured I-PDU の ID（SecOC_TxPduConfigType.SecOCTxPduId）。
+ * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。
+ *                            NULL 禁止。SduDataPtr も NULL 禁止。
+ *
+ * \retval  E_OK      Secured I-PDU を複製した。SduLength が複製した長さを示す。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、TxPduId が不正、保持している Secured I-PDU が無い、またはバッファが小さい。
+ *                    何も複製していない。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00127, SWS_SecOC_00068, SWS_SecOC_00069, SWS_SecOC_00150}
+ * \ServiceID      {0x41}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType SecOC_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr);
+
+/**
  * \brief   周期実行関数。保留中の TX Secured I-PDU を組み立てて送信する。
  *
  * \details SecOC_IfTransmit() が内部バッファへコピーした Authentic I-PDU に

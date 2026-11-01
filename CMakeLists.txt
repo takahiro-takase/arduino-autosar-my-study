@@ -406,6 +406,11 @@ add_executable(native_chain_tests
 )
 
 target_include_directories(native_chain_tests PRIVATE ${NATIVE_CHAIN_INCLUDE_DIRS})
+# SecOC.c だけ、TX Secured I-PDU を 1 件まで受け付けるビルドにする（SECOC_TX_PDU_MAX。SecOC.c 参照）。
+# 本番の設定は TX 方向で SecOC を使わない（SECOC_TX_PDU_COUNT=0）ので、既定のままでは、SecOC の TX の経路
+# （SecOC_IfTransmit() / SecOC_MainFunctionTx() / SecOC_TriggerTransmit()）を、単体テストで確認できない。
+# この定義は SecOC.c にだけ効き、本番（uno_r4）のビルドには影響しない。
+set_source_files_properties(${CMAKE_SOURCE_DIR}/src/Bsw/SecOC/SecOC.c PROPERTIES COMPILE_DEFINITIONS "SECOC_TX_PDU_MAX=1")
 
 # test/test_main.cpp が独自に main()/RUN_ALL_TESTS() を定義しているため、
 # 独自 main を持つ gtest_main ではなく gtest のみをリンクする。

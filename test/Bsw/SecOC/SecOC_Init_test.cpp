@@ -118,7 +118,9 @@ TEST_F(SecOC_Init_Test, SecOC_Init_NG_TxPduCountExceedsMax)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     SecOC_DeInit();
-    const SecOC_ConfigType badConfig = { NULL, 0U, NULL, SECOC_TX_PDU_COUNT + 1U };
+    // 受け付ける TX Secured I-PDU の最大数を超える数。単体テストのビルドは、TX 方向を確認するために、最大数を 1 にしている
+    // （CMakeLists.txt の SECOC_TX_PDU_MAX）ので、SECOC_TX_PDU_COUNT + 1 では超えない。
+    const SecOC_ConfigType badConfig = { NULL, 0U, NULL, SECOC_TX_PDU_COUNT + 2U };
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

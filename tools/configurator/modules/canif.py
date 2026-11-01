@@ -12,7 +12,7 @@ UPPER_LAYERS = {
     "PDUR":    {"txConfirm": "PduR_CanIfTxConfirmation", "rxIndication": "PduR_CanIfRxIndication",
                 "triggerTransmit": "PduR_CanIfTriggerTransmit", "header": "PduR_CanIf.h"},
     "CANNM":   {"txConfirm": "CanNm_TxConfirmation", "rxIndication": "CanNm_RxIndication",
-                "header": "CanNm.h"},
+                "triggerTransmit": "CanNm_TriggerTransmit", "header": "CanNm.h"},
     "CANTSYN": {"txConfirm": "CanTSyn_TxConfirmation", "rxIndication": "CanTSyn_RxIndication",
                 "header": "CanTSyn.h"},
 }
