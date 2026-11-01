@@ -481,7 +481,7 @@ Std_ReturnType EcuM_RequestRUN(EcuM_UserType user)
         EcuM_PostRunUsers = 0U;
     }
     /* SHUTDOWN 中に要求が来たら RUN へ戻る（CAN バスのウェイクアップ経由）。
-     * CanSM_ControllerModeIndication() → ComM_BusSM_ModeIndication(FULL_COM) →
+     * CanSM_RequestComMode(FULL_COM) → ComM_BusSM_ModeIndication(FULL_COM) →
      * EcuM_RequestRUN(ECUM_USER_COMM) という経路からの復帰を許可する。
      * POST_RUN からの復帰と同じ後処理（チェックポイント基準リセット・
      * HW ウォッチドッグ再有効化・全タスク再有効化）を行う。 */
@@ -652,7 +652,7 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
  *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
- *          によるノイズ除去（`CanSM_ControllerModeIndication()` 側の既存の
+ *          によるノイズ除去（`CanSM_StartWakeupSource()` が始める CanSM 側の
  *          ステートマシン）と、有効フレーム受信の確認（`CanIf_CheckValidation()`
  *          → `EcuM_ValidateWakeupEvent()` → `ComM_EcuM_WakeUpIndication()`
  *          → `CanSM_RequestComMode(FULL_COM)` による FULL_COM 確定）が担うため、
@@ -696,7 +696,9 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
         /* 検証待ちになったことを、BswM へ通知する（検証を始める CanSM への通知より前。仕様の PENDING は、検出した時点の状態）。 */
         BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING);
     }
-    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    /* [SWS_CanSM_00609]: 起床の検証を始める（CanSM は、NO_COM から WAKEUP_VALIDATING へ進む）。
+     * 以前は、CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を、起床の合図として呼んでいた。 */
+    (void)CanSM_StartWakeupSource(0U);
 }
 
 /* ----------------------------------------------------------------------

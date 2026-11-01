@@ -53,6 +53,8 @@
  *  を使っていたが、正しくは 0x07。 */
 #define CANSM_API_ID_CONTROLLER_MODE_INDICATION  0x07U
 #define CANSM_API_ID_MAIN_FUNCTION         0x05U
+#define CANSM_API_ID_START_WAKEUP_SOURCE   0x11U
+#define CANSM_API_ID_STOP_WAKEUP_SOURCE    0x12U
 #define CANSM_API_ID_DEINIT                 0x14U
 #define CANSM_API_ID_GET_VERSION_INFO       0x01U
 
@@ -81,10 +83,10 @@
 
 /** Bus-Off 回復試行回数の L1→L2 切替閾値（CanSMBorCounterL1ToL2 相当）
  *  この回数を超えて回復しない場合、一時的なバス障害ではなく持続的な
- *  Bus-Off と判断し、リトライ周期を L2 へ切り替えて継続する（回復自体は続く）。
- *  DemConf_DemEventParameter_CAN_BUSOFF (DTC 0x000108) へは、Bus-Off の検出ごとに PREFAILED を
- *  報告する。Dem 側のしきい値 DEM_DEBOUNCE_LIMIT_CAN_BUSOFF は、この値 + 1（config/data/Dem.json）。
- *  両者のずれは CanSM.c の #error で検出する。 */
+ *  Bus-Off と判断し、DemConf_DemEventParameter_CAN_BUSOFF (DTC 0x000108) を Dem へ FAILED
+ *  報告した上で、リトライ周期を L2 へ切り替えて継続する（回復自体は続く）。
+ *  Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1（この報告は既に十分なリトライを
+ *  経た後の確定情報のため、Dem では重ねてデバウンスしない）。 */
 #define CANSM_BUSOFF_L1_TO_L2_COUNT  3U
 
 /** Bus-Off 回復の確定条件（G_BUS_OFF_PASSIVE）に TX 確認のポーリングを使うか（CanSMBorTxConfirmationPolling 相当、

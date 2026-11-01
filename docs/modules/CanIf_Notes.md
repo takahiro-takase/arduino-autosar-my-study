@@ -92,11 +92,14 @@ CAN ドライバがコントローラの遷移の完了を知らせるコール�
 そのまま渡します（[SWS_CANIF_00711]）。CanIf が未初期化なら通知せず（[SWS_CANIF_00702]）、`CANIF_E_UNINIT` を報告し、
 `ControllerId` が範囲外なら `CANIF_E_PARAM_CONTROLLERID` を報告して通知しません（[SWS_CANIF_00700]）。
 
-**本番コードからは呼ばれません。** 本プロジェクトの `Can_SetControllerMode()` は要求の中で同期的に遷移を終え、
-`CanIf_SetControllerMode()` が成功の時点で状態を更新するので、Can が通知を返す必要がありません。
-起床の検出は、`EcuM_CheckWakeup()` が `CanSM_ControllerModeIndication()` を直接呼ぶ経路です
-（[`CanSM_Notes.md`](./CanSM_Notes.md)）。本関数は `CanIf_ControllerMode[]` を更新しません
-（`CanIf_SetControllerMode()` の側にある、起床時の通知・送信確認の状態などの付随処理と、ちぐはぐになるため）。
+**呼び出し元は、Can の `Can_MainFunction_Mode()` です（2026-11）。** `Can_SetControllerMode()` は、遷移そのものを要求の
+中で同期的に終えますが、遷移の結果のモード（STARTED / STOPPED / SLEEP）を通知として積み、`Can_MainFunction_Mode()`
+（Os の 1 ms タスク）が、要求の呼び出しとは別の文脈で、本関数を呼びます（[SWS_Can_00017]）。
+CanSM は、現在、受け取るだけで、状態を変えません（[`CanSM_Notes.md`](./CanSM_Notes.md)）。
+以前は、起床の合図として、`EcuM_CheckWakeup()` が `CanSM_ControllerModeIndication()` を直接呼んでいましたが、
+`CanSM_StartWakeupSource()` へ移しました（通知を、本物の完了通知として、流せるようにするため）。
+本関数は `CanIf_ControllerMode[]` を更新しません（`CanIf_SetControllerMode()` の側にある、起床時の通知・送信確認の
+状態などの付随処理と、ちぐはぐになるため）。
 
 ## CanIf_TriggerTransmit（送信データの要求の転送）
 

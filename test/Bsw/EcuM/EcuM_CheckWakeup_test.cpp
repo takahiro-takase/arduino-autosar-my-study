@@ -228,7 +228,7 @@ TEST_F(EcuM_CheckWakeup_Test, EcuM_CheckWakeup_OK_CanSourceDelegatesToCanSm)
     /* ----------------------- */
     // CanSM は未初期化のため、委譲先の CanSM が UNINIT を報告する（委譲された証拠）
     EXPECT_EQ(moduleAfterCheck, static_cast<uint8>(CANSM_MODULE_ID));
-    EXPECT_EQ(apiAfterCheck, CANSM_API_ID_CONTROLLER_MODE_INDICATION);
+    EXPECT_EQ(apiAfterCheck, CANSM_API_ID_START_WAKEUP_SOURCE);
     EXPECT_EQ(errorAfterCheck, CANSM_E_UNINIT);
     EXPECT_EQ(CallCount_Os_SchedulerStep, 1U);
 }

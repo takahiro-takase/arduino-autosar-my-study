@@ -172,6 +172,12 @@
       "periodMs": 100,
       "header": "StbM.h",
       "summary": "同期時間ベースの同期喪失タイムアウトの監視"
+    },
+    {
+      "function": "Can_MainFunction_Mode",
+      "periodMs": 1,
+      "header": "Can.h",
+      "summary": "コントローラのモード変更の完了通知を CanIf へ渡す"
     }
   ]
 }

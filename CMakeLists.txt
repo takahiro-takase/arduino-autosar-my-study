@@ -488,6 +488,8 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanSM_GetCurrentComMode
     CanSM_ControllerBusOff
     CanSM_ControllerModeIndication
+    CanSM_StartWakeupSource
+    CanSM_StopWakeupSource
     CanSM_MainFunction
     CanSM_GetVersionInfo
     # CanTp.c の AUTOSAR IF 全数（Wrap_CanTp.h/.c 参照）。

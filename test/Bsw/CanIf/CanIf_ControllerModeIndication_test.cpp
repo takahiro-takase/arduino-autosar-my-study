@@ -20,6 +20,7 @@ extern "C" {
 #include "Wrap_CanIf.h"
 #include "Wrap_Can.h"
 #include "Wrap_ComM.h"
+#include "Wrap_CanSM.h"
 }
 
 /* ======================================================================
@@ -97,20 +98,19 @@ TEST_F(CanIf_ControllerModeIndication_Test, CanIf_ControllerModeIndication_OK_Fo
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    FailFromCallCount_CanIf_SetControllerMode = 0U;   // CanSM が要求するコントローラの状態変更は、常に成功する
-    ForcedReturn_CanIf_SetControllerMode      = E_OK;
-    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
+    WrapCanSM_Reset();
+    const uint32 modeIndicationBefore = CallCount_CanSM_ControllerModeIndication;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanIf_ControllerModeIndication(0U, CAN_CS_STOPPED);   // CanSM は NO_COM（起床の検出）
+    CanIf_ControllerModeIndication(0U, CAN_CS_STOPPED);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    // CanSM が起床を受け付け、リスン専用への移行（停止）をコントローラへ要求した
-    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore + 1U);
+    // CanSM_ControllerModeIndication() へ、そのまま渡した（[SWS_CANIF_00711]）
+    EXPECT_EQ(CallCount_CanSM_ControllerModeIndication, modeIndicationBefore + 1U);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 

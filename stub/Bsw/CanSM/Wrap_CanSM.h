@@ -62,6 +62,8 @@ extern uint32 CallCount_CanSM_RequestComMode;
 extern uint32 CallCount_CanSM_GetCurrentComMode;
 extern uint32 CallCount_CanSM_ControllerBusOff;
 extern uint32 CallCount_CanSM_ControllerModeIndication;
+extern uint32 CallCount_CanSM_StartWakeupSource;
+extern uint32 CallCount_CanSM_StopWakeupSource;
 extern uint32 CallCount_CanSM_MainFunction;
 extern uint32 CallCount_CanSM_GetVersionInfo;
 
@@ -74,6 +76,8 @@ extern uint32 CallCount_CanSM_GetVersionInfo;
  *  対応する `ForcedReturn_CanSM_Xxx` を返す。 */
 extern uint32 FailFromCallCount_CanSM_RequestComMode;
 extern uint32 FailFromCallCount_CanSM_GetCurrentComMode;
+extern uint32 FailFromCallCount_CanSM_StartWakeupSource;
+extern uint32 FailFromCallCount_CanSM_StopWakeupSource;
 
 /* ----------------------------------------------------------------------
  * 閾値到達後の強制戻り値（戻り値を持つ2関数のみ）

@@ -208,6 +208,7 @@ static unsigned long CanSM_GetNowMs(void);
 static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag);
 
 static boolean CanSM_BorPassiveGuardMet(void);
+static void CanSM_AbortWakeupValidation(void);
 
 /* ======================================================================
  * Functions
@@ -450,13 +451,114 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
  * CanSM_StartWakeupSource
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床の検証を始める（[SWS_CanSM_00609]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_START_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00616]/[SWS_CanSM_00607]）。トリガが効くのは NO_COM（ボランタリスリープ中）だけで、
+ *          それ以外の状態では、何もしない（要求自体は受理する）。
+ *          NO_COM のとき、CAN_T_WAKEUP（SLEEP→STOPPED、Listen-Only）だけを実行して CANSM_STATE_WAKEUP_VALIDATING へ入り、
+ *          検証タイマを開始する。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
+ *          FULL_COM へ確定するのは、有効な受信の確認後に ComM が CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、
+ *          または CanSM_MainFunction() が検証のタイムアウトを検出して、再スリープするとき（検証失敗）。
+ *
+ *          以前は、同じ処理が CanSM_ControllerModeIndication() の中にあり、EcuM_CheckWakeup() が
+ *          CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を「起床の合図」として呼んでいた（2026-11 に、本関数へ移した。
+ *          仕様では、CanSM_ControllerModeIndication() は、コントローラがそのモードに達した完了通知）。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00609, SWS_CanSM_00607, SWS_CanSM_00616, SWS_CanSM_00617, SWS_CanSM_00612}
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StartWakeupSource(NetworkHandleType network)
+{
+    if (!CanSM_Initialized)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_START_WAKEUP_SOURCE, CANSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (network >= CANSM_CHANNEL_COUNT)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_START_WAKEUP_SOURCE, CANSM_E_INVALID_NETWORK_HANDLE);
+        return E_NOT_OK;
+    }
+
+    if (CanSM_State != CANSM_STATE_NO_COM)
+    {
+        /* トリガが効くのは NO_COM（ボランタリスリープ中）だけ。CANSM_STATE_BUS_OFF は、実 HW をスリープさせないので、
+         * そこから起床の検証を始めることは、原理的にない（フェイルセーフとして残す）。 */
+        DET_LOGW(TAG, "StartWakeupSource ignored: not in voluntary NO_COM sleep (state=%u)",
+                 (unsigned)CanSM_State);
+        return E_OK;
+    }
+
+    DET_LOGI(TAG, "Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)");
+    if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
+    {
+        /* 到達しないはずの経路（この分岐に来る時点で CanState==CAN_CS_SLEEP であることは、呼び出し元
+         * （Can_MainFunction_Wakeup() → EcuM_CheckWakeup()）側で保証されている）。実際に失敗した場合、コントローラは
+         * Listen-Only へ遷移していないため、検証タイマだけ回して確定させるのは危険。CANSM_STATE_NO_COM のまま据え置き、
+         * 次のウェイクアップ通知を待つ（2026-08 のレビューで指摘）。 */
+        DET_LOGE(TAG, "StartWakeupSource E: CanIf_SetControllerMode(STOPPED) failed, staying in NO_COM");
+        return E_OK;
+    }
+    CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
+    CanSM_ValidationTimerMs = CanSM_GetNowMs();
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_StopWakeupSource
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床の検証を止める（[SWS_CanSM_00610]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_STOP_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00622]/[SWS_CanSM_00608]）。トリガが効くのは WAKEUP_VALIDATING（検証中）だけで、
+ *          コントローラを再びスリープさせて、NO_COM へ戻る（検証失敗と同じ。CanSM_MainFunction() の検証タイムアウトと
+ *          共通の処理）。それ以外の状態では、何もしない（要求自体は受理する）。
+ *          本プロジェクトの EcuM は、現在この関数を呼ばない（検証の失敗は、CanSM_MainFunction() の検証タイムアウトが
+ *          自分で検出して、再スリープする）。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00610, SWS_CanSM_00608, SWS_CanSM_00618, SWS_CanSM_00619, SWS_CanSM_00620, SWS_CanSM_00622}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StopWakeupSource(NetworkHandleType network)
+{
+    if (!CanSM_Initialized)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_STOP_WAKEUP_SOURCE, CANSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (network >= CANSM_CHANNEL_COUNT)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_STOP_WAKEUP_SOURCE, CANSM_E_INVALID_NETWORK_HANDLE);
+        return E_NOT_OK;
+    }
+
+    if (CanSM_State == CANSM_STATE_WAKEUP_VALIDATING)
+    {
+        DET_LOGI(TAG, "StopWakeupSource: wakeup validation stopped -> back to SLEEP");
+        CanSM_AbortWakeupValidation();
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_GetVersionInfo
@@ -620,42 +722,25 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。旧
- *          `CanSM_ControllerWakeup`（2026-09-05、実仕様名・シグネチャへ
- *          是正。詳細は CanSM.h 参照）。
+ * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。
  *
- * \details CAN_CS_SLEEP 中に MCP2515 がバス活動を検知して自律的にウェイクアップ
- *          した際、Can_Isr()（割り込み） → Can_MainFunction_Wakeup() →
- *          EcuM_CheckWakeup()（[SWS_Can_00271]、2026-09-05 是正前は実仕様に
- *          存在しない独自 API CanIf_ControllerWakeup() 経由だった） 経由で
- *          呼び出される（本プロジェクトの唯一の呼び出し場面。EcuM.h 冒頭
- *          コメント参照）。
+ * \details CAN ドライバ（Can_MainFunction_Mode() → CanIf_ControllerModeIndication()）が、コントローラが
+ *          要求されたモードへ達したことを知らせるために呼ぶ完了通知。
  *
- *          CANSM_STATE_NO_COM（ComM の NO_COM 要求によるボランタリスリープ）
- *          からの起床のみを受け付ける。CANSM_STATE_BUS_OFF は Can_T_STOP/
- *          Can_T_START のみで回復を試行し、実 HW をスリープさせることが
- *          そもそもないため、この状態から本関数が呼ばれることは原理的にない。
+ *          現在は、通知を受け取るだけで、状態は変えない（2026-11）。CanSM の状態遷移は、まだ、CanIf_SetControllerMode() の
+ *          戻り値で完了とみなす（同期）ためで、通知を待って進める形（S_PRE_FULLCOM / S_PRE_NOCOM）は、今後の段階で入れる。
  *
- *          この時点ではまだ FULL_COM へ確定しない。MCP2515 の WAKIF はノイズでも
- *          誤って立ちうるため、CAN_T_WAKEUP（SLEEP→STOPPED、Listen-Only）のみを
- *          実行して CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマを開始する。
- *          実際に FULL_COM へ確定するのは、有効な受信の確認後に ComM が
- *          CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、または CanSM_MainFunction() が検証タイムアウトを
- *          検出して再スリープするとき（検証失敗）のいずれかである。
+ *          以前は、この関数が「起床の合図」を兼ねていた（EcuM_CheckWakeup() が CanSM_ControllerModeIndication(0,
+ *          CAN_CS_STOPPED) を呼んで、NO_COM から WAKEUP_VALIDATING へ進めていた）。仕様では、起床の検証は、EcuM が呼ぶ
+ *          CanSM_StartWakeupSource() で始める（[SWS_CanSM_00607]）ので、その処理を移した。
  *
- * \param[in]  ControllerId   モードが変化したコントローラ ID。
- * \param[in]  ControllerMode 通知されたコントローラモード。呼び出し場面が
- *                            ウェイクアップ検知のみに限定されるため、内部
- *                            ロジックはこの値では分岐しない（CanSM.h 参照）。
+ * \param[in]  ControllerId   モードが変化したコントローラ ID（0 のみ）。
+ * \param[in]  ControllerMode 通知されたコントローラモード。
  *
- * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN
- *          controllers)」だが、本実装は `CanSM_State`/`CanSM_ValidationTimerMs`
- *          等の共有 static 変数を排他制御なしに読み書きするため、
- *          兄弟関数（`CanSM_ControllerBusOff`/
- *          `CanSM_RequestComMode` 等、いずれも `Non Reentrant`）と同様に
- *          `Non Reentrant` のまま扱う（本プロジェクトは単一コントローラ構成
- *          で ControllerId!=0 を DET 拒否するため、実仕様が言う「異なる
- *          コントローラ間」のケース自体が到達しない点も踏まえた判断）。
+ * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN controllers)」だが、本実装は共有 static 変数を
+ *          排他制御なしに読み書きする兄弟関数（`CanSM_ControllerBusOff`/`CanSM_RequestComMode` 等、いずれも
+ *          `Non Reentrant`）と同様に `Non Reentrant` のまま扱う（単一コントローラ構成で、ControllerId!=0 を DET 拒否する
+ *          ため、「異なるコントローラ間」のケース自体が到達しない）。
  *
  * \AUTOSARReq     {SWS_CanSM_00396, SWS_CanSM_00397, SWS_CanSM_00398}
  * \ServiceID      {0x07}
@@ -664,8 +749,6 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  */
 void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode)
 {
-    (void)ControllerMode;
-
     if (!CanSM_Initialized)
     {
         (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_UNINIT);
@@ -679,32 +762,10 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_NO_COM)
-    {
-        /* 想定される呼び出し元は Can_MainFunction_Wakeup()（Can_Isr() の SLEEP
-         * 分岐が立てたフラグをドレインするタスク）のみであり、
-         * CanState == CAN_CS_SLEEP のときにしか到達しない。CANSM_STATE_BUS_OFF
-         * は実 HW をスリープさせないため、この分岐に到達すること自体が
-         * 原理的にない（フェイルセーフとして残す）。 */
-        DET_LOGW(TAG, "Wakeup ignored: not in voluntary NO_COM sleep (state=%u)",
-                 (unsigned)CanSM_State);
-        return;
-    }
-
-    DET_LOGI(TAG, "Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)");
-    if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
-    {
-        /* 到達しないはずの経路（この分岐に来る時点で CanState==CAN_CS_SLEEP
-         * であることは呼び出し元 Can_MainFunction_Wakeup() 側で保証されて
-         * いる）。実際に失敗した場合、コントローラは Listen-Only へ遷移
-         * していないため、検証タイマだけ回して確定させるのは危険。
-         * CANSM_STATE_NO_COM のまま据え置き、次のウェイクアップ通知を
-         * 待つ（2026-08 のレビューで指摘）。 */
-        DET_LOGE(TAG, "ControllerWakeup E: CanIf_SetControllerMode(STOPPED) failed, staying in NO_COM");
-        return;
-    }
-    CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
-    CanSM_ValidationTimerMs = CanSM_GetNowMs();
+    /* 現在は、通知を待たずに、CanIf_SetControllerMode() の戻り値で完了とみなすので、状態は変えない
+     * （上の \details 参照）。 */
+    DET_LOGD(TAG, "ControllerModeIndication ch=%u mode=%u (no state change)",
+             (unsigned)ControllerId, (unsigned)ControllerMode);
 }
 
 /* ----------------------------------------------------------------------
@@ -814,11 +875,7 @@ void CanSM_MainFunction(void)
         {
             DET_LOGW(TAG, "Wakeup validation timeout (%lums, no confirmed RX) -> back to SLEEP",
                      (unsigned long)CANSM_WAKEUP_VALIDATION_MS);
-            /* CAN_T_SLEEP は失敗しない（CanSM_RequestComMode() の
-             * COMM_NO_COMMUNICATION 分岐のコメント参照）。戻り値は明示的に無視する。 */
-            (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
-            CanSM_State             = CANSM_STATE_NO_COM;
-            CanSM_BorPassivePending = 0U;
+            CanSM_AbortWakeupValidation();
         }
         return;
     }
@@ -928,6 +985,24 @@ void CanSM_MainFunction(void)
 /* ======================================================================
  * Internal Functions
  * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanSM_AbortWakeupValidation
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   起床の検証を打ち切り、コントローラを再スリープさせて、NO_COM へ戻す。
+ *
+ * \details 検証のタイムアウト（CanSM_MainFunction()）と、CanSM_StopWakeupSource() に共通の処理。
+ *          CAN_T_SLEEP は失敗しない（CanSM_RequestComMode() の COMM_NO_COMMUNICATION 分岐のコメント参照）。
+ *          戻り値は、明示的に無視する。ウェイクアップ割り込みは、再武装される。
+ */
+static void CanSM_AbortWakeupValidation(void)
+{
+    (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
+    CanSM_State             = CANSM_STATE_NO_COM;
+    CanSM_BorPassivePending = 0U;
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_GetNowMs

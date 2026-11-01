@@ -168,8 +168,8 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 [SWS_Can_00271]。Can ドライバの `Can_MainFunction_Wakeup()` が、スリープ中の CAN バス活動を
 検出すると `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)` を呼びます（旧 `CanIf_ControllerWakeup()` の
 役割を引き継ぐ）。EcuM は CAN 以外の要因を持たないため、`ECUM_WKSOURCE_CAN` 以外には
-`ECUM_E_INVALID_PAR` を報告します。CAN の場合は `CanSM_ControllerModeIndication()` を呼んで
-ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始め、検証に成功すると ComM 経由で
+`ECUM_E_INVALID_PAR` を報告します。CAN の場合は `CanSM_StartWakeupSource()`（[SWS_CanSM_00609]。以前は `CanSM_ControllerModeIndication()` を起床の合図に
+流用していた）を呼んで、ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始め、検証に成功すると ComM 経由で
 `EcuM_RequestRUN()` が呼ばれて SHUTDOWN から RUN へ戻ります
 （詳細は [`CanSM_Notes.md`](./CanSM_Notes.md) と [can_stack.md](../can_stack.md#can-controller-sleep)）。
 

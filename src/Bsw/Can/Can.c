@@ -177,6 +177,25 @@ static uint8 Can_InterruptDisableNestCount = 0U;
 #define CAN_TX_CONF_QUEUE_DIAG_BURST  8U
 #define CAN_TX_CONF_QUEUE_SIZE        (CANIF_TX_PDU_COUNT + CAN_TX_CONF_QUEUE_DIAG_BURST)
 
+/* -----------------------------------------------------------------------
+ * コントローラのモード変更の完了通知（Can_MainFunction_Mode()）
+ * Can_SetControllerMode() が成功した遷移の結果のモード（STARTED / STOPPED / SLEEP）を積み、
+ * Can_MainFunction_Mode() が CanIf_ControllerModeIndication() へ通知する（[SWS_Can_00017]）。
+ * 遷移そのものは Can_SetControllerMode() の中で同期的に終える（本プロジェクトの簡略化）が、通知は
+ * 要求の呼び出しとは別の文脈（Os の 1 ms タスク）で行う。上位（CanSM）が、通知を待つ形へ進めるための土台。
+ * 1 要求につき最大 1 件。単一コントローラ構成（Controller != 0 は、Can_SetControllerMode() が DET で拒否する）のため、
+ * 通知の宛先のコントローラ番号は積まず、Can_MainFunction_Mode() が 0 で通知する。
+ * キューが満杯のときは、新しい通知を破棄して、警告ログを出す
+ * （通知は、現在は CanSM が状態を変えずに受け取るだけのため、取りこぼしの実害はない。
+ * CanSM が通知を待って進める形になるときは、この扱いを見直すこと）。
+ * ----------------------------------------------------------------------- */
+#define CAN_MODE_IND_QUEUE_SIZE  4U
+
+static Can_ControllerStateType Can_ModeIndQueue[CAN_MODE_IND_QUEUE_SIZE];
+static uint8                   Can_ModeIndHead = 0U;
+static uint8                   Can_ModeIndTail = 0U;
+static uint8                   Can_ModeIndLen  = 0U;
+
 static PduIdType Can_TxConfQueue[CAN_TX_CONF_QUEUE_SIZE];
 static uint8     Can_TxConfHead = 0U;  /**< 次に取り出すエントリの index */
 static uint8     Can_TxConfTail = 0U;  /**< 次に積むエントリの index     */
@@ -232,6 +251,9 @@ void Can_Init(const Can_ConfigType* Config)
     Can_TxConfHead = 0U;
     Can_TxConfTail = 0U;
     Can_TxConfLen  = 0U;
+    Can_ModeIndHead = 0U;
+    Can_ModeIndTail = 0U;
+    Can_ModeIndLen  = 0U;
     Can_InterruptDisableNestCount = 0U;
 
     if (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK)
@@ -426,6 +448,19 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
     default:
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
         return CAN_NOT_OK;
+    }
+
+    /* 遷移の結果のモードを、完了通知として積む（Can_MainFunction_Mode() が CanIf へ通知する）。 */
+    if (Can_ModeIndLen < CAN_MODE_IND_QUEUE_SIZE)
+    {
+        Can_ModeIndQueue[Can_ModeIndTail] = CanState;
+        Can_ModeIndTail = (uint8)((Can_ModeIndTail + 1U) % CAN_MODE_IND_QUEUE_SIZE);
+        Can_ModeIndLen++;
+    }
+    else
+    {
+        DET_LOGW(TAG, "SetControllerMode W: mode indication queue full, dropping notification (mode=%u)",
+                 (unsigned)CanState);
     }
 
     return CAN_OK;
@@ -853,7 +888,7 @@ void Can_MainFunction_BusOff(void)
  *          `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)`（[SWS_Can_00271]）で
  *          ECU State Manager へ直接通知する（2026-09-05 是正前は、実仕様に
  *          存在しない独自 API `CanIf_ControllerWakeup()` を経由していた）。
- *          `EcuM_CheckWakeup()` は内部で `CanSM_ControllerModeIndication()`
+ *          `EcuM_CheckWakeup()` は内部で `CanSM_StartWakeupSource()`
  *          （AUTOSAR EcuM Wakeup Validation Protocol 相当を CanSM 側で模した
  *          検証シーケンス、CanSM.c 参照）へ委譲する（EcuM.h 参照）。
  *
@@ -906,7 +941,38 @@ void Can_MainFunction_Wakeup(void)
  * Can_MainFunction_Mode
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   コントローラのモード変更の完了を、CanIf へ通知する（ポーリング）。
+ *
+ * \details Can_SetControllerMode() が成功した遷移（STARTED / STOPPED / SLEEP）ごとに、
+ *          CanIf_ControllerModeIndication() を 1 回呼ぶ（[SWS_Can_00017]/[SWS_Can_00369]）。CanIf は、CanSM
+ *          へ渡す（[SWS_CANIF_00711]）。
+ *          Os の 1 ms タスクから呼ばれる。通知は、要求の順に、取り出す。
+ *
+ * \pre        Can_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_Can_00017, SWS_Can_00369}
+ * \ServiceID      {0x0c}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Can_MainFunction_Mode(void)
+{
+    if (Can_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_MODE, CAN_E_UNINIT);
+        return;
+    }
+
+    while (Can_ModeIndLen > 0U)
+    {
+        const Can_ControllerStateType mode = Can_ModeIndQueue[Can_ModeIndHead];
+        Can_ModeIndHead = (uint8)((Can_ModeIndHead + 1U) % CAN_MODE_IND_QUEUE_SIZE);
+        Can_ModeIndLen--;
+
+        CanIf_ControllerModeIndication(0U, mode);
+    }
+}
 
 /* ======================================================================
  * API supporting Pretended Networking
@@ -943,7 +1009,7 @@ void Can_MainFunction_Wakeup(void)
  *          ウェイクアップ要因となったフレーム自体の受信は保証されない
  *          （モード遷移中に取りこぼされることがある）ため、ここでは読み出さず
  *          「目覚めた」ことだけをフラグで伝える。実際のフレーム受信は
- *          CanSM_ControllerModeIndication() が CAN_CS_STARTED へ遷移させた後、
+ *          検証の成功の後、CanSM_RequestComMode(FULL_COM) が CAN_CS_STARTED へ遷移させた後、
  *          以降の Can_MainFunction_Read() 呼び出しで通常どおり処理される。
  *
  * \pre        Can_Init() が正常に完了していること。

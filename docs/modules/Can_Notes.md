@@ -99,6 +99,7 @@ Can_Isr()                     ← 真の割り込み。フラグを立てるだ�
 Can_MainFunction_Read()       ← Can_RxIrqPending をドレインし RX 処理 (SWS_Can_00108)
 Can_MainFunction_BusOff()     ← EFLG.TXBO を毎回ポーリング (SWS_Can_00109、割り込み非依存)
 Can_MainFunction_Wakeup()     ← Can_WakeupIrqPending をドレインしウェイクアップ通知 (SWS_Can_00112)
+Can_MainFunction_Mode()       ← Can_SetControllerMode() が成功した遷移の完了を CanIf へ通知 (SWS_Can_00017、2026-11)
 ```
 
 `Can_MainFunction_Read()` のドレインループはフラグではなく `Can_Hw_CheckReceive()` が

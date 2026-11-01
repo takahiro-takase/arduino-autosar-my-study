@@ -237,6 +237,55 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  */
 void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode);
 
+/**
+ * \brief   起床の検証を始める（[SWS_CanSM_00609]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_START_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00616]/[SWS_CanSM_00607]）。トリガが効くのは NO_COM（ボランタリスリープ中）だけで、
+ *          それ以外の状態では、何もしない（要求自体は受理する）。
+ *          NO_COM のとき、CAN_T_WAKEUP（SLEEP→STOPPED、Listen-Only）だけを実行して CANSM_STATE_WAKEUP_VALIDATING へ入り、
+ *          検証タイマを開始する。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
+ *          FULL_COM へ確定するのは、有効な受信の確認後に ComM が CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、
+ *          または CanSM_MainFunction() が検証のタイムアウトを検出して、再スリープするとき（検証失敗）。
+ *
+ *          以前は、同じ処理が CanSM_ControllerModeIndication() の中にあり、EcuM_CheckWakeup() が
+ *          CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を「起床の合図」として呼んでいた（2026-11 に、本関数へ移した。
+ *          仕様では、CanSM_ControllerModeIndication() は、コントローラがそのモードに達した完了通知）。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00609, SWS_CanSM_00607, SWS_CanSM_00616, SWS_CanSM_00617, SWS_CanSM_00612}
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StartWakeupSource(NetworkHandleType network);
+
+/**
+ * \brief   起床の検証を止める（[SWS_CanSM_00610]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_STOP_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00622]/[SWS_CanSM_00608]）。トリガが効くのは WAKEUP_VALIDATING（検証中）だけで、
+ *          コントローラを再びスリープさせて、NO_COM へ戻る（検証失敗と同じ。CanSM_MainFunction() の検証タイムアウトと
+ *          共通の処理）。それ以外の状態では、何もしない（要求自体は受理する）。
+ *          本プロジェクトの EcuM は、現在この関数を呼ばない（検証の失敗は、CanSM_MainFunction() の検証タイムアウトが
+ *          自分で検出して、再スリープする）。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00610, SWS_CanSM_00608, SWS_CanSM_00618, SWS_CanSM_00619, SWS_CanSM_00620, SWS_CanSM_00622}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StopWakeupSource(NetworkHandleType network);
+
 /* ======================================================================
  * Test Functions
  * ====================================================================== */

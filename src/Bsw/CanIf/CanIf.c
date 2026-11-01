@@ -236,8 +236,8 @@ void CanIf_DeInit(void)
  *
  * \details 下位の Can_SetControllerMode() を呼び出す（[SWS_CANIF_00308]）。
  *          実 AUTOSAR は目標モードから実際の Can_StateTransitionType への
- *          変換に Can 側の非同期通知（CanIf_ControllerModeIndication、
- *          本実装は未実装）で得た現在状態を使うが、本プロジェクトの
+ *          変換に Can 側の非同期通知（CanIf_ControllerModeIndication。本実装でも、
+ *          Can_MainFunction_Mode() が通知するが、現在状態の更新には使わない）で得た現在状態を使うが、本プロジェクトの
  *          Can_SetControllerMode() は同期的に完了するため、CanIf 自身が
  *          追跡する `CanIf_ControllerMode[]`（前回の成功要求の結果）だけで
  *          十分に判定できる。
@@ -1466,13 +1466,13 @@ void CanIf_ControllerBusOff(uint8 ControllerId)
  *          ControllerId が範囲外のときは、CANIF_E_PARAM_CONTROLLERID を報告し、通知しない
  *          （[SWS_CANIF_00700]）。
  *
+ *          呼び出し元は、Can の Can_MainFunction_Mode() である（2026-11。Can_SetControllerMode() が成功した遷移ごとに、
+ *          Os の 1 ms タスクが、要求とは別の文脈で、1 回ずつ通知する）。
  *          簡略化: 本プロジェクトの Can_SetControllerMode() は、要求の中で同期的に遷移を終える。
  *          CanIf_SetControllerMode() が、成功の時点で CanIf_ControllerMode[] を直接更新するので、
- *          Can は、本関数を呼ばない（呼び出し元は無い）。本関数も CanIf_ControllerMode[] を更新しない
- *          （起床時の通知・送信確認の状態などの付随処理が CanIf_SetControllerMode() の側にあるため、
- *          更新だけを足すと、状態がちぐはぐになる）。
- *          CanSM_ControllerModeIndication() は、NO_COM のときの起床の検出にだけ反応し、通知されたモードでは
- *          分岐しない（CanSM.h 参照）。
+ *          本関数は CanIf_ControllerMode[] を更新しない（起床時の通知・送信確認の状態などの付随処理が
+ *          CanIf_SetControllerMode() の側にあるため、更新だけを足すと、状態がちぐはぐになる）。
+ *          CanSM_ControllerModeIndication() は、現在、通知を受け取るだけで、状態を変えない（CanSM.h 参照）。
  *
  * \param[in]  ControllerId    遷移したコントローラの ID。
  * \param[in]  ControllerMode  遷移後のコントローラのモード。

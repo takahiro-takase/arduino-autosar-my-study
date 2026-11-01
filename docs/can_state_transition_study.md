@@ -35,7 +35,7 @@ CAN の通信モードが、どのきっかけで、どう変わり、その結�
 
 | 現在の状態 | きっかけ | 次の状態 | 行うこと |
 |---|---|---|---|
-| NO_COM | `CanSM_ControllerModeIndication()`(バス活動の検知) | WAKEUP_VALIDATING | `CAN_CS_STOPPED` にして、検証タイマを開始 |
+| NO_COM | `CanSM_StartWakeupSource()`(バス活動の検知。EcuM から) | WAKEUP_VALIDATING | `CAN_CS_STOPPED` にして、検証タイマを開始 |
 | WAKEUP_VALIDATING | 有効な受信を確認し、ComM が `CanSM_RequestComMode(FULL_COM)` | FULL_COM | `CAN_CS_STARTED`、`CANIF_ONLINE`、ComM へ FULL_COM(Dem の Bus-Off の PASSED は報告しない。回復の確定のときだけ) |
 | WAKEUP_VALIDATING | 検証タイムアウト(`CANSM_WAKEUP_VALIDATION_MS` = 2000 ms) | NO_COM | `CAN_CS_SLEEP` へ戻す |
 | NO_COM | `RequestComMode(FULL_COM)` | FULL_COM | 同上 |
@@ -157,4 +157,5 @@ BswM のルールは、RX のグループ(`SENSOR_RX`)を、**ComM が NO_COM �
 |---|---|---|
 | `Com_IpduGroupStart()` を、起動中のグループへ呼ぶと、受信の監視を再始動する | 仕様は「停止中のグループを起動する」と書くだけで、起動中への呼び出しは定めていない。BswM の Rule 6 は、Bus-Off の回復のたびに、一度も止めていない RX のグループへ、起動を呼ぶ(上の 4.6 の 14:14:52.172 など) | 仕様が曖昧で、実機の動作が変わる。Bus-Off が短い間隔で続くと、再始動のたびにタイムアウトが遅れる点は、設計の選択として残す |
 | `BswM_CanSM_CurrentState()` が未実装 | 仕様の E_BUS_OFF / E_TX_ON の効果は、BswM への通知を求める。このプロジェクトでは、ComM 経由の通知で、同じルールを動かしている | 影響が小さく、規模が大きい(BswM の状態の入力元が増える) |
-| `CanSM_StartWakeupSource` / `CanSM_StopWakeupSource` が未実装 | EcuM の `Start/StopWakeupSources` の前提 | 既知の残件(EcuM の項目) |
+| EcuM が `CanSM_StopWakeupSource` を呼ばない。起床の検証の失敗は、CanSM の検証タイムアウトが自分で検出する | 仕様では、EcuM が検証の失敗を見て、`EcuM_StopWakeupSources` から呼ぶ | `CanSM_StartWakeupSource` / `CanSM_StopWakeupSource` は実装済み(2026-11)。EcuM に `EcuM_StartWakeupSources` / `EcuM_StopWakeupSources` が無いため、Stop は呼び出し元がない(EcuM の項目) |
+| `S_TX_TIMEOUT_EXCEPTION`(送信タイムアウトの例外の回復)と `CanSM_TxTimeoutException` が未実装 | 仕様では、CanNm が「NM メッセージの送信確認が時間内に来ない」ことを検出したとき(Partial Networking が有効な場合のみ。[SWS_CanNm_00064]/[00065]/[00446])に、CanSM を呼ぶ。CanSM は、コントローラを止めて、また始めて、PDU モードを ONLINE に戻す([SWS_CanSM_00584]〜[00582]、[SWS_CanSM_00655]) | Partial Networking を対応除外にしているため、この経路には到達しない(PN 対応トランシーバも持っていない。MCP2562FD も通常のトランシーバ)。PN 構成の「起きたばかりの ECU の最初の NM フレームに、寝ている相手が ACK を返さない」問題への対策で、PN の無い構成では、動かない。「5 回連続の送信失敗で Bus-Off とみなす簡易な代替」(`SW BusOff fallback`)は、別の機能 |

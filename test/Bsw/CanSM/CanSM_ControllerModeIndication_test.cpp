@@ -130,7 +130,8 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_In
     EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_PARAM_CONTROLLER);
 }
 
-TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_WakeupIgnoredOutsideNoCom)
+// 完了通知は、現在は受け取るだけで、状態を変えない（コントローラへも何も要求しない）
+TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_DoesNotChangeStateInFullCom)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -139,7 +140,7 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_Wa
     ForcedReturn_CanIf_SetControllerMode      = E_OK;
     FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
     ForcedReturn_CanIf_SetPduMode      = E_OK;
-    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // NO_COM ではなく FULL_COM にする
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // FULL_COM にする
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */
@@ -157,29 +158,25 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_Wa
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);       // コントローラへも何も要求しない
 }
 
-TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_NG_WakeupStaysInNoComWhenControllerCannotStop)
+// NO_COM で STOPPED の完了通知を受け取っても、起床とはみなさない（起床の検証は、CanSM_StartWakeupSource() で始める）
+TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_StoppedIndicationInNoComIsNotAWakeup)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
-    ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // NO_COM のまま、ウェイクアップを検出する
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore + 1U);   // リスン専用への移行（停止）を要求したが失敗した
-    // 検証中の状態へは移らない（次の MainFunction で、検証のタイムアウトが働かない）
-    FakeMillis_Value += CANSM_WAKEUP_VALIDATION_MS + 1UL;
-    const uint32 afterIndication = CallCount_CanIf_SetControllerMode;
-    CanSM_MainFunction();
-    EXPECT_EQ(CallCount_CanIf_SetControllerMode, afterIndication);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);   // 検証中へ進むための要求を出さない
 }
 
 }  // namespace
