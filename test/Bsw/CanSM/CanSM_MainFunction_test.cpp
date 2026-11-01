@@ -46,6 +46,17 @@ extern "C" {
 namespace
 {
 
+/* CanIf を wrap で成功させる（実体の Can を呼ばない）ため、CanSM が待っているコントローラのモード変更の完了通知を、
+ * CanSM へ直接流す。STOPPED → STARTED → SLEEP の順に流すと、FULL_COM へ入る手順（STOPPED → STARTED）も、
+ * NO_COM へ入る手順（STOPPED → SLEEP）も、完了する（待っていないモードの通知は、無視される）。 */
+void SettleCanSmModeRequests()
+{
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+}
+
+
 const CanIf_ConfigType kBusOffRecoveryCanIfConfig = {
     /* TxPduConfig */ NULL,
     /* TxPduCount */  0U,
@@ -86,6 +97,7 @@ protected:
         CanSM_Init(NULL);
         ComM_Init(NULL);
         ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  // 実 EcuM_Init() と同じく起動時に許可
+        Can_MainFunction_Mode();
         CanNm_Init(NULL);
         Nm_Init(NULL);
 
@@ -95,10 +107,12 @@ protected:
         // ComM 経由で動かす CanNm 協調ロジックが未検証の中途半端な状態から
         // 始まってしまう）。
         ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
+        Can_MainFunction_Mode();
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
 
         FakeMillis_Value += CANNM_REPEAT_MESSAGE_MS + 100UL;
         CanNm_MainFunction();
+        Can_MainFunction_Mode();
         CanNm_StateType nmState;
         CanNm_ModeType  nmMode;
         ASSERT_EQ(CanNm_GetState(CANNM_MAIN_NETWORK_HANDLE, &nmState, &nmMode), E_OK);
@@ -276,6 +290,8 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_NG_NoComDiscardsPendingRecoveryConf
     ArrangeBusOffPastL1Interval();
     CanSM_MainFunction();   // 再起動できる（確定待ちになる）
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    Can_MainFunction_Mode();
+    SettleCanSmModeRequests();
     WrapDem_Reset();
     FailFromCallCount_CanIf_GetTxConfirmationState = 1U;
     ForcedReturn_CanIf_GetTxConfirmationState      = CANIF_TX_RX_NOTIFICATION;
@@ -564,6 +580,8 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_SilentComRecoveryIsConfirmedByTi
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_SILENT_COMMUNICATION), E_OK);
+    Can_MainFunction_Mode();
+    SettleCanSmModeRequests();
     CanSM_ControllerBusOff(0U);
     FakeMillis_Value += static_cast<unsigned long>(CANSM_BUSOFF_RECOVERY_L1_MS) + 1UL;
     CanSM_MainFunction();   // 再起動して SILENT_COM に戻る
@@ -585,6 +603,57 @@ TEST_F(CanSM_MainFunction_Test, MainFunction_OK_SilentComRecoveryIsConfirmedByTi
     EXPECT_EQ(demBefore, 0U);
     EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PASSED);
+}
+
+// コントローラが既に SLEEP のとき、NO_COM への要求は、起こして寝かせ直さず、完了通知を待たずに、入り終える
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_NoComRequestWhenControllerAlreadySleepsCompletesImmediately)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);   // CanSM は知らない形で、既に寝ている
+    WrapCanIf_Reset();
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);   // 完了通知（Can_MainFunction_Mode）は、流していない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);   // コントローラへは、何も要求しない
+}
+
+// コントローラが既に STARTED のとき、FULL_COM への要求は、完了通知を待たずに、入り終える
+TEST_F(CanSM_MainFunction_Test, MainFunction_OK_FullComRequestWhenControllerAlreadyStartedCompletesImmediately)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION), E_OK);
+    Can_MainFunction_Mode();   // NO_COM（物理スリープ）
+    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STOPPED), E_OK);
+    ASSERT_EQ(CanIf_SetControllerMode(0U, CAN_CS_STARTED), E_OK);   // CanSM は知らない形で、既に起きている
+    WrapCanIf_Reset();
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);   // 完了通知（Can_MainFunction_Mode）は、流していない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);   // コントローラへは、何も要求しない
 }
 
 }  // namespace

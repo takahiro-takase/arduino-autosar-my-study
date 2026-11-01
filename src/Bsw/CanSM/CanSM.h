@@ -103,15 +103,17 @@ void CanSM_DeInit(void);
 /**
  * \brief   ネットワークの通信モード遷移を要求する。
  *
- * \details ComM から呼び出され、要求モードに応じて
- *          CanIf_SetControllerMode() でハードウェアを制御する。
- *          Bus-Off 回復中の場合は要求を保留する。
+ * \details ComM から呼び出され、要求を受理して（E_OK）、状態機械が考慮する（[SWS_CanSM_00369]/[SWS_CanSM_00182]）。
+ *          FULL_COM / NO_COM への遷移は、コントローラのモードを変える要求を出し、その完了通知を待つ手順
+ *          （S_PRE_FULLCOM / S_PRE_NOCOM）で行うため、ComM への結果の通知（ComM_BusSM_ModeIndication）は、
+ *          手順の完了のときに、この関数の戻りのあとで出る。SILENT_COM への遷移は、同期的に終える。
+ *          Bus-Off 回復中の要求は、回復の後に戻る状態を変えるか（FULL_COM / SILENT_COM）、回復を取り消して NO_COM へ向かう。
  *
  * \param[in]  network  ネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
  * \param[in]  mode     要求する通信モード (ComM_ModeType)。
  *
- * \retval  E_OK      モード遷移を受理した。
- * \retval  E_NOT_OK  network が範囲外、または Bus-Off 回復中。
+ * \retval  E_OK      モード遷移の要求を受理した。
+ * \retval  E_NOT_OK  未初期化、network が範囲外、または SILENT_COM への遷移で、TX を抑制できなかった。
  *
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}

@@ -245,6 +245,7 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     // EcuM_MainFunction() による検証の問い合わせの代わり
     EXPECT_EQ(CanIf_CheckValidation(ECUM_WKSOURCE_CAN), E_OK);
+    Can_MainFunction_Mode();
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

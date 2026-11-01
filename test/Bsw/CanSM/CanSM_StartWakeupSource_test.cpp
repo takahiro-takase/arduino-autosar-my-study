@@ -41,6 +41,17 @@ extern "C" {
 namespace
 {
 
+/* CanIf を wrap で成功させる（実体の Can を呼ばない）ため、CanSM が待っているコントローラのモード変更の完了通知を、
+ * CanSM へ直接流す。STOPPED → STARTED → SLEEP の順に流すと、FULL_COM へ入る手順（STOPPED → STARTED）も、
+ * NO_COM へ入る手順（STOPPED → SLEEP）も、完了する（待っていないモードの通知は、無視される）。 */
+void SettleCanSmModeRequests()
+{
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+}
+
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -151,6 +162,7 @@ TEST_F(CanSM_StartWakeupSource_Test, CanSM_StartWakeupSource_OK_IgnoredOutsideNo
     FailFromCallCount_CanIf_SetPduMode = 0U;
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    SettleCanSmModeRequests();
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */

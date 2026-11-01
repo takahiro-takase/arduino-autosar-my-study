@@ -126,6 +126,7 @@ protected:
         // NORMAL_OPERATION State まで進める(NmStack_SleepCoordination_test.cpp の
         // ArrangeFullCom() と同じ流儀)。
         ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
+        Can_MainFunction_Mode();   // コントローラのモード変更の完了通知を流して、FULL_COM へ入り終える
         FakeMillis_Value += CANNM_REPEAT_MESSAGE_MS + 100UL;
         CanNm_MainFunction();
         CanNm_StateType state;

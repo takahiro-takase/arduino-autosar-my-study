@@ -44,22 +44,25 @@ Protocol 相当）により有効な CAN フレーム受信を確認してから
 stateDiagram-v2
     [*] --> NO_COM
 
-    NO_COM --> FULL_COM: RequestComMode(FULL_COM)
+    NO_COM --> PRE_FULL_COM: RequestComMode(FULL_COM)
+    PRE_FULL_COM --> FULL_COM: 完了通知（STOPPED → STARTED）
+    PRE_FULL_COM --> PRE_NO_COM: RequestComMode(NO_COM)\nまたは T_REPEAT_MAX
     NO_COM --> SILENT_COM: RequestComMode(SILENT_COM)
     NO_COM --> WAKEUP_VALIDATING: StartWakeupSource()
 
     SILENT_COM --> FULL_COM: RequestComMode(FULL_COM)
-    SILENT_COM --> NO_COM: RequestComMode(NO_COM)\n(CanNm が Bus-Sleep Mode 到達、物理スリープ)
+    SILENT_COM --> PRE_NO_COM: RequestComMode(NO_COM)\n(CanNm が Bus-Sleep Mode 到達)
+    PRE_NO_COM --> NO_COM: 完了通知（STOPPED → SLEEP、物理スリープ）
     SILENT_COM --> BUS_OFF: ControllerBusOff()
 
-    FULL_COM --> NO_COM: RequestComMode(NO_COM)
+    FULL_COM --> PRE_NO_COM: RequestComMode(NO_COM)
     FULL_COM --> SILENT_COM: RequestComMode(SILENT_COM)
     FULL_COM --> BUS_OFF: ControllerBusOff()
 
     BUS_OFF --> FULL_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 FULL_COM）
     BUS_OFF --> SILENT_COM: MainFunction()\nL1/L2 回復成功（Bus-Off 発生時 SILENT_COM）
 
-    WAKEUP_VALIDATING --> FULL_COM: RequestComMode(FULL_COM)\n(有効フレームの受信確認後、ComM_EcuM_WakeUpIndication 経由)
+    WAKEUP_VALIDATING --> PRE_FULL_COM: RequestComMode(FULL_COM)\n(有効フレームの受信確認後、ComM_EcuM_WakeUpIndication 経由)
     WAKEUP_VALIDATING --> NO_COM: MainFunction()\n(検証タイムアウト、再スリープ)
 ```
 
@@ -87,7 +90,7 @@ stateDiagram-v2
 | `RequestComMode(NO_COM)` | `CanIf_SetControllerMode(SLEEP)` → `ComM_BusSM_ModeIndication(NO_COM)` |
 | `StartWakeupSource()`（ウェイクアップ。EcuM の `EcuM_CheckWakeup()` から） | NO_COM のときだけ効く。`CanIf_SetControllerMode(STOPPED)`（Listen-Only）にして `WAKEUP_VALIDATING` へ。それ以外の状態では、要求だけ受理して何もしない（`E_OK`） |
 | `StopWakeupSource()` | `WAKEUP_VALIDATING` のときだけ効く。`CanIf_SetControllerMode(SLEEP)` で再スリープして NO_COM へ（検証タイムアウトと共通の処理）。EcuM は、現在この関数を呼ばない |
-| `ControllerModeIndication()`（コントローラのモード変更の完了通知。Can の `Can_MainFunction_Mode()` から、CanIf 経由） | 現在は、受け取るだけで、状態を変えない（2026-11。通知を待って進める形は、今後の段階で入れる） |
+| `ControllerModeIndication()`（コントローラのモード変更の完了通知。Can の `Can_MainFunction_Mode()` から、CanIf 経由） | `PRE_FULL_COM` / `PRE_NO_COM` で、待っているモードへ達した通知が、手順を次へ進める。それ以外は、何もしない（下の「コントローラのモード変更の手順」参照） |
 | `RequestComMode(FULL_COM)`（検証中に有効フレームを確認した後、`ComM_EcuM_WakeUpIndication()` から） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `MainFunction()`（検証タイムアウト） | `CanIf_SetControllerMode(SLEEP)` で再スリープ（ウェイクアップ割り込みを再武装）し NO_COM へ戻る |
 
@@ -101,6 +104,27 @@ stateDiagram-v2
 | `CANSM_BOR_TX_CONFIRMATION_POLLING` | 1 | 回復の確定に TX 確認のポーリングを使う（1）か、時間で判定する（0）か |
 | `CANSM_BOR_TIME_TX_ENSURED_MS` | 1000 ms | 回復の確定までの待ち時間。ポーリングを使わない（上が 0 の）とき、および SILENT_COM に戻った場合に使う |
 | `CANSM_WAKEUP_VALIDATION_MS` | 2000 ms | ウェイクアップ検証の待ち時間。この間に有効な RX が無ければ再スリープ |
+
+### コントローラのモード変更の手順（S_PRE_FULLCOM / S_PRE_NOCOM、2026-11）
+
+FULL_COM へ入る、または NO_COM へ入るとき、CanSM は、コントローラのモードを変える要求を出し、その**完了通知を待って**から
+次へ進みます（仕様の `CANSM_BSM_S_PRE_FULLCOM` / `CANSM_BSM_S_PRE_NOCOM`）。通知は、Can の `Can_MainFunction_Mode()`
+（1 ms の Os タスク）が `CanIf_ControllerModeIndication()` へ出し、CanIf が `CanSM_ControllerModeIndication()` へ渡します。
+
+| 手順 | 順序 | 完了したとき |
+|---|---|---|
+| `PRE_FULL_COM`（NO_COM、WAKEUP_VALIDATING から FULL_COM へ） | STOPPED → STARTED（現在が STOPPED なら、STOPPED は省く） | PDU を ONLINE にして FULL_COM へ入り、ComM へ FULL_COM を通知 |
+| `PRE_NO_COM`（FULL_COM、SILENT_COM、BUS_OFF、WAKEUP_VALIDATING から NO_COM へ） | STOPPED → SLEEP（現在が STOPPED なら、STOPPED は省く） | NO_COM へ入り、ComM へ NO_COM を通知 |
+
+- 待っているモードへ達した通知だけが、手順を進めます（待っていないモードの通知は、無視します）。
+- `CANSM_MODEREQ_REPEAT_TIME_MS`（300 ms）が過ぎても通知が来なければ、同じ要求を繰り返します。繰り返しが
+  `CANSM_MODEREQ_REPEAT_MAX`（3 回）を超えたら T_REPEAT_MAX です。`PRE_FULL_COM` からは `PRE_NO_COM` へ戻り、
+  `PRE_NO_COM` からは、あきらめて NO_COM へ入ります（Dem へ CANSM_E_MODE_REQUEST_TIMEOUT を報告する処理は、今後の段階で入れます）。
+- `PRE_NO_COM` の最中に FULL_COM が要求されたら、保留して、NO_COM へ入り終えたあとで、始めます。
+  `PRE_FULL_COM` の最中に NO_COM が要求されたら、`PRE_NO_COM` へ向きを変えます。
+- SILENT_COM から FULL_COM へ戻るときは、コントローラが既に STARTED のため、この手順を経ずに、PDU を ONLINE にするだけです。
+- `RequestComMode()` は、要求を受理した時点で `E_OK` を返します。ComM への通知は、手順が完了したとき（1〜数 ms 後）に出ます。
+- Bus-Off の回復と、起床の検証（`WAKEUP_VALIDATING` の出入り）は、まだ、この待ちの仕組みに載せていません（同期のまま）。
 
 ### Bus-Off 回復の確定（G_BUS_OFF_PASSIVE、2026-10 追加）
 

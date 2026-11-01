@@ -40,6 +40,17 @@ extern "C" {
 namespace
 {
 
+/* CanIf を wrap で成功させる（実体の Can を呼ばない）ため、CanSM が待っているコントローラのモード変更の完了通知を、
+ * CanSM へ直接流す。STOPPED → STARTED → SLEEP の順に流すと、FULL_COM へ入る手順（STOPPED → STARTED）も、
+ * NO_COM へ入る手順（STOPPED → SLEEP）も、完了する（待っていないモードの通知は、無視される）。 */
+void SettleCanSmModeRequests()
+{
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+}
+
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */

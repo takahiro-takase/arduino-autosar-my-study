@@ -173,6 +173,7 @@ protected:
         CanSM_Init(NULL);
         ComM_Init(NULL);
         ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);  // 実 EcuM_Init() と同じく起動時に許可
+        Can_MainFunction_Mode();
         CanNm_Init(NULL);
         Nm_Init(NULL);
         CanTp_Init(NULL);
@@ -182,8 +183,10 @@ protected:
         /* FULL_COM を確立し、CanNm が Repeat Message State を抜けて Normal Operation State に
          * なるまで進める（ComM_RequestComMode() は CanSM 経由でコントローラを起動する）。 */
         ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
+        Can_MainFunction_Mode();
         FakeMillis_Value += CANNM_REPEAT_MESSAGE_MS + 100UL;
         CanNm_MainFunction();
+        Can_MainFunction_Mode();
 
         FakeCanHw_Reset();
         WrapComM_Reset();  // 通知回数は各テストの Act 区間だけを対象にする
@@ -204,6 +207,7 @@ protected:
     void DriveToSilentCom()
     {
         ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_NO_COMMUNICATION), E_OK);
+        Can_MainFunction_Mode();
         for (int i = 0; i < 15; i++)
         {
             CanNm_StateType state;
@@ -213,6 +217,7 @@ protected:
                 break;
             FakeMillis_Value += CANNM_CYCLE_MS;
             CanNm_MainFunction();
+            Can_MainFunction_Mode();
         }
         ComM_ModeType comMode = COMM_FULL_COMMUNICATION;
         ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &comMode), E_OK);

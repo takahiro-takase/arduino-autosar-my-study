@@ -83,10 +83,10 @@
 
 /** Bus-Off 回復試行回数の L1→L2 切替閾値（CanSMBorCounterL1ToL2 相当）
  *  この回数を超えて回復しない場合、一時的なバス障害ではなく持続的な
- *  Bus-Off と判断し、DemConf_DemEventParameter_CAN_BUSOFF (DTC 0x000108) を Dem へ FAILED
- *  報告した上で、リトライ周期を L2 へ切り替えて継続する（回復自体は続く）。
- *  Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1（この報告は既に十分なリトライを
- *  経た後の確定情報のため、Dem では重ねてデバウンスしない）。 */
+ *  Bus-Off と判断し、リトライ周期を L2 へ切り替えて継続する（回復自体は続く）。
+ *  DemConf_DemEventParameter_CAN_BUSOFF (DTC 0x000108) へは、Bus-Off の検出ごとに PREFAILED を
+ *  報告する。Dem 側のしきい値 DEM_DEBOUNCE_LIMIT_CAN_BUSOFF は、この値 + 1（config/data/Dem.json）。
+ *  両者のずれは CanSM.c の #error で検出する。 */
 #define CANSM_BUSOFF_L1_TO_L2_COUNT  3U
 
 /** Bus-Off 回復の確定条件（G_BUS_OFF_PASSIVE）に TX 確認のポーリングを使うか（CanSMBorTxConfirmationPolling 相当、
@@ -107,5 +107,19 @@
  *  による誤ウェイクアップとみなして再びスリープへ戻す。 */
 #define CANSM_WAKEUP_VALIDATION_MS  2000UL
 /* @@GEN-END cansm-params */
+
+/** コントローラのモード変更の完了通知を待つ時間 [ms]（CanSMModeRequestRepetitionTime、ECUC_CanSM_00336 相当）。
+ *  S_PRE_FULLCOM / S_PRE_NOCOM で、モード変更の要求を出してから、この時間が過ぎても、完了通知
+ *  （CanSM_ControllerModeIndication）が来なければ、要求を繰り返す（[SWS_CanSM_00490]/[00494]/[00467]/[00471]）。
+ *  CanSM_MainFunction() の周期（10 ms）が、判定の細かさになる。
+ *  起動時は、EcuM_Init() の中（Os のタスクが動き出す前）で FULL_COM への手順が始まり、初期化（ログ出力が多い）に
+ *  約 150 ms かかる。その間は、完了通知（Can_MainFunction_Mode()）が流れないので、これより短いと、毎回の起動で、
+ *  無駄な繰り返し（警告）が出る。繰り返しの上限（CANSM_MODEREQ_REPEAT_MAX）と合わせた、あきらめるまでの時間は、
+ *  手順の 1 段階あたり、この値 × (上限 + 1) になる。 */
+#define CANSM_MODEREQ_REPEAT_TIME_MS  300UL
+
+/** モード変更の要求の繰り返しの上限（CanSMModeRequestRepetitionMax、ECUC_CanSM_00335 相当）。
+ *  完了通知を得られないまま、この回数を超えて繰り返したら、T_REPEAT_MAX（[SWS_CanSM_00495]/[00480]）。 */
+#define CANSM_MODEREQ_REPEAT_MAX  3U
 
 #endif /* CANSM_CFG_H */

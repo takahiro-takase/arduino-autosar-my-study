@@ -109,13 +109,16 @@ protected:
         CanSM_Init(NULL);
         ComM_Init(NULL);
         ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE);
+        Can_MainFunction_Mode();
         CanNm_Init(NULL);
         Nm_Init(NULL);
 
         ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);
+        Can_MainFunction_Mode();
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
         FakeMillis_Value += CANNM_REPEAT_MESSAGE_MS + 100UL;
         CanNm_MainFunction();
+        Can_MainFunction_Mode();
 
         FakeCanHw_Reset();
         WrapDem_Reset();
@@ -152,6 +155,7 @@ protected:
         const uint32 sentBefore = FakeCanHw_SendCount;
         FakeMillis_Value += CANNM_CYCLE_MS;
         CanNm_MainFunction();
+        Can_MainFunction_Mode();
         ASSERT_GT(FakeCanHw_SendCount, sentBefore);   // 模擬 Can_Hw まで届いた
         Can_MainFunction_Write();                     // 保留中の TX 確認を、CanIf_TxConfirmation() へ渡す
     }

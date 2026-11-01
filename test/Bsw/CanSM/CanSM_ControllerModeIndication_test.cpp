@@ -46,6 +46,17 @@ extern "C" {
 namespace
 {
 
+/* CanIf を wrap で成功させる（実体の Can を呼ばない）ため、CanSM が待っているコントローラのモード変更の完了通知を、
+ * CanSM へ直接流す。STOPPED → STARTED → SLEEP の順に流すと、FULL_COM へ入る手順（STOPPED → STARTED）も、
+ * NO_COM へ入る手順（STOPPED → SLEEP）も、完了する（待っていないモードの通知は、無視される）。 */
+void SettleCanSmModeRequests()
+{
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+}
+
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -141,6 +152,7 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_Do
     FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // FULL_COM にする
+    SettleCanSmModeRequests();
     const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
 
     /* ----------------------- */
@@ -177,6 +189,66 @@ TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_St
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);   // 検証中へ進むための要求を出さない
+}
+
+// FULL_COM へ向かう途中は、待っているモードの完了通知だけが、手順を進める（待っていないモードの通知は、無視する）
+TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_OnlyTheAwaitedModeAdvancesTheSequence)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);   // 最初に待つのは STOPPED の完了
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);   // 待っていないモード（2 回流しても、進まない）
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    ComM_ModeType afterWrong = COMM_FULL_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &afterWrong), E_OK);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    ComM_ModeType afterAll = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &afterAll), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterWrong, COMM_NO_COMMUNICATION);   // 進まない
+    EXPECT_EQ(afterAll, COMM_FULL_COMMUNICATION);
+}
+
+// 手順の最中ではない（FULL_COM のまま）とき、完了通知は、何も起こさない
+TEST_F(CanSM_ControllerModeIndication_Test, CanSM_ControllerModeIndication_OK_IndicationWhileNotWaitingIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    SettleCanSmModeRequests();   // FULL_COM
+    const uint32 setModeBefore = CallCount_CanIf_SetControllerMode;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    ComM_ModeType mode = COMM_NO_COMMUNICATION;
+    ASSERT_EQ(CanSM_GetCurrentComMode(0U, &mode), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);
+    EXPECT_EQ(CallCount_CanIf_SetControllerMode, setModeBefore);
 }
 
 }  // namespace
