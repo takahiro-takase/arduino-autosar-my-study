@@ -123,6 +123,33 @@ TEST_F(Dem_Init_Test, Dem_Init_OK_FirstRunInitializesEventsAndPersistsMagic)
     EXPECT_EQ(SavedAging0(), 0U);
 }
 
+// OK: 新しい操作サイクル（本プロジェクトでは、起動ごとの Dem_Init()）の開始で、Dem 内部のデバウンスを初期化する。
+// 途中まで積み上がっていたカウンタは、0 に戻る（[SWS_Dem_00344]/[SWS_Dem_00438]。FDC も 0 になる）
+TEST_F(Dem_Init_Test, Dem_Init_OK_NewOperationCycleResetsDebounceCounter)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Dem_Init(NULL);
+    static_assert(DEM_DEBOUNCE_LIMIT_CAN_BUSOFF > 1, "このテストは、確定に複数回の報告が要るイベントが前提");
+    ASSERT_EQ(Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PREFAILED), E_OK);
+    sint8 fdcBefore = 0;
+    ASSERT_EQ(Dem_GetFaultDetectionCounter(DemConf_DemEventParameter_CAN_BUSOFF, &fdcBefore), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Dem_Init(NULL);   // 次の起動（新しい操作サイクル）
+    sint8 fdcAfter = 99;
+    ASSERT_EQ(Dem_GetFaultDetectionCounter(DemConf_DemEventParameter_CAN_BUSOFF, &fdcAfter), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_GT(fdcBefore, 0);   // 積み上がっていた
+    EXPECT_EQ(fdcAfter, 0);    // 新しいサイクルでは、0 に戻る
+}
+
 TEST_F(Dem_Init_Test, Dem_Init_OK_RestoredEventStartsNewCycleAndReFailureResetsAging)
 {
     /* ----------------------- */

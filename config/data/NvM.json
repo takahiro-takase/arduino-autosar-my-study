@@ -28,9 +28,9 @@
     {
       "name": "DEM_STATUS",
       "title": "DEM イベントステータス",
-      "length": 15,
+      "length": 16,
       "demEventCount": true,
-      "lengthDoc": "DEM_EVENT_COUNT = 15 イベント分",
+      "lengthDoc": "DEM_EVENT_COUNT = 16 イベント分",
       "addrDoc": "ステータステーブルの先頭アドレス",
       "note": [],
       "default": {
@@ -47,9 +47,9 @@
     {
       "name": "DEM_AGING",
       "title": "DEM 経年回復(Aging)カウンタ",
-      "length": 15,
+      "length": 16,
       "demEventCount": true,
-      "lengthDoc": "DEM_EVENT_COUNT = 15 イベント分",
+      "lengthDoc": "DEM_EVENT_COUNT = 16 イベント分",
       "addrDoc": "Aging カウンタの先頭アドレス",
       "note": [],
       "default": {
@@ -69,10 +69,10 @@
     {
       "name": "DEM_EXTENDED",
       "title": "DEM 故障確定回数 ExtendedData",
-      "length": 15,
+      "length": 16,
       "demEventCount": true,
       "redundant": true,
-      "lengthDoc": "DEM_EVENT_COUNT = 15 イベント分",
+      "lengthDoc": "DEM_EVENT_COUNT = 16 イベント分",
       "addrDoc": "故障確定回数の先頭アドレス・プライマリ面",
       "mirrorAddrDoc": "故障確定回数のミラー面。冗長ブロック専用",
       "note": [

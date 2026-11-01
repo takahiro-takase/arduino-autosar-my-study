@@ -103,15 +103,17 @@ void CanSM_DeInit(void);
 /**
  * \brief   ネットワークの通信モード遷移を要求する。
  *
- * \details ComM から呼び出され、要求モードに応じて
- *          CanIf_SetControllerMode() でハードウェアを制御する。
- *          Bus-Off 回復中の場合は要求を保留する。
+ * \details ComM から呼び出され、要求を受理して（E_OK）、状態機械が考慮する（[SWS_CanSM_00369]/[SWS_CanSM_00182]）。
+ *          FULL_COM / NO_COM への遷移は、コントローラのモードを変える要求を出し、その完了通知を待つ手順
+ *          （S_PRE_FULLCOM / S_PRE_NOCOM）で行うため、ComM への結果の通知（ComM_BusSM_ModeIndication）は、
+ *          手順の完了のときに、この関数の戻りのあとで出る。SILENT_COM への遷移は、同期的に終える。
+ *          Bus-Off 回復中の要求は、回復の後に戻る状態を変えるか（FULL_COM / SILENT_COM）、回復を取り消して NO_COM へ向かう。
  *
  * \param[in]  network  ネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
  * \param[in]  mode     要求する通信モード (ComM_ModeType)。
  *
- * \retval  E_OK      モード遷移を受理した。
- * \retval  E_NOT_OK  network が範囲外、または Bus-Off 回復中。
+ * \retval  E_OK      モード遷移の要求を受理した。
+ * \retval  E_NOT_OK  未初期化、network が範囲外、または SILENT_COM への遷移で、TX を抑制できなかった。
  *
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
@@ -236,6 +238,56 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  * \Synchronicity  {Synchronous}
  */
 void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode);
+
+/**
+ * \brief   起床の検証を始める（[SWS_CanSM_00609]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_START_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00616]/[SWS_CanSM_00607]）。トリガが効くのは NO_COM（ボランタリスリープ中）だけで、
+ *          それ以外の状態では、何もしない（要求自体は受理する）。
+ *          NO_COM のとき、CANSM_STATE_WAKEUP_VALIDATING へ入って検証タイマを開始し、コントローラを STOPPED
+ *          （SLEEP→STOPPED、Listen-Only）にする要求を出して、完了通知を待つ（来なければ繰り返す）。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
+ *          FULL_COM へ確定するのは、有効な受信の確認後に ComM が CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、
+ *          または CanSM_MainFunction() が検証のタイムアウトを検出して、再スリープするとき（検証失敗）。
+ *
+ *          以前は、同じ処理が CanSM_ControllerModeIndication() の中にあり、EcuM_CheckWakeup() が
+ *          CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を「起床の合図」として呼んでいた（2026-11 に、本関数へ移した。
+ *          仕様では、CanSM_ControllerModeIndication() は、コントローラがそのモードに達した完了通知）。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00609, SWS_CanSM_00607, SWS_CanSM_00616, SWS_CanSM_00617, SWS_CanSM_00612}
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StartWakeupSource(NetworkHandleType network);
+
+/**
+ * \brief   起床の検証を止める（[SWS_CanSM_00610]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_STOP_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00622]/[SWS_CanSM_00608]）。トリガが効くのは WAKEUP_VALIDATING（検証中）だけで、
+ *          コントローラを再びスリープさせて、NO_COM へ戻る（検証失敗と同じ。CanSM_MainFunction() の検証タイムアウトと
+ *          共通の処理）。それ以外の状態では、何もしない（要求自体は受理する）。
+ *          EcuM は、起床の検証が期限切れになったときに、EcuM_StopWakeupSources() からこの関数を呼ぶ（[SWS_EcuM_02926]）。
+ *          通常は、CanSM_MainFunction() の検証タイムアウト（CANSM_WAKEUP_VALIDATION_MS）が、EcuM の期限より先に
+ *          再スリープしているので、何も起こらない。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00610, SWS_CanSM_00608, SWS_CanSM_00618, SWS_CanSM_00619, SWS_CanSM_00620, SWS_CanSM_00622}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StopWakeupSource(NetworkHandleType network);
 
 /* ======================================================================
  * Test Functions

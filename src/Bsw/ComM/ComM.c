@@ -38,7 +38,7 @@
  *            このとき ComM は Nm_NetworkRequest() ではなく Nm_PassiveStartUp() を呼ぶ
  *            （ComM_BusSM_ModeIndication 参照）。CanNm は Repeat Message State を経て
  *            Ready Sleep State へ進み、その間に誰かが通信を要求しなければ、そのままスリープへ向かう
- *            （COMM_FULL_COM_READY_SLEEP サブステートに相当。ComM_NmRequested == 0）。
+ *            （COMM_FULL_COM_READY_SLEEP サブステート。ComM_FullComSubState）。
  *            ユーザが後から FULL_COM を要求したら、ComM_ApplyAggregatedRequest() が
  *            Nm_NetworkRequest() を呼んで NETWORK_REQUESTED へ戻す。
  *            以前は、ComM_UserRequest[COMM_USER_0] を、チャネルの実状態へ同期させて
@@ -74,7 +74,7 @@
  *            ComM_NmReleasePending[] のコメント（下記）を参照。
  *
  *            2026-09 追加: ComM_Nm_NetworkStartIndication()（[SWS_ComM_00383]）。
- *            この待機期間中の物理ウェイクアップ（CanSM_ControllerModeIndication() →
+ *            この待機期間中の物理ウェイクアップ（CanSM_StartWakeupSource() →
  *            ウェイクアップ検証 → ComM_EcuM_WakeUpIndication() →
  *            CanSM_RequestComMode(FULL_COM) → ComM_BusSM_ModeIndication(FULL_COM)）とは別に、CanNm 自身がまだ
  *            Bus-Sleep Mode のまま NM フレームを受信した場合（レース条件、
@@ -168,13 +168,14 @@ static ComM_ModeType ComM_UserRequest[COMM_USER_COUNT];
  *  関わらず無条件に）クリアされうる。理由は同関数の doc コメント参照。 */
 static uint8 ComM_NmReleasePending[COMM_CHANNEL_COUNT];
 
-/** 1 = ComM が Nm_NetworkRequest() で、通信が必要なことを Nm へ伝えている
- *  （COMM_FULL_COM_NETWORK_REQUESTED サブステート）。0 = 伝えていない
- *  （Nm_PassiveStartUp() で起きただけ、または Nm_NetworkRelease() 済み。
- *  COMM_FULL_COM_READY_SLEEP サブステート）。FULL_COM 入り
- *  （ComM_BusSM_ModeIndication()）と、ユーザ要求の変化
- *  （ComM_ApplyAggregatedRequest()）が更新する。 */
-static uint8 ComM_NmRequested[COMM_CHANNEL_COUNT];
+/** FULL_COM のサブステート（COMM_FULL_COM_NETWORK_REQUESTED または COMM_FULL_COM_READY_SLEEP。
+ *  [SWS_ComM_00880]）。チャネルが FULL_COM のときだけ意味を持つ。
+ *  NETWORK_REQUESTED: ComM が Nm_NetworkRequest() で、通信が必要なことを Nm へ伝えている。
+ *  READY_SLEEP: 伝えていない（Nm_PassiveStartUp() で起きただけ、または Nm_NetworkRelease() 済み）。
+ *  FULL_COM 入り（ComM_BusSM_ModeIndication()）と、ユーザ要求の変化（ComM_ApplyAggregatedRequest()）が更新する。
+ *  NO_COM のサブステート（NO_PENDING_REQUEST と REQUEST_PENDING）は、変数を持たず、ComM_GetState() が、
+ *  ユーザ要求の集約結果と CommunicationAllowed から導く。 */
+static ComM_StateType ComM_FullComSubState[COMM_CHANNEL_COUNT];
 
 /** EcuM へ最後に伝えた RUN 要求状態（COMM_FULL_COMMUNICATION または
  *  COMM_NO_COMMUNICATION のみを取る。COMM_SILENT_COMMUNICATION は EcuM の
@@ -242,7 +243,7 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
     {
         ComM_ChannelMode[i]              = COMM_NO_COMMUNICATION;
         ComM_NmReleasePending[i]         = 0U;
-        ComM_NmRequested[i]              = 0U;
+        ComM_FullComSubState[i]          = COMM_FULL_COM_READY_SLEEP;
         ComM_DcmActiveDiagnostic[i]      = 0U;
         ComM_CommunicationAllowedFlag[i] = FALSE;  /* [SWS_ComM_00884] 既定値 */
     }
@@ -282,7 +283,73 @@ void ComM_DeInit(void)
  * ComM_GetState
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   チャネルの状態機械の現在の状態（サブステートを含む）を取得する（[SWS_ComM_00872]）。
+ *
+ * \details 返す値は、仕様の 5 つの状態（ComM_StateType、[SWS_ComM_00674]）のいずれか。
+ *          - COMM_NO_COM_NO_PENDING_REQUEST: 通信なし。通信の開始の要求も保留もない。
+ *          - COMM_NO_COM_REQUEST_PENDING: 通信なし。ユーザ（または診断）が FULL_COM を要求しているが、
+ *            チャネルがまだ FULL_COM へ達していない（[SWS_ComM_00875]/[SWS_ComM_00876]/[SWS_ComM_00895]）。
+ *            CommunicationAllowed が FALSE の間のほか、TRUE でも、CanSM が要求を断った間は、この状態のまま。
+ *            この状態は、保留を表す変数を持たず、「NO_COM のまま、ユーザ要求の集約結果が FULL_COM」から、その場で導く
+ *            （保留を別に覚えると、撤回との不整合が起きたため。ComM_RequestFullComOrPend() 参照）。
+ *          - COMM_FULL_COM_NETWORK_REQUESTED: FULL_COM。通信が必要なことを Nm へ伝えている（Nm_NetworkRequest）。
+ *          - COMM_FULL_COM_READY_SLEEP: FULL_COM。通信は要求していない（パッシブ起動、または Nm_NetworkRelease 済み）。
+ *          - COMM_SILENT_COM: SILENT_COM（Prepare Bus-Sleep、Bus-Off の回復中）。
+ *
+ * \param[in]   Channel  対象チャネル（0 〜 COMM_CHANNEL_COUNT-1）。
+ * \param[out]  State    状態を受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が範囲外、または State が NULL。
+ *
+ * \AUTOSARReq     {SWS_ComM_00872, SWS_ComM_00674, SWS_ComM_00879, SWS_ComM_00880, SWS_ComM_00881}
+ * \ServiceID      {0x34}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetState(NetworkHandleType Channel, ComM_StateType* State)
+{
+    if (!ComM_Initialized)
+    {
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATE, COMM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Channel >= COMM_CHANNEL_COUNT)
+    {
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATE, COMM_E_WRONG_PARAMETERS);
+        return E_NOT_OK;
+    }
+
+    if (State == NULL)
+    {
+        (void)Det_ReportError(COMM_MODULE_ID, 0U, COMM_API_ID_GET_STATE, COMM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    switch (ComM_ChannelMode[Channel])
+    {
+        case COMM_FULL_COMMUNICATION:
+            *State = ComM_FullComSubState[Channel];
+            break;
+
+        case COMM_SILENT_COMMUNICATION:
+            *State = COMM_SILENT_COM;
+            break;
+
+        default:
+            /* NO_COM のまま、ユーザ要求の集約結果が FULL_COM なら、要求が保留中（[SWS_ComM_00875]）。
+             * CommunicationAllowed が FALSE の間のほか、TRUE でも、CanSM が要求を断った間は、ここに来る。
+             * ComM_FullComSubState は、NO_COM のときは意味を持たないので、見ない。 */
+            *State = (ComM_ComputeAggregatedMode() == COMM_FULL_COMMUNICATION)
+                         ? COMM_NO_COM_REQUEST_PENDING
+                         : COMM_NO_COM_NO_PENDING_REQUEST;
+            break;
+    }
+
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * ComM_GetStatus
@@ -1101,7 +1168,7 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
                      * パッシブ起動する（CanNm は Repeat Message → Ready Sleep へ進む）。
                      * CanNm が既に Network Mode なら E_NOT_OK だが、問題ない。 */
                     (void)Nm_PassiveStartUp(NM_MAIN_NETWORK_HANDLE);
-                    ComM_NmRequested[Network] = 0U;
+                    ComM_FullComSubState[Network] = COMM_FULL_COM_READY_SLEEP;
                     DET_LOGI(TAG, "ch%u FULL_COM without user request -> Nm_PassiveStartUp (READY_SLEEP)",
                              (unsigned)Network);
                 }
@@ -1116,7 +1183,7 @@ void ComM_BusSM_ModeIndication(NetworkHandleType Network, ComM_ModeType Mode)
              * ComM_NmReleasePending は、物理スリープが実際に完了したことが
              * 確定するこのタイミングでクリアする。 */
             ComM_NmReleasePending[Network] = 0U;
-            ComM_NmRequested[Network]      = 0U;
+            ComM_FullComSubState[Network]  = COMM_FULL_COM_READY_SLEEP;
             if (ComM_EcuMRunMode != COMM_NO_COMMUNICATION)
             {
                 (void)EcuM_ReleaseRUN(ECUM_USER_COMM);
@@ -1213,23 +1280,23 @@ void ComM_MainFunction(void)
 /**
  * \brief   通信が必要なことを Nm へ伝え、NETWORK_REQUESTED を記録する（[SWS_ComM_00869]）。
  *
- * \details Nm_NetworkRequest() の呼び出しと ComM_NmRequested の更新を、必ず対にするための関数。
+ * \details Nm_NetworkRequest() の呼び出しと ComM_FullComSubState の更新を、必ず対にするための関数。
  */
 static void ComM_NmNetworkRequest(NetworkHandleType Network)
 {
     (void)Nm_NetworkRequest(NM_MAIN_NETWORK_HANDLE);
-    ComM_NmRequested[Network] = 1U;
+    ComM_FullComSubState[Network] = COMM_FULL_COM_NETWORK_REQUESTED;
 }
 
 /**
  * \brief   通信が不要になったことを Nm へ伝え、READY_SLEEP（要求なし）を記録する。
  *
- * \details Nm_NetworkRelease() の呼び出しと ComM_NmRequested の更新を、必ず対にするための関数。
+ * \details Nm_NetworkRelease() の呼び出しと ComM_FullComSubState の更新を、必ず対にするための関数。
  */
 static void ComM_NmNetworkRelease(NetworkHandleType Network)
 {
     (void)Nm_NetworkRelease(NM_MAIN_NETWORK_HANDLE);
-    ComM_NmRequested[Network] = 0U;
+    ComM_FullComSubState[Network] = COMM_FULL_COM_READY_SLEEP;
 }
 
 /**
@@ -1357,7 +1424,7 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * ユーザが FULL_COM を要求したら、通信が必要になったことを Nm へ伝える
      * （READY_SLEEP → NETWORK_REQUESTED、[SWS_ComM_00869]）。 */
     if ((aggregated == COMM_FULL_COMMUNICATION) && (ComM_ChannelMode[0U] == COMM_FULL_COMMUNICATION)
-        && (ComM_NmRequested[0U] == 0U))
+        && (ComM_FullComSubState[0U] == COMM_FULL_COM_READY_SLEEP))
     {
         ComM_NmNetworkRequest(0U);
         DET_LOGI(TAG, "FULL_COM requested while READY_SLEEP -> Nm_NetworkRequest");

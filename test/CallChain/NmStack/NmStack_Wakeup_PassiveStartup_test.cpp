@@ -172,6 +172,7 @@ TEST_F(NmStack_Wakeup_PassiveStartup_Test, OK)
     Can_MainFunction_Wakeup();     // SLEEP 中の起床を検出（WAKEUP_VALIDATING）
     Can_MainFunction_Read();       // 起床後の最初の受信
     ASSERT_EQ(CanIf_CheckValidation(ECUM_WKSOURCE_CAN), E_OK);   // 検証成功 → FULL_COM
+    Can_MainFunction_Mode();
     ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     ASSERT_EQ(CurrentNmState(), CANNM_STATE_REPEAT_MESSAGE);   // パッシブ起動で、Repeat Message State
 
@@ -184,6 +185,7 @@ TEST_F(NmStack_Wakeup_PassiveStartup_Test, OK)
     {
         FakeMillis_Value += CANNM_CYCLE_MS;
         CanNm_MainFunction();
+        Can_MainFunction_Mode();
         sawNormalOperation = sawNormalOperation || (CurrentNmState() == CANNM_STATE_NORMAL_OPERATION);
         sawReadySleep      = sawReadySleep      || (CurrentNmState() == CANNM_STATE_READY_SLEEP);
     }

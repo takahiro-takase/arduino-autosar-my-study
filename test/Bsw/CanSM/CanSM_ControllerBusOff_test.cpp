@@ -46,6 +46,17 @@ extern "C" {
 namespace
 {
 
+/* CanIf を wrap で成功させる（実体の Can を呼ばない）ため、CanSM が待っているコントローラのモード変更の完了通知を、
+ * CanSM へ直接流す。STOPPED → STARTED → SLEEP の順に流すと、FULL_COM へ入る手順（STOPPED → STARTED）も、
+ * NO_COM へ入る手順（STOPPED → SLEEP）も、完了する（待っていないモードの通知は、無視される）。 */
+void SettleCanSmModeRequests()
+{
+    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_STARTED);
+    CanSM_ControllerModeIndication(0U, CAN_CS_SLEEP);
+}
+
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -163,6 +174,7 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ProceedsToBusOffEv
     FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    SettleCanSmModeRequests();
     FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に失敗する
     ForcedReturn_CanIf_SetControllerMode      = E_NOT_OK;
 
@@ -191,6 +203,7 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ReportsPreFailedTo
     FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    SettleCanSmModeRequests();
     WrapDem_Reset();
 
     /* ----------------------- */
@@ -217,6 +230,7 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_DoesNotReportAgain
     FailFromCallCount_CanIf_SetPduMode = 0U;
     ForcedReturn_CanIf_SetPduMode      = E_OK;
     ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    SettleCanSmModeRequests();
     CanSM_ControllerBusOff(0U);   // 1 回目（BUS_OFF の状態へ入る）
     WrapDem_Reset();
 

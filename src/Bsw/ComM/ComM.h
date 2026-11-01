@@ -47,6 +47,14 @@ typedef uint8 ComM_ModeType;
 /** ComM モジュール自身の初期化状態型 (AUTOSAR ComM_InitStatusType) */
 typedef uint8 ComM_InitStatusType;
 
+/** チャネルの状態機械の状態（サブステートを含む。[SWS_ComM_00674]）。値は仕様どおり。 */
+typedef uint8 ComM_StateType;
+#define COMM_NO_COM_NO_PENDING_REQUEST   0U  /**< 通信なし。通信の開始の要求も保留もない */
+#define COMM_NO_COM_REQUEST_PENDING      1U  /**< 通信なし。FULL_COM の要求が保留中（まだ FULL_COM へ達していない） */
+#define COMM_FULL_COM_NETWORK_REQUESTED  2U  /**< FULL_COM。通信が必要なことを Nm へ伝えている */
+#define COMM_FULL_COM_READY_SLEEP        3U  /**< FULL_COM。通信は要求していない（スリープへ向かえる） */
+#define COMM_SILENT_COM                  4U  /**< SILENT_COM */
+
 /**
  * \brief   ComM_Init() の設定引数型（不透明型）。
  *
@@ -169,6 +177,33 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType ComM_GetRequestedComMode(ComM_UserHandleType User, ComM_ModeType* ComMode);
+
+/**
+ * \brief   チャネルの状態機械の現在の状態（サブステートを含む）を取得する（[SWS_ComM_00872]）。
+ *
+ * \details 返す値は、仕様の 5 つの状態（ComM_StateType、[SWS_ComM_00674]）のいずれか。
+ *          - COMM_NO_COM_NO_PENDING_REQUEST: 通信なし。通信の開始の要求も保留もない。
+ *          - COMM_NO_COM_REQUEST_PENDING: 通信なし。ユーザ（または診断）が FULL_COM を要求しているが、
+ *            チャネルがまだ FULL_COM へ達していない（[SWS_ComM_00875]/[SWS_ComM_00876]/[SWS_ComM_00895]）。
+ *            CommunicationAllowed が FALSE の間のほか、TRUE でも、CanSM が要求を断った間は、この状態のまま。
+ *            この状態は、保留を表す変数を持たず、「NO_COM のまま、ユーザ要求の集約結果が FULL_COM」から、その場で導く
+ *            （保留を別に覚えると、撤回との不整合が起きたため。ComM_RequestFullComOrPend() 参照）。
+ *          - COMM_FULL_COM_NETWORK_REQUESTED: FULL_COM。通信が必要なことを Nm へ伝えている（Nm_NetworkRequest）。
+ *          - COMM_FULL_COM_READY_SLEEP: FULL_COM。通信は要求していない（パッシブ起動、または Nm_NetworkRelease 済み）。
+ *          - COMM_SILENT_COM: SILENT_COM（Prepare Bus-Sleep、Bus-Off の回復中）。
+ *
+ * \param[in]   Channel  対象チャネル（0 〜 COMM_CHANNEL_COUNT-1）。
+ * \param[out]  State    状態を受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、Channel が範囲外、または State が NULL。
+ *
+ * \AUTOSARReq     {SWS_ComM_00872, SWS_ComM_00674, SWS_ComM_00879, SWS_ComM_00880, SWS_ComM_00881}
+ * \ServiceID      {0x34}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType ComM_GetState(NetworkHandleType Channel, ComM_StateType* State);
 
 /**
  * \brief   ユーザの現在の通信モードを取得する。

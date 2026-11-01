@@ -372,7 +372,7 @@ Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHU
   └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
        └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
             がフラグをドレインし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)  ← Can が EcuM へ直接通知（[SWS_Can_00271]）
-                 └→ CanSM_ControllerModeIndication(0)
+                 └→ CanSM_StartWakeupSource(0)
                       └→ Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
                            └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
 
@@ -480,7 +480,7 @@ Can_Isr()（INT ピン立ち下がりの真のハードウェア割り込み、S
 
 Can_MainFunction_Wakeup()（1ms 周期、SHUTDOWN 中も動作）:
   CAN_CS_SLEEP 中 かつ Can_WakeupIrqPending ?
-    YES → フラグをクリアし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanSM_ControllerModeIndication(0)
+    YES → フラグをクリアし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanSM_StartWakeupSource(0)
             → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
             → CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ通知しない）
 

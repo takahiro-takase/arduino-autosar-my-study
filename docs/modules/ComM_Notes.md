@@ -116,6 +116,37 @@ INFO ComM: FULL_COM -> NO_COM requested: Nm_NetworkRelease() sent, awaiting Bus-
 INFO CanSM: ->NO_COM (physical sleep)   ← CanNm が Bus-Sleep Mode へ到達してから
 ```
 
+## チャネルの状態機械（仕様との対応）と `ComM_GetState()`
+
+仕様（[SWS_ComM_00879]〜[SWS_ComM_00881]）のチャネルの状態機械は、3 つの主な状態（NO_COM、SILENT_COM、FULL_COM）と、
+NO_COM と FULL_COM の 2 つずつのサブステートから成ります。`ComM_GetState()`（[SWS_ComM_00872]、2026-11 追加）は、
+この 5 つの状態を返します（`ComM_StateType`、[SWS_ComM_00674]）。
+
+| 仕様の状態（`ComM_StateType`） | 値 | このプロジェクトでの表し方 |
+|---|---|---|
+| `COMM_NO_COM_NO_PENDING_REQUEST` | 0 | `ComM_ChannelMode` が NO_COM で、保留中の要求がない |
+| `COMM_NO_COM_REQUEST_PENDING` | 1 | `ComM_ChannelMode` が NO_COM のまま、ユーザ要求の集約結果が FULL_COM（`CommunicationAllowed` が FALSE の間のほか、TRUE でも CanSM が要求を断った間。変数は持たず、`ComM_GetState()` がその場で導く） |
+| `COMM_FULL_COM_NETWORK_REQUESTED` | 2 | `ComM_ChannelMode` が FULL_COM で、`ComM_FullComSubState` が NETWORK_REQUESTED（Nm へ通信を要求済み） |
+| `COMM_FULL_COM_READY_SLEEP` | 3 | `ComM_ChannelMode` が FULL_COM で、`ComM_FullComSubState` が READY_SLEEP（パッシブ起動、または解放済み。協調スリープ待ちを含む） |
+| `COMM_SILENT_COM` | 4 | `ComM_ChannelMode` が SILENT_COM（Prepare Bus-Sleep、Bus-Off の回復中） |
+
+NO_COM の 2 つのサブステートを、変数として覚えない理由: 保留を個別のフラグで覚えると、要求の撤回やスリープとの協調で、
+状態の不整合が繰り返し起きたため（2026-09）、毎回、ユーザ要求を集約し直す方式にしたからです。見え方（`ComM_GetState()`
+の結果）は、仕様どおりになります。
+
+仕様の遷移と、実装の対応:
+- NO_COM_NO_PENDING_REQUEST → REQUEST_PENDING（[SWS_ComM_00875]/[00876]）: ユーザが FULL_COM を要求する、または Dcm の
+  診断が始まる。`CommunicationAllowed` が TRUE で、CanSM も受け付ければ、すぐに FULL_COM へ進むので、REQUEST_PENDING は見えない。
+
+  FULL_COM のサブステート（`ComM_FullComSubState`）は、`ComM_NmReleasePending` が立っている間は、必ず READY_SLEEP
+  （解放の送信と一緒にしか立てないため）。そのため、Bus-Off の回復で、解放待ちのまま FULL_COM へ戻っても、サブステートは食い違わない。
+- REQUEST_PENDING → FULL_COM（[SWS_ComM_00895]）: `ComM_CommunicationAllowed(TRUE)` を受けて、集約し直す。
+- REQUEST_PENDING → NO_PENDING_REQUEST（[SWS_ComM_00897]）: 要求が取り下げられる。
+- FULL_COM の入りのサブステート（[SWS_ComM_00899]）: ユーザの要求があれば NETWORK_REQUESTED、起床だけなら READY_SLEEP
+  （[SWS_ComM_00296]）。
+- NETWORK_REQUESTED ↔ READY_SLEEP（[SWS_ComM_00882]/[00883]）: ユーザの要求の有無で切り替える。
+- FULL_COM → SILENT_COM（[SWS_ComM_00826]）: CanNm が Prepare Bus-Sleep へ進んだ。SILENT_COM → NO_COM（[SWS_ComM_00295]/[00637]）: Bus-Sleep へ進んだ。
+
 ## ウェイクアップ時のパッシブ起動（READY_SLEEP）
 
 CanSM がウェイクアップの検証成功（や、他ノードの NM フレームによる起床）で
@@ -123,10 +154,10 @@ CanSM がウェイクアップの検証成功（や、他ノードの NM フレ�
 どのユーザの要求でもない自動的な変化です（2026-11 変更）。このとき ComM は、
 ユーザの要求の集約結果で、Nm の起こし方を変えます（[SWS_ComM_00665]/[SWS_ComM_00903]/[SWS_ComM_00869]）。
 
-| FULL_COM へ入ったとき | Nm の呼び出し | CanNm | `ComM_NmRequested` |
+| FULL_COM へ入ったとき | Nm の呼び出し | CanNm | `ComM_FullComSubState` |
 |---|---|---|---|
-| ユーザが FULL_COM を要求している | `Nm_NetworkRequest()` | Repeat Message → Normal Operation | 1（NETWORK_REQUESTED） |
-| 誰も要求していない（起床など） | `Nm_PassiveStartUp()` | Repeat Message → Ready Sleep → 誰も要求しなければスリープへ | 0（READY_SLEEP） |
+| ユーザが FULL_COM を要求している | `Nm_NetworkRequest()` | Repeat Message → Normal Operation | NETWORK_REQUESTED |
+| 誰も要求していない（起床など） | `Nm_PassiveStartUp()` | Repeat Message → Ready Sleep → 誰も要求しなければスリープへ | READY_SLEEP |
 
 READY_SLEEP のあとで、ユーザが FULL_COM を要求したら、`ComM_ApplyAggregatedRequest()` が
 `Nm_NetworkRequest()` を呼んで、NETWORK_REQUESTED へ戻します（CanNm は Ready Sleep → Normal Operation）。

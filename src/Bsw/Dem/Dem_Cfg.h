@@ -165,35 +165,38 @@
  * App_EngineManager の状態ハンドラが Dem_SetEventStatus() に渡す。
  * ----------------------------------------------------------------------- */
 /* @@GEN-BEGIN dem-events  生成元: config/data/Dem.json  （自動生成: 手編集禁止） */
-#define DemConf_DemEventParameter_ENGINE_OVERHEAT         0U   /**< 冷却水温過熱 */
-#define DemConf_DemEventParameter_ENGINE_STALL            1U   /**< エンジン失速 */
-#define DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG    2U   /**< フラグなし回転検出 */
-#define DemConf_DemEventParameter_STARTING_TIMEOUT        3U   /**< 起動タイムアウト */
-#define DemConf_DemEventParameter_COMM_TIMEOUT            4U   /**< EngineInfo 受信タイムアウト */
-#define DemConf_DemEventParameter_BUTTON_STUCK            5U   /**< 警告確認ボタン固着（5 秒以上押下） */
-#define DemConf_DemEventParameter_ADC_VOLT_LOW            6U   /**< ADC センサ電圧低下（< 1000 mV） */
-#define DemConf_DemEventParameter_CAN_BUSOFF              7U   /**< CAN Bus-Off 持続（L1→L2 降格） */
-#define DemConf_DemEventParameter_E2E_ABSINFO             8U   /**< AbsInfo E2E 保護違反 (CRC/カウンタ異常) */
-#define DemConf_DemEventParameter_E2E_ENGINEINFO          9U   /**< EngineInfo E2E 保護違反 (CRC/カウンタ異常) */
-#define DemConf_DemEventParameter_WDGM_SUPERVISION        10U  /**< WdgM Global Supervision Status が
-                                                                *   WDGM_GLOBAL_STATUS_STOPPED に到達
-                                                                *   ([SWS_WdgM_00129]/[00375]、2026-09 追加) */
-#define DemConf_DemEventParameter_WDG_DISABLE_REJECTED    11U  /**< Wdg_SetMode(WDGIF_OFF_MODE) が
-                                                                *   無効化不可（HW制約）により拒否された
-                                                                *   ([SWS_Wdg_00026]/[00182]、2026-09 追加) */
-#define DemConf_DemEventParameter_NVM_INTEGRITY_FAILED    12U  /**< NvM_Init() 時の読み込みで
-                                                                *   CRC 不整合を検出
-                                                                *   ([SWS_NvM_00591]/[00864]、
-                                                                *   2026-09 追加) */
-#define DemConf_DemEventParameter_NVM_LOSS_OF_REDUNDANCY  13U  /**< 冗長ブロックの片面が破損し
-                                                                *   自己修復した
-                                                                *   ([SWS_NvM_00595]/[00868]、
-                                                                *   2026-09 追加) */
-#define DemConf_DemEventParameter_NVM_REQ_FAILED          14U  /**< NvM_WriteBlock() が書き込み
-                                                                *   リトライ上限を超えて失敗
-                                                                *   ([SWS_NvM_00659]/[00865]、
-                                                                *   2026-10 追加) */
-#define DEM_EVENT_COUNT                                   15U  /**< イベント総数 */
+#define DemConf_DemEventParameter_ENGINE_OVERHEAT             0U   /**< 冷却水温過熱 */
+#define DemConf_DemEventParameter_ENGINE_STALL                1U   /**< エンジン失速 */
+#define DemConf_DemEventParameter_ENGINE_SPEED_NO_FLAG        2U   /**< フラグなし回転検出 */
+#define DemConf_DemEventParameter_STARTING_TIMEOUT            3U   /**< 起動タイムアウト */
+#define DemConf_DemEventParameter_COMM_TIMEOUT                4U   /**< EngineInfo 受信タイムアウト */
+#define DemConf_DemEventParameter_BUTTON_STUCK                5U   /**< 警告確認ボタン固着（5 秒以上押下） */
+#define DemConf_DemEventParameter_ADC_VOLT_LOW                6U   /**< ADC センサ電圧低下（< 1000 mV） */
+#define DemConf_DemEventParameter_CAN_BUSOFF                  7U   /**< CAN Bus-Off 持続（L1→L2 降格） */
+#define DemConf_DemEventParameter_E2E_ABSINFO                 8U   /**< AbsInfo E2E 保護違反 (CRC/カウンタ異常) */
+#define DemConf_DemEventParameter_E2E_ENGINEINFO              9U   /**< EngineInfo E2E 保護違反 (CRC/カウンタ異常) */
+#define DemConf_DemEventParameter_WDGM_SUPERVISION            10U  /**< WdgM Global Supervision Status が
+                                                                    *   WDGM_GLOBAL_STATUS_STOPPED に到達
+                                                                    *   ([SWS_WdgM_00129]/[00375]、2026-09 追加) */
+#define DemConf_DemEventParameter_WDG_DISABLE_REJECTED        11U  /**< Wdg_SetMode(WDGIF_OFF_MODE) が
+                                                                    *   無効化不可（HW制約）により拒否された
+                                                                    *   ([SWS_Wdg_00026]/[00182]、2026-09 追加) */
+#define DemConf_DemEventParameter_NVM_INTEGRITY_FAILED        12U  /**< NvM_Init() 時の読み込みで
+                                                                    *   CRC 不整合を検出
+                                                                    *   ([SWS_NvM_00591]/[00864]、
+                                                                    *   2026-09 追加) */
+#define DemConf_DemEventParameter_NVM_LOSS_OF_REDUNDANCY      13U  /**< 冗長ブロックの片面が破損し
+                                                                    *   自己修復した
+                                                                    *   ([SWS_NvM_00595]/[00868]、
+                                                                    *   2026-09 追加) */
+#define DemConf_DemEventParameter_NVM_REQ_FAILED              14U  /**< NvM_WriteBlock() が書き込み
+                                                                    *   リトライ上限を超えて失敗
+                                                                    *   ([SWS_NvM_00659]/[00865]、
+                                                                    *   2026-10 追加) */
+#define DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT  15U  /**< CanSM が CAN コントローラのモード変更の完了通知を、
+                                                                    *   繰り返しの上限まで待っても得られなかった
+                                                                    *   （[SWS_CanSM_00664]/[SWS_CanSM_00385]、2026-11 追加） */
+#define DEM_EVENT_COUNT                                       16U  /**< イベント総数 */
 /* @@GEN-END dem-events */
 
 /* -----------------------------------------------------------------------
@@ -201,21 +204,22 @@
  * 製造者定義領域を使用 (byte1=0x00, byte2-3=0x01xx)
  * ----------------------------------------------------------------------- */
 /* @@GEN-BEGIN dem-dtcs  生成元: config/data/Dem.json  （自動生成: 手編集禁止） */
-#define DEM_DTC_ENGINE_OVERHEAT         0x000101UL  /**< 冷却水温過熱 */
-#define DEM_DTC_ENGINE_STALL            0x000102UL  /**< エンジン失速 */
-#define DEM_DTC_ENGINE_SPEED_NO_FLAG    0x000103UL  /**< フラグなし回転 */
-#define DEM_DTC_STARTING_TIMEOUT        0x000104UL  /**< 起動タイムアウト */
-#define DEM_DTC_COMM_TIMEOUT            0x000105UL  /**< EngineInfo 受信タイムアウト */
-#define DEM_DTC_BUTTON_STUCK            0x000106UL  /**< 警告確認ボタン固着 */
-#define DEM_DTC_ADC_VOLT_LOW            0x000107UL  /**< ADC センサ電圧低下 */
-#define DEM_DTC_CAN_BUSOFF              0x000108UL  /**< CAN Bus-Off 持続（L1→L2 降格） */
-#define DEM_DTC_E2E_ABSINFO             0x000109UL  /**< AbsInfo E2E 保護違反 */
-#define DEM_DTC_E2E_ENGINEINFO          0x00010AUL  /**< EngineInfo E2E 保護違反 */
-#define DEM_DTC_WDGM_SUPERVISION        0x00010BUL  /**< WdgM Global Supervision Status STOPPED */
-#define DEM_DTC_WDG_DISABLE_REJECTED    0x00010CUL  /**< Wdg_SetMode(OFF) 無効化拒否 */
-#define DEM_DTC_NVM_INTEGRITY_FAILED    0x00010DUL  /**< NvM 読み込みCRC不整合 */
-#define DEM_DTC_NVM_LOSS_OF_REDUNDANCY  0x00010EUL  /**< NvM 冗長ブロック片面破損 */
-#define DEM_DTC_NVM_REQ_FAILED          0x00010FUL  /**< NvM 書き込みがリトライ上限超過で失敗 */
+#define DEM_DTC_ENGINE_OVERHEAT             0x000101UL  /**< 冷却水温過熱 */
+#define DEM_DTC_ENGINE_STALL                0x000102UL  /**< エンジン失速 */
+#define DEM_DTC_ENGINE_SPEED_NO_FLAG        0x000103UL  /**< フラグなし回転 */
+#define DEM_DTC_STARTING_TIMEOUT            0x000104UL  /**< 起動タイムアウト */
+#define DEM_DTC_COMM_TIMEOUT                0x000105UL  /**< EngineInfo 受信タイムアウト */
+#define DEM_DTC_BUTTON_STUCK                0x000106UL  /**< 警告確認ボタン固着 */
+#define DEM_DTC_ADC_VOLT_LOW                0x000107UL  /**< ADC センサ電圧低下 */
+#define DEM_DTC_CAN_BUSOFF                  0x000108UL  /**< CAN Bus-Off 持続（L1→L2 降格） */
+#define DEM_DTC_E2E_ABSINFO                 0x000109UL  /**< AbsInfo E2E 保護違反 */
+#define DEM_DTC_E2E_ENGINEINFO              0x00010AUL  /**< EngineInfo E2E 保護違反 */
+#define DEM_DTC_WDGM_SUPERVISION            0x00010BUL  /**< WdgM Global Supervision Status STOPPED */
+#define DEM_DTC_WDG_DISABLE_REJECTED        0x00010CUL  /**< Wdg_SetMode(OFF) 無効化拒否 */
+#define DEM_DTC_NVM_INTEGRITY_FAILED        0x00010DUL  /**< NvM 読み込みCRC不整合 */
+#define DEM_DTC_NVM_LOSS_OF_REDUNDANCY      0x00010EUL  /**< NvM 冗長ブロック片面破損 */
+#define DEM_DTC_NVM_REQ_FAILED              0x00010FUL  /**< NvM 書き込みがリトライ上限超過で失敗 */
+#define DEM_DTC_CANSM_MODE_REQUEST_TIMEOUT  0x000110UL  /**< CAN コントローラのモード変更の完了通知のタイムアウト */
 /* @@GEN-END dem-dtcs */
 
 /* -----------------------------------------------------------------------
@@ -236,30 +240,32 @@
  *   PREFAILED—L1 の回復で戻れる一時的な Bus-Off では確定させない）。
  * ----------------------------------------------------------------------- */
 /* @@GEN-BEGIN dem-debounce-limits  生成元: config/data/Dem.json  （自動生成: 手編集禁止） */
-#define DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT         2  /**< 瞬時しきい値判定のため複数回要求 */
-#define DEM_DEBOUNCE_LIMIT_ENGINE_STALL            2  /**< 瞬時しきい値判定のため複数回要求 */
-#define DEM_DEBOUNCE_LIMIT_ENGINE_SPEED_NO_FLAG    2  /**< 瞬時しきい値判定のため複数回要求 */
-#define DEM_DEBOUNCE_LIMIT_STARTING_TIMEOUT        2  /**< 瞬時しきい値判定のため複数回要求 */
-#define DEM_DEBOUNCE_LIMIT_COMM_TIMEOUT            2  /**< 毎サイクル報告のため数百ms〜数秒で確定 */
-#define DEM_DEBOUNCE_LIMIT_BUTTON_STUCK            1  /**< IoHwAb が 5 秒固着判定済み。二重チェック不要 */
-#define DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW            2  /**< 毎サイクル報告のため数十 ms で確定 */
-#define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF              4  /**< Bus-Off 検出ごとに PREFAILED。CANSM_BUSOFF_L1_TO_L2_COUNT(3)+1 回で確定 */
-#define DEM_DEBOUNCE_LIMIT_E2E_ABSINFO             1  /**< E2EXf が E2E_SMCheck() で単発異常を
-                                                       *   吸収済み(2026-09)。二重チェック不要 */
-#define DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO          1  /**< 同上(E2EXf_AbsInfoRxCfg 参照) */
-#define DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION        1  /**< WdgM 自身が OK→FAILED→EXPIRED→
-                                                       *   猶予サイクル消費という多段階の
-                                                       *   持続性チェックを経てから STOPPED を
-                                                       *   報告するため、二重チェック不要 */
-#define DEM_DEBOUNCE_LIMIT_WDG_DISABLE_REJECTED    1  /**< HW制約による決定論的な拒否
-                                                       *   （毎回必ず拒否される）ため
-                                                       *   二重チェック不要 */
-#define DEM_DEBOUNCE_LIMIT_NVM_INTEGRITY_FAILED    1  /**< CRC比較は決定論的。
-                                                       *   不一致は即確定 */
-#define DEM_DEBOUNCE_LIMIT_NVM_LOSS_OF_REDUNDANCY  1  /**< CRC比較は決定論的。
-                                                       *   不一致は即確定 */
-#define DEM_DEBOUNCE_LIMIT_NVM_REQ_FAILED          1  /**< NvM 内でリトライを使い切った後に
-                                                       *   報告されるため二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_ENGINE_OVERHEAT             2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_ENGINE_STALL                2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_ENGINE_SPEED_NO_FLAG        2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_STARTING_TIMEOUT            2  /**< 瞬時しきい値判定のため複数回要求 */
+#define DEM_DEBOUNCE_LIMIT_COMM_TIMEOUT                2  /**< 毎サイクル報告のため数百ms〜数秒で確定 */
+#define DEM_DEBOUNCE_LIMIT_BUTTON_STUCK                1  /**< IoHwAb が 5 秒固着判定済み。二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_ADC_VOLT_LOW                2  /**< 毎サイクル報告のため数十 ms で確定 */
+#define DEM_DEBOUNCE_LIMIT_CAN_BUSOFF                  4  /**< Bus-Off 検出ごとに PREFAILED。CANSM_BUSOFF_L1_TO_L2_COUNT(3)+1 回で確定 */
+#define DEM_DEBOUNCE_LIMIT_E2E_ABSINFO                 1  /**< E2EXf が E2E_SMCheck() で単発異常を
+                                                           *   吸収済み(2026-09)。二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_E2E_ENGINEINFO              1  /**< 同上(E2EXf_AbsInfoRxCfg 参照) */
+#define DEM_DEBOUNCE_LIMIT_WDGM_SUPERVISION            1  /**< WdgM 自身が OK→FAILED→EXPIRED→
+                                                           *   猶予サイクル消費という多段階の
+                                                           *   持続性チェックを経てから STOPPED を
+                                                           *   報告するため、二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_WDG_DISABLE_REJECTED        1  /**< HW制約による決定論的な拒否
+                                                           *   （毎回必ず拒否される）ため
+                                                           *   二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_NVM_INTEGRITY_FAILED        1  /**< CRC比較は決定論的。
+                                                           *   不一致は即確定 */
+#define DEM_DEBOUNCE_LIMIT_NVM_LOSS_OF_REDUNDANCY      1  /**< CRC比較は決定論的。
+                                                           *   不一致は即確定 */
+#define DEM_DEBOUNCE_LIMIT_NVM_REQ_FAILED              1  /**< NvM 内でリトライを使い切った後に
+                                                           *   報告されるため二重チェック不要 */
+#define DEM_DEBOUNCE_LIMIT_CANSM_MODE_REQUEST_TIMEOUT  2  /**< 繰り返しの上限を超えるたびに PREFAILED を報告し、
+                                                           *   2 回の失敗で確定する。FULL_COM へ入る手順が最後の完了通知まで届いたときに PREPASSED で戻す */
 /* @@GEN-END dem-debounce-limits */
 
 /* -----------------------------------------------------------------------
@@ -272,21 +278,22 @@
  *   一過性の可能性が高いイベントは小さめ（2）、それ以外は標準（3）。
  * ----------------------------------------------------------------------- */
 /* @@GEN-BEGIN dem-aging-thresholds  生成元: config/data/Dem.json  （自動生成: 手編集禁止） */
-#define DEM_AGING_THRESHOLD_ENGINE_OVERHEAT         5U  /**< 重大故障。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_ENGINE_STALL            5U  /**< 重大故障。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_ENGINE_SPEED_NO_FLAG    3U  /**< 標準 */
-#define DEM_AGING_THRESHOLD_STARTING_TIMEOUT        2U  /**< 起動時の一過性要因の可能性が高い */
-#define DEM_AGING_THRESHOLD_COMM_TIMEOUT            3U  /**< 標準 */
-#define DEM_AGING_THRESHOLD_BUTTON_STUCK            3U  /**< 標準 */
-#define DEM_AGING_THRESHOLD_ADC_VOLT_LOW            3U  /**< 標準 */
-#define DEM_AGING_THRESHOLD_CAN_BUSOFF              5U  /**< 通信路の重大故障。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_E2E_ABSINFO             3U  /**< 標準 */
-#define DEM_AGING_THRESHOLD_E2E_ENGINEINFO          3U  /**< 標準 */
-#define DEM_AGING_THRESHOLD_WDGM_SUPERVISION        5U  /**< 重大故障（実HWリセット直前）。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_WDG_DISABLE_REJECTED    5U  /**< 安全上重要な無効化拒否。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_NVM_INTEGRITY_FAILED    5U  /**< EEPROM データ破損。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_NVM_LOSS_OF_REDUNDANCY  5U  /**< EEPROM データ破損。誤って早期回復しないよう慎重に */
-#define DEM_AGING_THRESHOLD_NVM_REQ_FAILED          5U  /**< EEPROM 書き込み不良。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_ENGINE_OVERHEAT             5U  /**< 重大故障。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_ENGINE_STALL                5U  /**< 重大故障。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_ENGINE_SPEED_NO_FLAG        3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_STARTING_TIMEOUT            2U  /**< 起動時の一過性要因の可能性が高い */
+#define DEM_AGING_THRESHOLD_COMM_TIMEOUT                3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_BUTTON_STUCK                3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_ADC_VOLT_LOW                3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_CAN_BUSOFF                  5U  /**< 通信路の重大故障。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_E2E_ABSINFO                 3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_E2E_ENGINEINFO              3U  /**< 標準 */
+#define DEM_AGING_THRESHOLD_WDGM_SUPERVISION            5U  /**< 重大故障（実HWリセット直前）。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_WDG_DISABLE_REJECTED        5U  /**< 安全上重要な無効化拒否。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_NVM_INTEGRITY_FAILED        5U  /**< EEPROM データ破損。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_NVM_LOSS_OF_REDUNDANCY      5U  /**< EEPROM データ破損。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_NVM_REQ_FAILED              5U  /**< EEPROM 書き込み不良。誤って早期回復しないよう慎重に */
+#define DEM_AGING_THRESHOLD_CANSM_MODE_REQUEST_TIMEOUT  5U  /**< 通信路の重大故障。誤って早期回復しないよう慎重に */
 /* @@GEN-END dem-aging-thresholds */
 
 /* -----------------------------------------------------------------------

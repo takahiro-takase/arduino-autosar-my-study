@@ -19,6 +19,19 @@
  *                状態（CANSM_STATE_FULL_COM、または CANSM_STATE_SILENT_COM）へ戻る。
  *                図は FULL_COM 経由のみを示す）
  *
+ *          コントローラのモード変更の手順（2026-11、S_PRE_FULLCOM / S_PRE_NOCOM）:
+ *            NO_COM / WAKEUP_VALIDATING から FULL_COM への要求は、CANSM_STATE_PRE_FULL_COM へ入り、コントローラを
+ *            STOPPED → STARTED の順に変える。FULL_COM から NO_COM への要求は、CANSM_STATE_PRE_NO_COM へ入り、
+ *            STOPPED → SLEEP の順に変える。現在のモードが既に STOPPED なら、STOPPED の要求は省く。
+ *            各要求のあと、CanSM_ControllerModeIndication()（Can_MainFunction_Mode() → CanIf から届く完了通知）で、
+ *            手順を次へ進める。CANSM_MODEREQ_REPEAT_TIME_MS が過ぎても通知が来なければ、要求を繰り返し
+ *            （CanSM_MainFunction()）、CANSM_MODEREQ_REPEAT_MAX を超えたら T_REPEAT_MAX（PRE_FULL_COM からは
+ *            PRE_NO_COM へ戻り、PRE_NO_COM からは、あきらめて NO_COM へ入る）。
+ *            ComM への通知（ComM_BusSM_ModeIndication）は、手順の完了のとき（FULL_COM / NO_COM へ入り終えたとき）に出す。
+ *            PRE_NO_COM の最中の FULL_COM の要求は、保留して、NO_COM へ入り終えたあとで、始める。
+ *            PRE_FULL_COM の最中の NO_COM の要求は、PRE_NO_COM へ向きを変える。
+ *            SILENT_COM から FULL_COM へ戻るときは、コントローラが既に STARTED のため、手順を経ずに、PDU を ONLINE にする。
+ *
  *          RequestComMode(NO_COM) が CanSM へ届く時点で、上位層（ComM）は
  *          既に CanNm の協調スリープ完了を確認済みである（[SWS_ComM_00133]/
  *          [SWS_ComM_00392] 準拠、ComM.c 参照）。そのため CanSM 自身は
@@ -33,12 +46,14 @@
  *          CanSMEnableBusOffDelay=FALSE 相当の L1/L2 バックオフ）:
  *            1. Bus-Off 検出 → コントローラ停止・タイマ起動
  *            2. CANSM_BUSOFF_RECOVERY_L1_MS（短い周期）待機（CanSM_MainFunction が監視）
- *            3. コントローラ再起動 → Bus-Off 前の状態（FULL_COM / SILENT_COM）に復帰 → Dem へ PASSED 報告
- *            4. 再度 Bus-Off が発生した場合は試行回数をカウント
+ *            3. コントローラ再起動 → Bus-Off 前の状態（FULL_COM / SILENT_COM）に復帰。回復の確定
+ *               （G_BUS_OFF_PASSIVE）のとき、Dem へ PASSED を報告する（[SWS_CanSM_00498]）
+ *            4. 再度 Bus-Off が発生した場合は試行回数をカウント。Bus-Off を検出するたびに、Dem へ PREFAILED を報告する
+ *               （DemConf_DemEventParameter_CAN_BUSOFF、[SWS_CanSM_00522]）
  *            5. 試行回数が CANSM_BUSOFF_L1_TO_L2_COUNT を超えたら、一時的な
- *               バス障害ではなく持続的な Bus-Off と判断し、Dem へ FAILED 報告
- *               (DemConf_DemEventParameter_CAN_BUSOFF)。Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1
- *               のため即座に確定する。以降はリトライ周期を長い
+ *               バス障害ではなく持続的な Bus-Off と判断する。Dem 側は、PREFAILED の積み重ねが
+ *               DEM_DEBOUNCE_LIMIT_CAN_BUSOFF（= CANSM_BUSOFF_L1_TO_L2_COUNT + 1）に達した時点で DTC を確定する。
+ *               以降はリトライ周期を長い
  *               CANSM_BUSOFF_RECOVERY_L2_MS へ切り替えるだけで、回復試行その
  *               ものは無期限に継続する（AUTOSAR 仕様には「回復を諦めて二度と
  *               復帰しない」状態は存在しない。一時的なバス障害が長引いただけで
@@ -71,7 +86,7 @@
  *            なかったことを確認してから ComM_Nm_BusSleepMode() を呼ぶ
  *            （[SWS_ComM_00392]）。ComM はこれを受けて初めて
  *            CanSM_RequestComMode(NO_COM) を呼び、CanSM が
- *            CanIf_SetControllerMode(CAN_CS_SLEEP) で MCP2515 を実際に
+ *            S_PRE_NOCOM（STOPPED → SLEEP）で MCP2515 を実際に
  *            スリープさせる。これにより「他ノードがまだ通信中の間は実際には
  *            スリープしない」という NM 本来の協調スリープを実機で確認できる。
  *            CANSM_STATE_BUS_OFF は実 HW をスリープさせないため、これが
@@ -91,8 +106,7 @@
  *            戻す）。CanNm がこれを受けて Prepare
  *            Bus-Sleep Mode から Network Mode へ自律復帰した場合の扱いは
  *            ComM.c の ComM_Nm_NetworkMode() の doc コメントを参照
- *            （CanSM_RequestComMode(FULL_COM) は Bus-Off 中は拒否されるが、
- *            それでも安全に収束するよう ComM 側で設計されている）。
+ *            （CanSM_RequestComMode() は Bus-Off の回復中の要求を受理する。[SWS_CanSM_00369]/[SWS_CanSM_00182]）。
  *
  *          ウェイクアップ検証（Wakeup Validation、AUTOSAR EcuM の
  *          Wakeup Validation Protocol に相当）:
@@ -104,9 +118,10 @@
  *                 → Can_MainFunction_Wakeup() が EcuM_CheckWakeup() を呼ぶ
  *                   （[SWS_Can_00271]。2026-09-05 是正前は実仕様に存在しない
  *                   独自 API CanIf_ControllerWakeup() 経由だった）
- *                 → CanSM_ControllerModeIndication()（旧 CanSM_ControllerWakeup）
- *                 → CAN_T_WAKEUP のみ実行（SLEEP→STOPPED、Listen-Only）。
- *                   CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマ開始。
+ *                 → CanSM_StartWakeupSource()（[SWS_CanSM_00609]。以前は CanSM_ControllerModeIndication() を流用していた）
+ *                 → CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマ開始。コントローラを STOPPED
+ *                   （SLEEP→STOPPED、Listen-Only）にする要求を出して、その完了通知を待つ（S_CC_STOPPED、
+ *                   [SWS_CanSM_00627]〜[00630]。通知が来なければ、CANSM_MODEREQ_REPEAT_TIME_MS ごとに繰り返す）。
  *                   ComM/EcuM へはまだ何も通知しない（この時点ではノイズの
  *                   可能性を否定できないため）。
  *              2a. 検証タイマ (CANSM_WAKEUP_VALIDATION_MS) 内に何らかの
@@ -115,12 +130,13 @@
  *                  EcuM_ValidateWakeupEvent() → ComM_EcuM_WakeUpIndication()
  *                  → CanSM_RequestComMode(FULL_COM) が呼ばれる（検証成功。
  *                  2026-10 に、独自 API の CanSM_RxIndication() から置き換え）。
- *                  CAN_T_START → CANSM_STATE_FULL_COM へ確定し、
- *                  ComM_BusSM_ModeIndication(FULL_COM) で EcuM を RUN へ復帰させる。
+ *                  S_PRE_FULLCOM（コントローラは既に STOPPED のため STARTED だけ）を経て CANSM_STATE_FULL_COM へ
+ *                  確定し、ComM_BusSM_ModeIndication(FULL_COM) で EcuM を RUN へ復帰させる。
  *              2b. 検証タイマが切れても何も受信できなければ、CanSM_MainFunction()
- *                  がノイズによる誤ウェイクアップと判断し、Can_T_SLEEP で
- *                  再びスリープへ戻す（ComM/EcuM は一切関与しないため、
- *                  他レイヤに影響を与えず静かに元の状態へ戻れる）。
+ *                  がノイズによる誤ウェイクアップと判断し、S_PRE_NOCOM（STOPPED → SLEEP の完了通知を待つ）で
+ *                  再びスリープへ戻す（ComM は、起床を知らされておらず NO_COM のままなので、入り終えても
+ *                  NO_COM を通知しない。EcuM は、検証の期限切れで EcuM_StopWakeupSources() から同じ処理を
+ *                  始めることもある。他レイヤに影響を与えず静かに元の状態へ戻れる）。
  *            CANSM_STATE_NO_COM からの起床のみを受け付ける。CANSM_STATE_BUS_OFF
  *            は実 HW をスリープさせないため、この状態から呼ばれることは
  *            原理的にない。
@@ -165,7 +181,9 @@ typedef enum
     CANSM_STATE_SILENT_COM,          /* 受信専用 */
     CANSM_STATE_FULL_COM,            /* 全二重通信（正常動作） */
     CANSM_STATE_BUS_OFF,             /* Bus-Off 回復中 */
-    CANSM_STATE_WAKEUP_VALIDATING    /* ウェイクアップ検証中（Listen-Only、RX確認待ち） */
+    CANSM_STATE_WAKEUP_VALIDATING,   /* ウェイクアップ検証中（Listen-Only、RX確認待ち） */
+    CANSM_STATE_PRE_FULL_COM,        /* S_PRE_FULLCOM: FULL_COM へ入る途中（モード変更の完了通知待ち。[SWS_CanSM_00483〜00495]） */
+    CANSM_STATE_PRE_NO_COM           /* S_PRE_NOCOM: NO_COM へ入る途中（モード変更の完了通知待ち。[SWS_CanSM_00464〜00480]） */
 } CanSM_InternalStateType;
 
 /* ======================================================================
@@ -185,6 +203,34 @@ static uint8                   CanSM_BusOffRetries;   /* 回復試行回数 (L1�
 static uint8                   CanSM_BorPassivePending;
 static unsigned long           CanSM_BorRestartMs;    /* 直近の回復の再起動の時刻（確定条件を時間で判定するときの起点） */
 static unsigned long           CanSM_ValidationTimerMs; /* ウェイクアップ検証開始時刻 */
+
+/** S_PRE_FULLCOM / S_PRE_NOCOM で、コントローラのモードを変える手順の状態（[SWS_CanSM_00464]〜[00495]）。
+ *  CanSM_ModeReqTarget: いま要求して、完了通知（CanSM_ControllerModeIndication）を待っているモード。
+ *  CanSM_ModeReqTimerMs: その要求を出した時刻。CANSM_MODEREQ_REPEAT_TIME_MS を過ぎても通知が来なければ、要求を繰り返す。
+ *  CanSM_ModeReqRepeats: 同じ要求を繰り返した回数。CANSM_MODEREQ_REPEAT_MAX を超えたら T_REPEAT_MAX。
+ *  CanSM_PendingFullRequest: PRE_NO_COM の最中に FULL_COM が要求された。NO_COM へ入り終えたあとで、始める。 */
+static Can_ControllerStateType CanSM_ModeReqTarget;
+static unsigned long           CanSM_ModeReqTimerMs;
+static uint8                   CanSM_ModeReqRepeats;
+static uint8                   CanSM_PendingFullRequest;
+
+/** 起床の検証（WAKEUP_VALIDATING）の最初の要求（SLEEP → STOPPED）の完了通知を待っている（[SWS_CanSM_00627]〜[00630]）。
+ *  待っている間も、検証のタイマ（CANSM_WAKEUP_VALIDATION_MS）は進む。通知が来なければ、CANSM_MODEREQ_REPEAT_TIME_MS ごとに要求を繰り返す。 */
+static uint8                   CanSM_WakeupAwaitStopped;
+
+/** Bus-Off の回復の再起動（STOPPED → STARTED）の完了通知を待っている（S_RESTART_CC_WAIT、[SWS_CanSM_00600]/[00602]/[00604]）。
+ *  通知を受け取ってから、回復を完了する（CanSM_CompleteBusOffRecovery()）。 */
+static uint8                   CanSM_BorAwaitStarted;
+
+/** PRE_NO_COM へ入り終えたときに、ComM へ NO_COM を通知しない。起床の検証の失敗（NO_COM から始まって、ComM は何も知らない）
+ *  のあとに、コントローラを再びスリープさせる手順（CanSM_AbortWakeupValidation()）で立てる。 */
+static uint8                   CanSM_QuietNoCom;
+
+/** PRE_NO_COM へ入る前の、ネットワークのモード（COMM_FULL_COMMUNICATION / COMM_SILENT_COMMUNICATION /
+ *  COMM_NO_COMMUNICATION）。CanSM_GetCurrentComMode() は、PRE_NO_COM の最中、この値を返す
+ *  （[SWS_CanSM_00266]: 現在のネットワークモードは、各遷移の効果 E_NOCOM などで更新される。
+ *  NO_COM へ入り終えるまでは、ComM へ通知した直前のモードのまま）。 */
+static ComM_ModeType           CanSM_ModeBeforePreNoCom;
 
 /** Bus-Off の回復の後に戻る状態（CANSM_STATE_FULL_COM または CANSM_STATE_SILENT_COM のいずれか）。
  *  Bus-Off 検出直前の CanSM_State で始まり、回復中に CanSM_RequestComMode() が FULL_COM / SILENT_COM を
@@ -208,6 +254,17 @@ static unsigned long CanSM_GetNowMs(void);
 static void CanSM_SetPduModeOnlineBestEffort(const char* callerTag);
 
 static boolean CanSM_BorPassiveGuardMet(void);
+static void CanSM_AbortWakeupValidation(void);
+static Can_ControllerStateType CanSM_GetControllerModeOrUnknown(void);
+static void CanSM_IssueModeRequest(Can_ControllerStateType target);
+static void CanSM_EnterPreFullCom(void);
+static void CanSM_EnterPreNoCom(void);
+static void CanSM_CompleteFullCom(void);
+static void CanSM_CompleteNoCom(void);
+static void CanSM_AdvanceModeSequence(void);
+static void CanSM_ServiceModeRequest(void);
+static void CanSM_RepeatPendingModeRequest(void);
+static void CanSM_CompleteBusOffRecovery(void);
 
 /* ======================================================================
  * Functions
@@ -234,6 +291,14 @@ void CanSM_Init(const CanSM_ConfigType* ConfigPtr)
     CanSM_BorRestartMs       = 0UL;
     CanSM_ValidationTimerMs  = 0UL;
     CanSM_PreBusOffState     = CANSM_STATE_NO_COM;
+    CanSM_ModeReqTarget      = CAN_CS_STOPPED;
+    CanSM_ModeReqTimerMs     = 0UL;
+    CanSM_ModeReqRepeats     = 0U;
+    CanSM_PendingFullRequest = 0U;
+    CanSM_WakeupAwaitStopped = 0U;
+    CanSM_BorAwaitStarted    = 0U;
+    CanSM_QuietNoCom         = 0U;
+    CanSM_ModeBeforePreNoCom = COMM_NO_COMMUNICATION;
     CanSM_Initialized        = 1U;
     DET_LOGI(TAG, "Init");
 }
@@ -262,7 +327,9 @@ void CanSM_DeInit(void)
  * \brief   ネットワークの通信モード遷移を要求する。
  *
  * \details ComM から呼び出される。ネットワークハンドルが正しければ、要求を受理し（E_OK）、状態機械が
- *          考慮する（[SWS_CanSM_00369]/[SWS_CanSM_00182]）。Bus-Off 回復中の要求は、次のとおり扱う。
+ *          考慮する（[SWS_CanSM_00369]/[SWS_CanSM_00182]）。FULL_COM / NO_COM への遷移は、コントローラのモードを変える
+ *          要求を出して、完了通知を待つ手順（S_PRE_FULLCOM / S_PRE_NOCOM）で行う。ComM への結果の通知は、
+ *          手順の完了のときに出る（本関数の戻りのあと）。Bus-Off 回復中の要求は、次のとおり扱う。
  *          - NO_COM: すぐに受け付けて、回復を取り消し、コントローラをスリープさせる（Bus-Off の回復の途中でも、
  *            S_FULLCOM と S_SILENTCOM_BOR のどちらからも、T_NO_COM_MODE_REQUEST で E_PRE_NOCOM へ遷移する）。
  *          - FULL_COM / SILENT_COM: 回復の後に戻る状態（CanSM_PreBusOffState）を、要求されたモードへ変える
@@ -322,34 +389,40 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
     switch (mode)
     {
         case COMM_FULL_COMMUNICATION:
-            if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)
+            if (CanSM_State == CANSM_STATE_SILENT_COM)
             {
-                /* CanIf_SetControllerMode() は CanState==CAN_CS_SLEEP からの
-                 * CAN_T_START を拒否しうる（Can.c 参照）。現状の呼び出し
-                 * 経路ではこの分岐に到達しないはずだが、もし到達すれば
-                 * コントローラは実際にはまだ稼働していない。ここで
-                 * CanSM_State を FULL_COM に進めてしまうと、CanSM/ComM/EcuM
-                 * が「成功した」と誤認したまま MCP2515 は眠り続け、以降の
-                 * 送受信がハードリセットするまで静かに壊れる
-                 * （2026-08 のレビューで指摘）。実際に遷移が成功したときのみ
-                 * 状態を進める。 */
-                DET_LOGE(TAG, "RequestComMode E: CanIf_SetControllerMode(STARTED) failed, state unchanged");
-                return E_NOT_OK;
+                /* [SWS_CanSM_00433] E_SILENT_TO_FULL_COM: コントローラは、SILENT_COM でも CAN_CS_STARTED のままなので、
+                 * 完了通知を待たずに、PDU チャネルを CANIF_ONLINE へ戻す（TX 抑制解除、[SWS_CANIF_00137]）だけで、
+                 * FULL_COM へ戻れる。 */
+                CanSM_CompleteFullCom();
             }
-            /* [SWS_CANIF_00137]: SILENT_COM から戻る場合に備え、PDU チャネルを
-             * CANIF_ONLINE へ戻す（TX 抑制解除）。NO_COM/WAKEUP_VALIDATING から
-             * 来た場合も無条件で ONLINE にしてよい（Init 直後の既定
-             * CANIF_OFFLINE、または以前 SILENT_COM だった名残のいずれでも、
-             * FULL_COM では常に TX 有効であるべきため）。 */
-            CanSM_SetPduModeOnlineBestEffort("RequestComMode");
-            CanSM_State             = CANSM_STATE_FULL_COM;
-            CanSM_BusOffRetries     = 0U;
-            CanSM_BorPassivePending = 0U;   /* 新しく FULL_COM へ入り直すので、前の回復の確定待ちは破棄する */
-            DET_LOGI(TAG, "->FULL_COM");
-            ComM_BusSM_ModeIndication(network, COMM_FULL_COMMUNICATION);
+            else if (CanSM_State == CANSM_STATE_PRE_NO_COM)
+            {
+                /* NO_COM へ入る途中。入り終えたあとで、FULL_COM へ向かう（[SWS_CanSM_00182]: 受理して、状態機械が考慮する）。 */
+                CanSM_PendingFullRequest = 1U;
+            }
+            else if ((CanSM_State == CANSM_STATE_FULL_COM) || (CanSM_State == CANSM_STATE_PRE_FULL_COM))
+            {
+                /* 既に FULL_COM、または向かっている途中。何もしない（要求は受理する）。 */
+            }
+            else
+            {
+                /* NO_COM / WAKEUP_VALIDATING から: S_PRE_FULLCOM へ入り、コントローラを STOPPED → STARTED の順に変えて、
+                 * 各完了通知を待つ。FULL_COM へ入り終えたら、ComM へ通知する（CanSM_CompleteFullCom()）。 */
+                CanSM_EnterPreFullCom();
+            }
             break;
 
         case COMM_SILENT_COMMUNICATION:
+            if ((CanSM_State == CANSM_STATE_PRE_FULL_COM) || (CanSM_State == CANSM_STATE_PRE_NO_COM))
+            {
+                /* コントローラのモードを変えている最中（STARTED ではないかもしれない）。SILENT_COM は、コントローラが
+                 * STARTED であることが前提なので、受け付けない。手順は、そのまま続ける（ComM は、FULL_COM に入り終えて
+                 * から、Prepare Bus-Sleep のときに、要求する。仕様でも、SILENT_COM へは FULL_COM からしか遷移しない）。 */
+                DET_LOGW(TAG, "RequestComMode W: SILENT_COM denied while changing the controller mode (state=%u)",
+                         (unsigned)CanSM_State);
+                return E_NOT_OK;
+            }
             /* 2026-08 変更: 以前はコントローラ全体を Can_SetControllerMode
              * (CAN_T_STOP) で Listen-Only へ落としていたが、実 AUTOSAR の
              * SILENT_COMMUNICATION は PDU チャネル単位の TX 抑制
@@ -379,22 +452,26 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
             break;
 
         case COMM_NO_COMMUNICATION:
-            /* ComM は CanNm が実際に Bus-Sleep Mode へ到達してから初めて本関数を
-             * COMM_NO_COMMUNICATION で呼ぶ（ComM_Nm_BusSleepMode() 経由。
-             * [SWS_ComM_00133]/[SWS_ComM_00392]、詳細は ComM.c および本ファイル
-             * 冒頭コメント参照）。そのため呼ばれた時点で「もう眠ってよい」ことが
-             * 確定しており、CANSM_STATE_FULL_COM から物理スリープまで一気に
-             * 遷移してよい（以前あった「解放要求はされたがまだ寝てはいけない」
-             * という中間状態 CANSM_STATE_NO_COM_PENDING_SLEEP は、この設計では
-             * 不要になったため削除した）。
-             * CAN_T_SLEEP は Can_SetControllerMode() 側で状態検証をしておらず
-             * （CAN_CS_STARTED/STOPPED いずれから呼ばれても正当なため）、
-             * 戻り値は常に E_OK。明示的に無視する。 */
-            (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);
-            CanSM_State             = CANSM_STATE_NO_COM;
-            CanSM_BorPassivePending = 0U;   /* 眠るので、前の回復の確定待ちは破棄する */
-            DET_LOGI(TAG, "->NO_COM (physical sleep)");
-            ComM_BusSM_ModeIndication(network, COMM_NO_COMMUNICATION);
+            /* ComM は CanNm が実際に Bus-Sleep Mode へ到達してから初めて本関数を COMM_NO_COMMUNICATION で呼ぶ
+             * （ComM_Nm_BusSleepMode() 経由。[SWS_ComM_00133]/[SWS_ComM_00392]、詳細は ComM.c および本ファイル冒頭コメント参照）。
+             * そのため呼ばれた時点で「もう眠ってよい」ことが確定している。
+             * FULL_COM / SILENT_COM / BUS_OFF / WAKEUP_VALIDATING / PRE_FULL_COM からは、S_PRE_NOCOM へ入り、
+             * コントローラを STOPPED → SLEEP の順に変えて、各完了通知を待つ（[SWS_CanSM_00464]〜）。入り終えたら、
+             * ComM へ NO_COM を通知する（CanSM_CompleteNoCom()）。
+             * 既に NO_COM、または向かっている途中なら、何もしない（FULL_COM の要求が保留されていれば、取り消す）。 */
+            if (CanSM_State == CANSM_STATE_NO_COM)
+            {
+                /* 既に NO_COM（コントローラも、スリープ済み）。何もしない。 */
+            }
+            else if (CanSM_State == CANSM_STATE_PRE_NO_COM)
+            {
+                CanSM_PendingFullRequest = 0U;
+                CanSM_QuietNoCom         = 0U;   /* ComM 自身が NO_COM を要求した。入り終えたら、通知する */
+            }
+            else
+            {
+                CanSM_EnterPreNoCom();
+            }
             break;
 
         default:
@@ -441,6 +518,7 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
     {
         case CANSM_STATE_FULL_COM:   *mode = COMM_FULL_COMMUNICATION;   break;
         case CANSM_STATE_SILENT_COM: *mode = COMM_SILENT_COMMUNICATION; break;
+        case CANSM_STATE_PRE_NO_COM: *mode = CanSM_ModeBeforePreNoCom;  break;   /* NO_COM へ入り終えるまでは、直前のモード */
         default:                     *mode = COMM_NO_COMMUNICATION;     break;
     }
     return E_OK;
@@ -450,13 +528,121 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
  * CanSM_StartWakeupSource
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床の検証を始める（[SWS_CanSM_00609]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_START_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00616]/[SWS_CanSM_00607]）。トリガが効くのは NO_COM（ボランタリスリープ中）だけで、
+ *          それ以外の状態では、何もしない（要求自体は受理する）。
+ *          NO_COM のとき、CANSM_STATE_WAKEUP_VALIDATING へ入って検証タイマを開始し、コントローラを STOPPED
+ *          （SLEEP→STOPPED、Listen-Only）にする要求を出して、完了通知を待つ（来なければ繰り返す）。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
+ *          FULL_COM へ確定するのは、有効な受信の確認後に ComM が CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、
+ *          または CanSM_MainFunction() が検証のタイムアウトを検出して、再スリープするとき（検証失敗）。
+ *
+ *          以前は、同じ処理が CanSM_ControllerModeIndication() の中にあり、EcuM_CheckWakeup() が
+ *          CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を「起床の合図」として呼んでいた（2026-11 に、本関数へ移した。
+ *          仕様では、CanSM_ControllerModeIndication() は、コントローラがそのモードに達した完了通知）。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00609, SWS_CanSM_00607, SWS_CanSM_00616, SWS_CanSM_00617, SWS_CanSM_00612}
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StartWakeupSource(NetworkHandleType network)
+{
+    if (!CanSM_Initialized)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_START_WAKEUP_SOURCE, CANSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (network >= CANSM_CHANNEL_COUNT)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_START_WAKEUP_SOURCE, CANSM_E_INVALID_NETWORK_HANDLE);
+        return E_NOT_OK;
+    }
+
+    if (CanSM_State != CANSM_STATE_NO_COM)
+    {
+        /* トリガが効くのは NO_COM（ボランタリスリープ中）だけ。CANSM_STATE_BUS_OFF は、実 HW をスリープさせないので、
+         * そこから起床の検証を始めることは、原理的にない（フェイルセーフとして残す）。 */
+        DET_LOGW(TAG, "StartWakeupSource ignored: not in voluntary NO_COM sleep (state=%u)",
+                 (unsigned)CanSM_State);
+        return E_OK;
+    }
+
+    DET_LOGI(TAG, "Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)");
+    CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
+    CanSM_ValidationTimerMs = CanSM_GetNowMs();
+    CanSM_ModeReqRepeats    = 0U;
+
+    /* コントローラを STOPPED（Listen-Only）にして、その完了通知を待つ（S_CC_STOPPED、[SWS_CanSM_00627]〜[00630]）。
+     * 現在のモードが STOPPED なら、要求は省く（[SWS_CanSM_00627]: 現在のモードと違うときだけ要求する）。
+     * 要求が失敗しても（到達しないはずの経路）、検証のタイマが進むので、通知が来なければ繰り返し、
+     * 検証のタイムアウトで、再スリープする。 */
+    if (CanSM_GetControllerModeOrUnknown() == CAN_CS_STOPPED)
+    {
+        CanSM_WakeupAwaitStopped = 0U;
+    }
+    else
+    {
+        CanSM_WakeupAwaitStopped = 1U;
+        CanSM_IssueModeRequest(CAN_CS_STOPPED);
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_StopWakeupSource
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床の検証を止める（[SWS_CanSM_00610]）。EcuM から呼ばれる。
+ *
+ * \details 初期化済みで、ネットワークハンドルが正しければ、E_OK を返し、状態機械の T_STOP_WAKEUP_SOURCE の
+ *          トリガとして扱う（[SWS_CanSM_00622]/[SWS_CanSM_00608]）。トリガが効くのは WAKEUP_VALIDATING（検証中）だけで、
+ *          コントローラを再びスリープさせて、NO_COM へ戻る（検証失敗と同じ。CanSM_MainFunction() の検証タイムアウトと
+ *          共通の処理）。それ以外の状態では、何もしない（要求自体は受理する）。
+ *          EcuM は、起床の検証が期限切れになったときに、EcuM_StopWakeupSources() からこの関数を呼ぶ（[SWS_EcuM_02926]）。
+ *          通常は、CanSM_MainFunction() の検証タイムアウト（CANSM_WAKEUP_VALIDATION_MS）が、EcuM の期限より先に
+ *          再スリープしているので、何も起こらない。
+ *
+ * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ *
+ * \retval  E_OK      要求を受理した。
+ * \retval  E_NOT_OK  未初期化、またはネットワークハンドルが範囲外。
+ *
+ * \AUTOSARReq     {SWS_CanSM_00610, SWS_CanSM_00608, SWS_CanSM_00618, SWS_CanSM_00619, SWS_CanSM_00620, SWS_CanSM_00622}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType CanSM_StopWakeupSource(NetworkHandleType network)
+{
+    if (!CanSM_Initialized)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_STOP_WAKEUP_SOURCE, CANSM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (network >= CANSM_CHANNEL_COUNT)
+    {
+        (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_STOP_WAKEUP_SOURCE, CANSM_E_INVALID_NETWORK_HANDLE);
+        return E_NOT_OK;
+    }
+
+    if (CanSM_State == CANSM_STATE_WAKEUP_VALIDATING)
+    {
+        DET_LOGI(TAG, "StopWakeupSource: wakeup validation stopped -> back to SLEEP");
+        CanSM_AbortWakeupValidation();
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_GetVersionInfo
@@ -570,7 +756,15 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
         return;
     }
 
-    if ((CanSM_State != CANSM_STATE_FULL_COM) && (CanSM_State != CANSM_STATE_SILENT_COM))
+    /* FULL_COM へ向かう途中で、コントローラが既に STARTED の段階（STARTED の完了通知を待っている間）に、Bus-Off に
+     * なることもある。その Bus-Off を落とすと、FULL_COM へ入り終えたあとも、回復が走らない。FULL_COM のときの
+     * Bus-Off として扱う（STOPPED の完了通知を待っている間は、コントローラが止まっているので、Bus-Off は起こらない）。 */
+    const uint8 startingFullCom = ((CanSM_State == CANSM_STATE_PRE_FULL_COM) && (CanSM_ModeReqTarget == CAN_CS_STARTED)) ? 1U : 0U;
+    /* 回復の再起動（STARTED）の完了通知を待っている間にも、Bus-Off になりうる。この Bus-Off を落とすと、通知が来た
+     * ときに、止まったコントローラのまま FULL_COM / SILENT_COM へ戻ってしまう。回復を最初からやり直す。 */
+    const uint8 restartingRecovery = ((CanSM_State == CANSM_STATE_BUS_OFF) && (CanSM_BorAwaitStarted != 0U)) ? 1U : 0U;
+    if ((CanSM_State != CANSM_STATE_FULL_COM) && (CanSM_State != CANSM_STATE_SILENT_COM)
+        && (startingFullCom == 0U) && (restartingRecovery == 0U))
     {
         return;
     }
@@ -580,7 +774,11 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
      * ここでは一切触らない。Can_Write() 自体がこの後コントローラ停止で
      * 拒否するため、TX 抑制の二重化は不要かつ、回復時にわざわざ
      * 再設定しなくて済む（下記コメント・CanSM_MainFunction() 参照）。 */
-    CanSM_PreBusOffState = CanSM_State;
+    if (restartingRecovery == 0U)
+    {
+        CanSM_PreBusOffState = (startingFullCom != 0U) ? CANSM_STATE_FULL_COM : CanSM_State;
+    }
+    CanSM_BorAwaitStarted = 0U;   /* 再起動の通知の待ちは、取り消す。以降の通知は、無視される */
 
     /* 確定条件を満たす前に再度 Bus-Off が起きた。回復は確定しないので、確定待ちを破棄する
      * （回復試行回数は戻さない。[SWS_CanSM_00514]/[00515]） */
@@ -606,7 +804,10 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
     /* [SWS_CanSM_00522]/[00605]: Bus-Off のたびに PREFAILED。確定は Dem のデバウンスカウンタが決める。 */
     (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PREFAILED);
 
-    ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);
+    if (restartingRecovery == 0U)
+    {
+        ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);   /* 回復のやり直しのときは、通知済み */
+    }
 
     const uint8 inL2 = (CanSM_BusOffRetries >= CANSM_BUSOFF_L1_TO_L2_COUNT) ? 1U : 0U;
     DET_LOGW(TAG, "BusOff detected! retry=%u (%s) recovery in %lums",
@@ -620,42 +821,26 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。旧
- *          `CanSM_ControllerWakeup`（2026-09-05、実仕様名・シグネチャへ
- *          是正。詳細は CanSM.h 参照）。
+ * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。
  *
- * \details CAN_CS_SLEEP 中に MCP2515 がバス活動を検知して自律的にウェイクアップ
- *          した際、Can_Isr()（割り込み） → Can_MainFunction_Wakeup() →
- *          EcuM_CheckWakeup()（[SWS_Can_00271]、2026-09-05 是正前は実仕様に
- *          存在しない独自 API CanIf_ControllerWakeup() 経由だった） 経由で
- *          呼び出される（本プロジェクトの唯一の呼び出し場面。EcuM.h 冒頭
- *          コメント参照）。
+ * \details CAN ドライバ（Can_MainFunction_Mode() → CanIf_ControllerModeIndication()）が、コントローラが
+ *          要求されたモードへ達したことを知らせるために呼ぶ完了通知。
  *
- *          CANSM_STATE_NO_COM（ComM の NO_COM 要求によるボランタリスリープ）
- *          からの起床のみを受け付ける。CANSM_STATE_BUS_OFF は Can_T_STOP/
- *          Can_T_START のみで回復を試行し、実 HW をスリープさせることが
- *          そもそもないため、この状態から本関数が呼ばれることは原理的にない。
+ *          S_PRE_FULLCOM / S_PRE_NOCOM（[SWS_CanSM_00483]〜[00495]、[SWS_CanSM_00464]〜[00480]）では、いま要求して待っている
+ *          モードへ達した通知で、手順を次へ進める（2026-11）。FULL_COM へは STOPPED → STARTED、NO_COM へは STOPPED → SLEEP の順。
+ *          それ以外の状態や、待っていないモードの通知では、何もしない。
  *
- *          この時点ではまだ FULL_COM へ確定しない。MCP2515 の WAKIF はノイズでも
- *          誤って立ちうるため、CAN_T_WAKEUP（SLEEP→STOPPED、Listen-Only）のみを
- *          実行して CANSM_STATE_WAKEUP_VALIDATING へ遷移し、検証タイマを開始する。
- *          実際に FULL_COM へ確定するのは、有効な受信の確認後に ComM が
- *          CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、または CanSM_MainFunction() が検証タイムアウトを
- *          検出して再スリープするとき（検証失敗）のいずれかである。
+ *          以前は、この関数が「起床の合図」を兼ねていた（EcuM_CheckWakeup() が CanSM_ControllerModeIndication(0,
+ *          CAN_CS_STOPPED) を呼んで、NO_COM から WAKEUP_VALIDATING へ進めていた）。仕様では、起床の検証は、EcuM が呼ぶ
+ *          CanSM_StartWakeupSource() で始める（[SWS_CanSM_00607]）ので、その処理を移した。
  *
- * \param[in]  ControllerId   モードが変化したコントローラ ID。
- * \param[in]  ControllerMode 通知されたコントローラモード。呼び出し場面が
- *                            ウェイクアップ検知のみに限定されるため、内部
- *                            ロジックはこの値では分岐しない（CanSM.h 参照）。
+ * \param[in]  ControllerId   モードが変化したコントローラ ID（0 のみ）。
+ * \param[in]  ControllerMode 通知されたコントローラモード。
  *
- * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN
- *          controllers)」だが、本実装は `CanSM_State`/`CanSM_ValidationTimerMs`
- *          等の共有 static 変数を排他制御なしに読み書きするため、
- *          兄弟関数（`CanSM_ControllerBusOff`/
- *          `CanSM_RequestComMode` 等、いずれも `Non Reentrant`）と同様に
- *          `Non Reentrant` のまま扱う（本プロジェクトは単一コントローラ構成
- *          で ControllerId!=0 を DET 拒否するため、実仕様が言う「異なる
- *          コントローラ間」のケース自体が到達しない点も踏まえた判断）。
+ * \note    実仕様の \Reentrancy は「Reentrant (only for different CAN controllers)」だが、本実装は共有 static 変数を
+ *          排他制御なしに読み書きする兄弟関数（`CanSM_ControllerBusOff`/`CanSM_RequestComMode` 等、いずれも
+ *          `Non Reentrant`）と同様に `Non Reentrant` のまま扱う（単一コントローラ構成で、ControllerId!=0 を DET 拒否する
+ *          ため、「異なるコントローラ間」のケース自体が到達しない）。
  *
  * \AUTOSARReq     {SWS_CanSM_00396, SWS_CanSM_00397, SWS_CanSM_00398}
  * \ServiceID      {0x07}
@@ -664,8 +849,6 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
  */
 void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType ControllerMode)
 {
-    (void)ControllerMode;
-
     if (!CanSM_Initialized)
     {
         (void)Det_ReportError(CANSM_MODULE_ID, 0U, CANSM_API_ID_CONTROLLER_MODE_INDICATION, CANSM_E_UNINIT);
@@ -679,32 +862,31 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
         return;
     }
 
-    if (CanSM_State != CANSM_STATE_NO_COM)
-    {
-        /* 想定される呼び出し元は Can_MainFunction_Wakeup()（Can_Isr() の SLEEP
-         * 分岐が立てたフラグをドレインするタスク）のみであり、
-         * CanState == CAN_CS_SLEEP のときにしか到達しない。CANSM_STATE_BUS_OFF
-         * は実 HW をスリープさせないため、この分岐に到達すること自体が
-         * 原理的にない（フェイルセーフとして残す）。 */
-        DET_LOGW(TAG, "Wakeup ignored: not in voluntary NO_COM sleep (state=%u)",
-                 (unsigned)CanSM_State);
-        return;
-    }
+    DET_LOGD(TAG, "ControllerModeIndication ch=%u mode=%u", (unsigned)ControllerId, (unsigned)ControllerMode);
 
-    DET_LOGI(TAG, "Wakeup detected -> validating (Listen-Only, waiting for confirmed RX)");
-    if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)  /* CAN_CS_SLEEP -> CAN_CS_STOPPED (Listen-Only) */
+    /* S_PRE_FULLCOM / S_PRE_NOCOM で、いま待っているモードへ達した通知だけが、手順を進める
+     * （それ以外の状態や、待っていないモードの通知は、無視する）。 */
+    if (((CanSM_State == CANSM_STATE_PRE_FULL_COM) || (CanSM_State == CANSM_STATE_PRE_NO_COM))
+        && (ControllerMode == CanSM_ModeReqTarget))
     {
-        /* 到達しないはずの経路（この分岐に来る時点で CanState==CAN_CS_SLEEP
-         * であることは呼び出し元 Can_MainFunction_Wakeup() 側で保証されて
-         * いる）。実際に失敗した場合、コントローラは Listen-Only へ遷移
-         * していないため、検証タイマだけ回して確定させるのは危険。
-         * CANSM_STATE_NO_COM のまま据え置き、次のウェイクアップ通知を
-         * 待つ（2026-08 のレビューで指摘）。 */
-        DET_LOGE(TAG, "ControllerWakeup E: CanIf_SetControllerMode(STOPPED) failed, staying in NO_COM");
-        return;
+        CanSM_AdvanceModeSequence();
     }
-    CanSM_State             = CANSM_STATE_WAKEUP_VALIDATING;
-    CanSM_ValidationTimerMs = CanSM_GetNowMs();
+    else if ((CanSM_State == CANSM_STATE_WAKEUP_VALIDATING) && (CanSM_WakeupAwaitStopped != 0U)
+             && (ControllerMode == CAN_CS_STOPPED))
+    {
+        /* T_CC_STOPPED_INDICATED（[SWS_CanSM_00629]）: コントローラが Listen-Only になった。以降は、有効な受信を待つだけ */
+        CanSM_WakeupAwaitStopped = 0U;
+    }
+    else if ((CanSM_State == CANSM_STATE_BUS_OFF) && (CanSM_BorAwaitStarted != 0U) && (ControllerMode == CAN_CS_STARTED))
+    {
+        /* T_RESTART_CC_INDICATED（[SWS_CanSM_00600]）: Bus-Off の回復の再起動が完了した */
+        CanSM_BorAwaitStarted = 0U;
+        CanSM_CompleteBusOffRecovery();
+    }
+    else
+    {
+        /* 待っていない状態・モードの通知は、無視する */
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -781,7 +963,12 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  *          ウェイクアップ検証中 (CANSM_STATE_WAKEUP_VALIDATING) は、
  *          CANSM_WAKEUP_VALIDATION_MS 以内に有効な受信による
  *          検証成功（CanSM_RequestComMode(FULL_COM)）がなければタイムアウトと判断し、ノイズによる誤ウェイクアップ
- *          とみなして Can_T_SLEEP で再びスリープへ戻す。
+ *          とみなして、再スリープの手順（S_PRE_NOCOM。STOPPED → SLEEP の完了通知を待つ）で NO_COM へ戻す。
+ *          ComM は起床を知らされていないので、入り終えても NO_COM は通知しない。
+ *
+ *          完了通知を待つ間の繰り返し（CANSM_MODEREQ_REPEAT_TIME_MS ごと）: ウェイクアップ検証の最初の STOPPED
+ *          （CanSM_WakeupAwaitStopped）と、Bus-Off の回復の STARTED（CanSM_BorAwaitStarted）。どちらも
+ *          T_REPEAT_MAX は無い（CanSM_RepeatPendingModeRequest() 参照）。
  *
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
@@ -808,23 +995,40 @@ void CanSM_MainFunction(void)
         (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
     }
 
+    if ((CanSM_State == CANSM_STATE_PRE_FULL_COM) || (CanSM_State == CANSM_STATE_PRE_NO_COM))
+    {
+        /* 完了通知を待っている間、CANSM_MODEREQ_REPEAT_TIME_MS ごとに要求を繰り返す（[SWS_CanSM_00467]/[00471]/[00490]/[00494]） */
+        CanSM_ServiceModeRequest();
+        return;
+    }
+
     if (CanSM_State == CANSM_STATE_WAKEUP_VALIDATING)
     {
         if ((CanSM_GetNowMs() - CanSM_ValidationTimerMs) >= CANSM_WAKEUP_VALIDATION_MS)
         {
             DET_LOGW(TAG, "Wakeup validation timeout (%lums, no confirmed RX) -> back to SLEEP",
                      (unsigned long)CANSM_WAKEUP_VALIDATION_MS);
-            /* CAN_T_SLEEP は失敗しない（CanSM_RequestComMode() の
-             * COMM_NO_COMMUNICATION 分岐のコメント参照）。戻り値は明示的に無視する。 */
-            (void)CanIf_SetControllerMode(0U, CAN_CS_SLEEP);  /* CAN_CS_STOPPED -> CAN_CS_SLEEP、ウェイクアップ割り込み再武装 */
-            CanSM_State             = CANSM_STATE_NO_COM;
-            CanSM_BorPassivePending = 0U;
+            CanSM_AbortWakeupValidation();
+        }
+        else if (CanSM_WakeupAwaitStopped != 0U)
+        {
+            CanSM_RepeatPendingModeRequest();   /* T_CC_STOPPED_TIMEOUT（[SWS_CanSM_00630]）: 通知が来なければ、要求を繰り返す */
+        }
+        else
+        {
+            /* コントローラは、Listen-Only になっている。有効な受信（検証の成功）を待つ */
         }
         return;
     }
 
     if (CanSM_State != CANSM_STATE_BUS_OFF)
     {
+        return;
+    }
+
+    if (CanSM_BorAwaitStarted != 0U)
+    {
+        CanSM_RepeatPendingModeRequest();   /* T_RESTART_CC_TIMEOUT（[SWS_CanSM_00602]）: 通知が来なければ、再起動の要求を繰り返す */
         return;
     }
 
@@ -886,25 +1090,346 @@ void CanSM_MainFunction(void)
         DET_LOGE(TAG, "MainFunction E: CanIf_SetControllerMode(STARTED) failed during BusOff recovery, retry next cycle");
         return;
     }
-    /* コントローラは再起動できたが、回復の確定はまだ（[SWS_CanSM_00496]〜[00498]）。確定条件（G_BUS_OFF_PASSIVE）を
-     * 満たすまで、Dem へ PASSED は報告せず、回復試行回数も戻さない（上の判定ブロック参照）。確定する前に再度
-     * Bus-Off が起きれば、回数を持ち越して次の回復試行へ進む。 */
+    /* 再起動の要求は受理された。完了通知（STARTED）を待つ（S_RESTART_CC_WAIT）。通知を受け取ったら、回復を完了する
+     * （CanSM_CompleteBusOffRecovery()）。 */
+    CanSM_BorAwaitStarted = 1U;
+    CanSM_ModeReqTarget   = CAN_CS_STARTED;
+    CanSM_ModeReqTimerMs  = CanSM_GetNowMs();
+    CanSM_ModeReqRepeats  = 0U;
+    /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
+}
+
+/* ======================================================================
+ * Internal Functions
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * CanSM_GetControllerModeOrUnknown
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   コントローラの現在のモードを取る。取れなければ CAN_CS_UNINIT（不明）を返す。
+ *
+ * \details S_PRE_FULLCOM / S_PRE_NOCOM が、最初の要求を選ぶために使う（現在のモードと違うときだけ要求する、
+ *          [SWS_CanSM_00487]/[SWS_CanSM_00464]）。不明のときは、最初から（STOPPED から）始める。
+ *
+ * \return  CanIf_GetControllerMode() が返した現在のモード。取れなければ CAN_CS_UNINIT。
+ */
+static Can_ControllerStateType CanSM_GetControllerModeOrUnknown(void)
+{
+    Can_ControllerStateType current = CAN_CS_UNINIT;
+    if (CanIf_GetControllerMode(0U, &current) != E_OK)
+    {
+        current = CAN_CS_UNINIT;
+    }
+    return current;
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_IssueModeRequest
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   コントローラのモード変更を要求し、完了通知を待つ状態にする（DO_SET_CC_MODE_xxx、[SWS_CanSM_00464]〜）。
+ *
+ * \details 待つモード（CanSM_ModeReqTarget）と、要求の時刻（CanSM_ModeReqTimerMs）を記録してから、
+ *          CanIf_SetControllerMode() を呼ぶ。戻り値が E_OK でなくても、状態は変えない。CANSM_MODEREQ_REPEAT_TIME_MS が
+ *          過ぎても、完了通知が来なければ、CanSM_MainFunction() が、要求を繰り返す
+ *          （[SWS_CanSM_00495]: E_OK を得られず、通知も得られないまま、繰り返した回数が上限を超えたら T_REPEAT_MAX）。
+ *
+ * \param[in]  target  要求するコントローラのモード（CAN_CS_STOPPED / CAN_CS_STARTED / CAN_CS_SLEEP）。
+ */
+static void CanSM_IssueModeRequest(Can_ControllerStateType target)
+{
+    CanSM_ModeReqTarget  = target;
+    CanSM_ModeReqTimerMs = CanSM_GetNowMs();
+    if (CanIf_SetControllerMode(0U, target) != E_OK)
+    {
+        DET_LOGW(TAG, "ModeRequest W: CanIf_SetControllerMode(%u) failed, will repeat", (unsigned)target);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_EnterPreFullCom
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   S_PRE_FULLCOM へ入り、FULL_COM へ向かう手順を始める（[SWS_CanSM_00487]/[00491]）。
+ *
+ * \details コントローラを STOPPED → STARTED の順に変える。現在のモードが STOPPED なら、STOPPED の要求は省く
+ *          （[SWS_CanSM_00487]: 現在のモードと違うときだけ要求する）。各要求のあと、完了通知を待つ
+ *          （CanSM_ControllerModeIndication() が CanSM_AdvanceModeSequence() を呼ぶ）。
+ */
+static void CanSM_EnterPreFullCom(void)
+{
+    Can_ControllerStateType current;
+    CanSM_State              = CANSM_STATE_PRE_FULL_COM;
+    CanSM_ModeReqRepeats     = 0U;
+    CanSM_BorPassivePending  = 0U;   /* 新しく FULL_COM へ入り直すので、前の回復の確定待ちは破棄する */
+    CanSM_WakeupAwaitStopped = 0U;   /* 検証の最初の通知の待ちは、この手順が引き継ぐ */
+    CanSM_BorAwaitStarted    = 0U;
+    DET_LOGI(TAG, "->PRE_FULL_COM");
+
+    current = CanSM_GetControllerModeOrUnknown();
+
+    if (current == CAN_CS_STARTED)
+    {
+        CanSM_CompleteFullCom();   /* 既に STARTED。完了通知は来ないので、待たずに、入り終える */
+    }
+    else if (current == CAN_CS_STOPPED)
+    {
+        CanSM_IssueModeRequest(CAN_CS_STARTED);
+    }
+    else
+    {
+        CanSM_IssueModeRequest(CAN_CS_STOPPED);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_EnterPreNoCom
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   S_PRE_NOCOM へ入り、NO_COM へ向かう手順を始める（[SWS_CanSM_00464]/[00468]）。
+ *
+ * \details コントローラを STOPPED → SLEEP の順に変える。現在のモードが STOPPED なら、STOPPED の要求は省く
+ *          （Bus-Off の回復中や、起床の検証中は、コントローラが既に STOPPED）。各要求のあと、完了通知を待つ。
+ *          FULL_COM の要求の保留は、取り消さない（CanSM_RequestComMode() が、状況に応じて、立てる）。
+ */
+static void CanSM_EnterPreNoCom(void)
+{
+    Can_ControllerStateType current;
+
+    /* NO_COM へ入り終えるまで、CanSM_GetCurrentComMode() が返す、直前のネットワークのモードを記録する
+     * （PRE_FULL_COM / PRE_NO_COM / NO_COM 等からは、NO_COM とみなす） */
+    if (CanSM_State == CANSM_STATE_FULL_COM)
+    {
+        CanSM_ModeBeforePreNoCom = COMM_FULL_COMMUNICATION;
+    }
+    else if (CanSM_State == CANSM_STATE_SILENT_COM)
+    {
+        CanSM_ModeBeforePreNoCom = COMM_SILENT_COMMUNICATION;
+    }
+    else if (CanSM_State != CANSM_STATE_PRE_NO_COM)
+    {
+        CanSM_ModeBeforePreNoCom = COMM_NO_COMMUNICATION;
+    }
+    else
+    {
+        /* PRE_NO_COM のまま（再入）。記録は、そのまま */
+    }
+
+    CanSM_State              = CANSM_STATE_PRE_NO_COM;
+    CanSM_ModeReqRepeats     = 0U;
+    CanSM_BorPassivePending  = 0U;   /* 眠るので、前の回復の確定待ちは破棄する */
+    CanSM_WakeupAwaitStopped = 0U;   /* 検証の最初の通知・Bus-Off の再起動の通知の待ちは、この手順が引き継ぐ（取り消す） */
+    CanSM_BorAwaitStarted    = 0U;
+    DET_LOGI(TAG, "->PRE_NO_COM");
+
+    current = CanSM_GetControllerModeOrUnknown();
+
+    if (current == CAN_CS_SLEEP)
+    {
+        CanSM_CompleteNoCom();   /* 既に SLEEP。完了通知は来ないので、待たずに、入り終える（起こして、また寝かせない） */
+    }
+    else if (current == CAN_CS_STOPPED)
+    {
+        CanSM_IssueModeRequest(CAN_CS_SLEEP);
+    }
+    else
+    {
+        CanSM_IssueModeRequest(CAN_CS_STOPPED);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_CompleteFullCom
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   FULL_COM へ入り終える（E_FULL_COM、[SWS_CanSM_00432]/[SWS_CanSM_00518]）。
+ *
+ * \details PDU チャネルを CANIF_ONLINE にし（[SWS_CANIF_00137]。TX 抑制の解除。NO_COM / WAKEUP_VALIDATING から来た場合も、
+ *          無条件で ONLINE にしてよい）、CanSM_State を FULL_COM にして、ComM へ FULL_COM を通知する。
+ *          Bus-Off の回復試行回数と、回復の確定待ちは、戻す（新しく FULL_COM へ入り直すため）。
+ */
+static void CanSM_CompleteFullCom(void)
+{
+    CanSM_SetPduModeOnlineBestEffort("CompleteFullCom");
+    CanSM_State             = CANSM_STATE_FULL_COM;
+    CanSM_BusOffRetries     = 0U;
+    CanSM_BorPassivePending = 0U;
+    DET_LOGI(TAG, "->FULL_COM");
+    ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_CompleteNoCom
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   NO_COM へ入り終える（E_NOCOM、[SWS_CanSM_00430]）。
+ *
+ * \details CanSM_State を NO_COM にして、ComM へ NO_COM を通知する。NO_COM へ入る途中に FULL_COM が要求されて
+ *          いたら（CanSM_PendingFullRequest）、通知のあとで、FULL_COM へ向かう手順を始める。
+ */
+static void CanSM_CompleteNoCom(void)
+{
+    CanSM_State             = CANSM_STATE_NO_COM;
+    CanSM_BorPassivePending = 0U;
+    DET_LOGI(TAG, "->NO_COM (physical sleep)");
+    if (CanSM_QuietNoCom != 0U)
+    {
+        CanSM_QuietNoCom = 0U;   /* 起床の検証の失敗: ComM は、NO_COM のままと認識している。通知しない */
+    }
+    else
+    {
+        ComM_BusSM_ModeIndication(0U, COMM_NO_COMMUNICATION);
+    }
+
+    if (CanSM_PendingFullRequest != 0U)
+    {
+        CanSM_PendingFullRequest = 0U;
+        CanSM_EnterPreFullCom();
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_AdvanceModeSequence
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   待っていたモード変更の完了通知を受け取ったので、手順を次へ進める。
+ *
+ * \details S_PRE_FULLCOM: STOPPED の完了 → STARTED を要求。STARTED の完了 → FULL_COM へ入り終える。
+ *          S_PRE_NOCOM: STOPPED の完了 → SLEEP を要求。SLEEP の完了 → NO_COM へ入り終える。
+ */
+static void CanSM_AdvanceModeSequence(void)
+{
+    CanSM_ModeReqRepeats = 0U;
+
+    if (CanSM_State == CANSM_STATE_PRE_FULL_COM)
+    {
+        if (CanSM_ModeReqTarget == CAN_CS_STOPPED)
+        {
+            CanSM_IssueModeRequest(CAN_CS_STARTED);
+        }
+        else
+        {
+            /* [SWS_CanSM_00664]: FULL_COM へ入る要求が、最後の完了通知（STARTED）まで届いたので、タイムアウトの故障を、
+             * PREPASSED で戻す。途中の通知（STOPPED）や、NO_COM へ入る手順の通知では、戻さない
+             * （T_REPEAT_MAX で出した PREFAILED を、直後の通知で打ち消してしまうため）。 */
+            (void)Dem_SetEventStatus(DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT, DEM_EVENT_STATUS_PREPASSED);
+            CanSM_CompleteFullCom();
+        }
+    }
+    else
+    {
+        if (CanSM_ModeReqTarget == CAN_CS_STOPPED)
+        {
+            CanSM_IssueModeRequest(CAN_CS_SLEEP);
+        }
+        else
+        {
+            CanSM_CompleteNoCom();
+        }
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_ServiceModeRequest
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   完了通知の待ちの時間切れを監視して、要求を繰り返す（CanSM_MainFunction() から）。
+ *
+ * \details 要求の時刻から CANSM_MODEREQ_REPEAT_TIME_MS が過ぎたら、繰り返し回数を数えて、同じ要求をもう一度出す
+ *          （[SWS_CanSM_00490]/[00494]/[00467]/[00471] の T_xxx_TIMEOUT）。回数が CANSM_MODEREQ_REPEAT_MAX を超えたら、
+ *          T_REPEAT_MAX（[SWS_CanSM_00495]/[00480]）: Dem へ CANSM_E_MODE_REQUEST_TIMEOUT を PREFAILED で報告し
+ *          （[SWS_CanSM_00385]/[00664]）、S_PRE_FULLCOM からは、S_PRE_NOCOM へ戻り（E_PRE_NOCOM）、
+ *          S_PRE_NOCOM からは、あきらめて NO_COM へ入り終える（E_NOCOM）。FULL_COM へ入る手順が最後の完了通知まで届いたときに、PREPASSED で戻す
+ *          （CanSM_AdvanceModeSequence()）。
+ */
+static void CanSM_ServiceModeRequest(void)
+{
+    if ((CanSM_GetNowMs() - CanSM_ModeReqTimerMs) < CANSM_MODEREQ_REPEAT_TIME_MS)
+    {
+        return;
+    }
+
+    CanSM_ModeReqRepeats++;
+    if (CanSM_ModeReqRepeats > CANSM_MODEREQ_REPEAT_MAX)
+    {
+        DET_LOGE(TAG, "ModeRequest E: no controller mode indication after %u repeats (T_REPEAT_MAX, state=%u)",
+                 (unsigned)CANSM_MODEREQ_REPEAT_MAX, (unsigned)CanSM_State);
+        /* [SWS_CanSM_00385]/[SWS_CanSM_00664]: T_REPEAT_MAX のとき、CANSM_E_MODE_REQUEST_TIMEOUT を PREFAILED で報告する */
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT, DEM_EVENT_STATUS_PREFAILED);
+        if (CanSM_State == CANSM_STATE_PRE_FULL_COM)
+        {
+            CanSM_EnterPreNoCom();
+        }
+        else
+        {
+            CanSM_CompleteNoCom();
+        }
+        return;
+    }
+
+    DET_LOGW(TAG, "ModeRequest W: no controller mode indication yet, repeat %u/%u (state=%u)",
+             (unsigned)CanSM_ModeReqRepeats, (unsigned)CANSM_MODEREQ_REPEAT_MAX, (unsigned)CanSM_State);
+    CanSM_IssueModeRequest(CanSM_ModeReqTarget);
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_RepeatPendingModeRequest
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   起床の検証と Bus-Off の回復で、完了通知の待ちの時間切れを監視して、要求を繰り返す（CanSM_MainFunction() から）。
+ *
+ * \details 要求の時刻から CANSM_MODEREQ_REPEAT_TIME_MS が過ぎたら、同じ要求（CanSM_ModeReqTarget）をもう一度出す
+ *          （[SWS_CanSM_00630]/[00602]）。この 2 つの手順には、T_REPEAT_MAX が無い（S_PRE_FULLCOM / S_PRE_NOCOM と違う）。
+ *          起床の検証は、検証のタイムアウトが終わらせる。Bus-Off の回復は、通知が来るまで繰り返す。
+ */
+static void CanSM_RepeatPendingModeRequest(void)
+{
+    if ((CanSM_GetNowMs() - CanSM_ModeReqTimerMs) < CANSM_MODEREQ_REPEAT_TIME_MS)
+    {
+        return;
+    }
+
+    if (CanSM_ModeReqRepeats < 0xFFU)   /* ログ用。Bus-Off の回復は、無期限に繰り返すので、折り返さない */
+    {
+        CanSM_ModeReqRepeats++;
+    }
+    DET_LOGW(TAG, "ModeRequest W: no controller mode indication yet, repeat %u (state=%u)",
+             (unsigned)CanSM_ModeReqRepeats, (unsigned)CanSM_State);
+    CanSM_IssueModeRequest(CanSM_ModeReqTarget);
+}
+
+/* ----------------------------------------------------------------------
+ * CanSM_CompleteBusOffRecovery
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Bus-Off の回復の再起動が完了した（T_RESTART_CC_INDICATED、[SWS_CanSM_00600]）ので、回復を完了する。
+ *
+ * \details 回復の確定（G_BUS_OFF_PASSIVE）は、まだ（[SWS_CanSM_00496]〜[00498]）。確定条件を満たすまで、Dem へ PASSED は
+ *          報告せず、回復試行回数も戻さない（CanSM_MainFunction() 参照）。確定する前に再度 Bus-Off が起きれば、回数を
+ *          持ち越して次の回復試行へ進む。Bus-Off の直前の状態（CanSM_PreBusOffState）へ戻り、ComM へ通知する。
+ *          SILENT_COM へ戻るときは、CanIf の PDU モードが Bus-Off 中も CANIF_TX_OFFLINE のままなので、再設定しない
+ *          （E_TX_OFF、[SWS_CanSM_00601]）。FULL_COM へ戻るときは、PDU を ONLINE にする。Bus-Off の発生時点で ComM が
+ *          CanNm へ解放を送信済みだった場合の「誤って CanNm を再起床させない」ためのガードは、ComM 側
+ *          （ComM_BusSM_ModeIndication() の FULL_COM 分岐）にある。
+ */
+static void CanSM_CompleteBusOffRecovery(void)
+{
     CanSM_BorPassivePending = 1U;
     CanSM_BorRestartMs      = CanSM_GetNowMs();
 
-    /* 2026-08 変更: Bus-Off は CANSM_STATE_FULL_COM だけでなく
-     * CANSM_STATE_SILENT_COM からも起こりうるようになったため
-     * （CanSM_ControllerBusOff() 参照）、回復成功時は Bus-Off 発生直前の
-     * 状態（CanSM_PreBusOffState）へ戻す。Bus-Off 発生時点で ComM が既に
-     * CanNm へ解放を送信済み（ComM_NmReleasePending、ComM.c 参照）だった場合の
-     * 「誤って CanNm を再起床させない」ためのガードは ComM 側
-     * （ComM_BusSM_ModeIndication() の FULL_COM 分岐。何もしないで、CanNm の協調スリープを
-     * そのまま続けさせる）に実装している。 */
     if (CanSM_PreBusOffState == CANSM_STATE_SILENT_COM)
     {
-        /* CanIf の PDU モードは Bus-Off 中も CANIF_TX_OFFLINE のまま
-         * 触っていない（CanSM_ControllerBusOff() 参照）ため、再設定不要で
-         * そのまま SILENT_COM へ戻ってよい。 */
         CanSM_State = CANSM_STATE_SILENT_COM;
         DET_LOGI(TAG, "BusOff recovered -> SILENT_COM (was silent before BusOff)");
         ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);
@@ -916,18 +1441,35 @@ void CanSM_MainFunction(void)
         /* CAN ツールの「ECU 状態」パネルが、このログから CanSM の状態を FULL_COM へ戻す
          * （SILENT_COM へ戻る分岐のログと対）。 */
         DET_LOGI(TAG, "BusOff recovered -> FULL_COM");
-        /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る
-         * （ただし上記の CanNm 解放ペンディング中だった場合は、ComM 側は EcuM の RUN も
-         * CanNm のネットワーク要求も触らず、CanNm の協調スリープを続けさせる。CanNm が
+        /* 回復成功 → ComM に FULL_COM を通知 → EcuM_RequestRUN → RUN へ戻る（CanNm の解放待ち中だった場合は、
+         * ComM 側が EcuM の RUN も CanNm のネットワーク要求も触らず、CanNm の協調スリープを続けさせる。CanNm が
          * Bus-Sleep Mode へ到達すれば、ComM_Nm_BusSleepMode() が CanSM_RequestComMode(NO_COM) を呼ぶ）。 */
         ComM_BusSM_ModeIndication(0U, COMM_FULL_COMMUNICATION);
     }
-    /* 再度 Bus-Off が発生すれば CanIf → CanSM_ControllerBusOff() が呼ばれる */
 }
 
-/* ======================================================================
- * Internal Functions
- * ====================================================================== */
+/* ----------------------------------------------------------------------
+ * CanSM_AbortWakeupValidation
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   起床の検証を打ち切り、コントローラを再スリープさせて、NO_COM へ戻す手順（S_PRE_NOCOM）を始める。
+ *
+ * \details 検証のタイムアウト（CanSM_MainFunction()）と、CanSM_StopWakeupSource() に共通の処理。
+ *          コントローラを SLEEP へ戻す要求を出して、完了通知を待つ（コントローラが既に SLEEP なら、待たずに入り終える）。
+ *          入り終えたとき、ComM へは NO_COM を通知しない（ComM は、起床を知らされておらず、NO_COM のままのため。
+ *          仕様の E_NOCOM は通知するが、本プロジェクトの ComM は、NO_COM の重ねての通知で、BswM のルールと Dcm の状態を
+ *          もう一度動かしてしまう）。ウェイクアップ割り込みは、SLEEP へ入るときに再武装される。
+ */
+static void CanSM_AbortWakeupValidation(void)
+{
+    /* 検証の失敗: S_PRE_NOCOM へ入り、コントローラを（STOPPED から）SLEEP へ戻して、その完了通知を待つ。
+     * ComM は、検証の間も NO_COM と認識している（起床を知らされていない）ので、入り終えても通知しない。
+     * 完了通知を待っている間に FULL_COM が要求されれば、NO_COM へ入り終えたあとで、始める。
+     * ウェイクアップ割り込みは、SLEEP へ入るときに再武装される。 */
+    CanSM_QuietNoCom = 1U;
+    CanSM_EnterPreNoCom();
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_GetNowMs

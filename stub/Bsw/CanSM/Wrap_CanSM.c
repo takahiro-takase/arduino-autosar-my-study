@@ -36,17 +36,23 @@ uint32 CallCount_CanSM_RequestComMode             = 0U;
 uint32 CallCount_CanSM_GetCurrentComMode          = 0U;
 uint32 CallCount_CanSM_ControllerBusOff           = 0U;
 uint32 CallCount_CanSM_ControllerModeIndication   = 0U;
+uint32 CallCount_CanSM_StartWakeupSource          = 0U;
+uint32 CallCount_CanSM_StopWakeupSource           = 0U;
 uint32 CallCount_CanSM_MainFunction               = 0U;
 uint32 CallCount_CanSM_GetVersionInfo             = 0U;
 
 uint32 FailFromCallCount_CanSM_RequestComMode    = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanSM_GetCurrentComMode = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_CanSM_StartWakeupSource = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_CanSM_StopWakeupSource  = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
 
 Std_ReturnType ForcedReturn_CanSM_RequestComMode    = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanSM_GetCurrentComMode = E_NOT_OK;
+Std_ReturnType ForcedReturn_CanSM_StartWakeupSource = E_NOT_OK;
+Std_ReturnType ForcedReturn_CanSM_StopWakeupSource  = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapCanSM_Reset — 8関数すべての状態を一括で初期化する（Wrap_CanSM.h 参照）。
+ * WrapCanSM_Reset — 10関数すべての状態を一括で初期化する（Wrap_CanSM.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapCanSM_Reset(void)
@@ -57,14 +63,20 @@ void WrapCanSM_Reset(void)
     CallCount_CanSM_GetCurrentComMode        = 0U;
     CallCount_CanSM_ControllerBusOff         = 0U;
     CallCount_CanSM_ControllerModeIndication = 0U;
+    CallCount_CanSM_StartWakeupSource        = 0U;
+    CallCount_CanSM_StopWakeupSource         = 0U;
     CallCount_CanSM_MainFunction             = 0U;
     CallCount_CanSM_GetVersionInfo           = 0U;
 
     FailFromCallCount_CanSM_RequestComMode    = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanSM_GetCurrentComMode = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_CanSM_StartWakeupSource = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_CanSM_StopWakeupSource  = WRAP_CANSM_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_CanSM_RequestComMode    = E_NOT_OK;
     ForcedReturn_CanSM_GetCurrentComMode = E_NOT_OK;
+    ForcedReturn_CanSM_StartWakeupSource = E_NOT_OK;
+    ForcedReturn_CanSM_StopWakeupSource  = E_NOT_OK;
 }
 
 /* ======================================================================
@@ -141,13 +153,39 @@ Std_ReturnType __wrap_CanSM_GetCurrentComMode(NetworkHandleType network, ComM_Mo
  * CanSM_StartWakeupSource
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_CanSM_StartWakeupSource(NetworkHandleType network);
+Std_ReturnType __wrap_CanSM_StartWakeupSource(NetworkHandleType network)
+{
+    CallCount_CanSM_StartWakeupSource++;
+    Log_Write(LOG_T, TAG, "CanSM_StartWakeupSource", "called %u times", CallCount_CanSM_StartWakeupSource);
+
+    if (CallCount_CanSM_StartWakeupSource >= FailFromCallCount_CanSM_StartWakeupSource)
+    {
+        return ForcedReturn_CanSM_StartWakeupSource;
+    }
+
+    return __real_CanSM_StartWakeupSource(network);
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_StopWakeupSource
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_CanSM_StopWakeupSource(NetworkHandleType network);
+Std_ReturnType __wrap_CanSM_StopWakeupSource(NetworkHandleType network)
+{
+    CallCount_CanSM_StopWakeupSource++;
+    Log_Write(LOG_T, TAG, "CanSM_StopWakeupSource", "called %u times", CallCount_CanSM_StopWakeupSource);
+
+    if (CallCount_CanSM_StopWakeupSource >= FailFromCallCount_CanSM_StopWakeupSource)
+    {
+        return ForcedReturn_CanSM_StopWakeupSource;
+    }
+
+    return __real_CanSM_StopWakeupSource(network);
+}
 
 /* ----------------------------------------------------------------------
  * CanSM_GetVersionInfo

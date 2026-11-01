@@ -70,7 +70,7 @@ Std_ReturnType __wrap_EcuM_ReleaseRUN(EcuM_UserType user)
 }
 
 /* Fake_Bsw_EcuM.h 冒頭コメント参照: 他の RUN/POST_RUN 系スパイと異なり、
- * ウェイクアップ検証チェーンを途切れさせないよう実 CanSM_ControllerModeIndication()
+ * ウェイクアップ検証チェーンを途切れさせないよう実 CanSM_StartWakeupSource()
  * へ委譲する（EcuM_CheckWakeup() 自体の実装が一行委譲のみのため、フェイク側で
  * 同じ委譲を再現しても実装の分岐ロジックが二重管理になる心配はない）。 */
 void __wrap_EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
@@ -87,5 +87,5 @@ void __wrap_EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
     if (wakeupSource != ECUM_WKSOURCE_CAN)
         return;
 
-    CanSM_ControllerModeIndication(0U, CAN_CS_STOPPED);
+    (void)CanSM_StartWakeupSource(0U);
 }

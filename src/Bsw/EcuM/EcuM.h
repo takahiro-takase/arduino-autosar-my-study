@@ -41,7 +41,7 @@
  * \details フェーズ値は AUTOSAR 仕様の定義に準拠した範囲を使用している。
  *          STARTUP は EcuM_Init() 実行中のみ。
  *          SHUTDOWN は Arduino では電源断できないためアイドル待機となるが、
- *          CAN バスのウェイクアップ（CanSM_ControllerModeIndication 経由の
+ *          CAN バスのウェイクアップ（CanSM_StartWakeupSource 経由の
  *          EcuM_RequestRUN）により RUN へ復帰でき、実機リセットは不要
  *          （詳細は EcuM_RequestRUN() を参照。CanSM の Bus-Off 回復は
  *          L1/L2 バックオフで無期限に継続するため、Bus-Off が原因で
@@ -149,7 +149,7 @@ EcuM_StateType EcuM_GetState(void);
  *
  * \details POST_RUN 状態で呼ばれた場合は RUN へ戻る。
  *          SHUTDOWN 状態で呼ばれた場合も RUN へ戻る（CAN バスのウェイクアップ
- *          経由。CanSM_ControllerModeIndication() → ComM_BusSM_ModeIndication(FULL_COM) →
+ *          経由。CanSM_RequestComMode(FULL_COM) → ComM_BusSM_ModeIndication(FULL_COM) →
  *          本関数、という経路を想定）。
  *          STARTUP 状態で呼ばれた場合はビットのみ記録し、
  *          EcuM_Init() 完了時に RUN へ遷移する。
@@ -264,7 +264,7 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user);
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
  *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
- *          によるノイズ除去（`CanSM_ControllerModeIndication()` 側の既存の
+ *          によるノイズ除去（`CanSM_StartWakeupSource()` が始める CanSM 側の
  *          ステートマシン）と、有効フレーム受信の確認（`CanIf_CheckValidation()`
  *          → `EcuM_ValidateWakeupEvent()` → `ComM_EcuM_WakeUpIndication()`
  *          → `CanSM_RequestComMode(FULL_COM)` による FULL_COM 確定）が担うため、
@@ -356,6 +356,53 @@ EcuM_WakeupSourceType EcuM_GetValidatedWakeupEvents(void);
  * \Synchronicity  {Synchronous}
  */
 EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void);
+
+/**
+ * \brief   起床要因を、検証できる状態にする（コールアウト、[SWS_EcuM_02924]）。
+ *
+ * \details CAN の要因が含まれていれば、CanSM の検証を始める（`CanSM_StartWakeupSource()`）。
+ *          `EcuM_CheckWakeup()` が、起床を検出したときに呼ぶ。
+ *
+ * \param[in]  wakeupSource  検証を始める起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02924, SWS_EcuM_02858}
+ * \ServiceID      {0x46}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_StartWakeupSources(EcuM_WakeupSourceType wakeupSource);
+
+/**
+ * \brief   起床要因の検証を、問い合わせる（コールアウト、[SWS_EcuM_02925]）。
+ *
+ * \details CAN の要因が含まれていれば、CanIf に、起床後の有効な受信があったかを問い合わせる
+ *          （`CanIf_CheckValidation()`。あれば、CanIf が `EcuM_ValidateWakeupEvent()` を呼び返す）。
+ *          CAN 以外の要因は、無視する（CanIf へは、CAN のビットだけを渡す）。
+ *          `EcuM_MainFunction()` が、検証待ちの間、毎回呼ぶ。
+ *
+ * \param[in]  wakeupSource  検証を問い合わせる起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02925, SWS_EcuM_02858, SWS_CANIF_00178}
+ * \ServiceID      {0x47}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_CheckValidation(EcuM_WakeupSourceType wakeupSource);
+
+/**
+ * \brief   検証に失敗した起床要因を、止める（コールアウト、[SWS_EcuM_02926]）。
+ *
+ * \details CAN の要因が含まれていれば、CanSM の検証を止める（`CanSM_StopWakeupSource()`）。
+ *          検証が期限切れになったときに、`EcuM_MainFunction()` が呼ぶ。
+ *
+ * \param[in]  wakeupSource  止める起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02926, SWS_EcuM_02858}
+ * \ServiceID      {0x48}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_StopWakeupSources(EcuM_WakeupSourceType wakeupSource);
 
 /**
  * \brief   指定した起床要因を、検証待ち・検証済み・期限切れのすべてから消す（[SWS_EcuM_02683]）。

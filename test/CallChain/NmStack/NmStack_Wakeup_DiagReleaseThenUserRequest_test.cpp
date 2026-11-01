@@ -171,21 +171,27 @@ TEST_F(NmStack_Wakeup_DiagReleaseThenUserRequest_Test, OK)
     Can_MainFunction_Wakeup();     // SLEEP 中の起床を検出（WAKEUP_VALIDATING）
     Can_MainFunction_Read();       // 起床後の最初の受信
     ASSERT_EQ(CanIf_CheckValidation(ECUM_WKSOURCE_CAN), E_OK);   // 検証成功 → FULL_COM
+    Can_MainFunction_Mode();
     ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     ASSERT_EQ(CurrentNmState(), CANNM_STATE_REPEAT_MESSAGE);   // パッシブ起動
     ComM_DCM_ActiveDiagnostic(0U);
+    Can_MainFunction_Mode();
     ComM_DCM_InactiveDiagnostic(0U);                             // 診断が終わる。User0 は要求していないので、解放を送る
+    Can_MainFunction_Mode();
     FakeMillis_Value += CANNM_CYCLE_MS;
     CanNm_MainFunction();                                         // まだ Repeat Message Time の途中
+    Can_MainFunction_Mode();
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     ASSERT_EQ(ComM_RequestComMode(COMM_USER_0, COMM_FULL_COMMUNICATION), E_OK);   // アプリの最初の要求（猶予のうち）
+    Can_MainFunction_Mode();
     for (int tick = 0; tick < 2; tick++)
     {
         FakeMillis_Value += CANNM_CYCLE_MS;
         CanNm_MainFunction();
+        Can_MainFunction_Mode();
     }
 
     /* ----------------------- */

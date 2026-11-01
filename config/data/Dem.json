@@ -293,6 +293,27 @@
       "agingDoc": [
         "EEPROM 書き込み不良。誤って早期回復しないよう慎重に"
       ]
+    },
+    {
+      "name": "CANSM_MODE_REQUEST_TIMEOUT",
+      "dtc": "0x000110",
+      "debounceLimit": 2,
+      "agingThreshold": 5,
+      "idDoc": [
+        "CanSM が CAN コントローラのモード変更の完了通知を、",
+        "繰り返しの上限まで待っても得られなかった",
+        "（[SWS_CanSM_00664]/[SWS_CanSM_00385]、2026-11 追加）"
+      ],
+      "dtcDoc": [
+        "CAN コントローラのモード変更の完了通知のタイムアウト"
+      ],
+      "debounceDoc": [
+        "繰り返しの上限を超えるたびに PREFAILED を報告し、",
+        "2 回の失敗で確定する。FULL_COM へ入る手順が最後の完了通知まで届いたときに PREPASSED で戻す"
+      ],
+      "agingDoc": [
+        "通信路の重大故障。誤って早期回復しないよう慎重に"
+      ]
     }
   ]
 }

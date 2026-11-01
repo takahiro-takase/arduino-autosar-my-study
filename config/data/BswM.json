@@ -107,7 +107,8 @@
     "App_GptDemo_Run",
     "ComM_MainFunction",
     "SecOC_MainFunctionRx",
-    "App_Test_Run"
+    "App_Test_Run",
+    "Can_MainFunction_Mode"
   ],
   "osTaskExcludedNote": [
     "次の Os のタスクは意図的に BswM の制御対象外（excludedOsTasks）のため、BswM 用のタスク ID 定数を持たない。",

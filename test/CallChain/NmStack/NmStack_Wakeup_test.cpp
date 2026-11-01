@@ -183,6 +183,7 @@ protected:
     {
         FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;
         Can_MainFunction_Wakeup();
+        Can_MainFunction_Mode();   // STOPPED（Listen-Only）の完了通知を CanSM へ流す（検証の最初の要求が完了する）
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
         ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
         ASSERT_EQ(FakeEcuM_RequestRUNCount, 0U);
@@ -245,6 +246,7 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     ASSERT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     // EcuM_MainFunction() による検証の問い合わせの代わり
     EXPECT_EQ(CanIf_CheckValidation(ECUM_WKSOURCE_CAN), E_OK);
+    Can_MainFunction_Mode();
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -257,7 +259,12 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     EXPECT_EQ(CallCount_BswM_ComM_CurrentMode, 1U);
     EXPECT_EQ(LastMode_BswM_ComM_CurrentMode, static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     // FULL_COM へ入っただけでは、Bus-Off の PASSED は報告しない（[SWS_CanSM_00498]: 回復の確定のときだけ）
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CAN_BUSOFF], 0xFF);   // 未報告
+    // FULL_COM へ入り終えたときに、1 回だけ、モード変更のタイムアウトの故障を PREPASSED で戻す（[SWS_CanSM_00664]）。
+    // Dem への報告は、この 1 回だけ
+    EXPECT_EQ(LastStatusOfEvent_Dem_SetEventStatus[DemConf_DemEventParameter_CANSM_MODE_REQUEST_TIMEOUT],
+              DEM_EVENT_STATUS_PREPASSED);
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);
 }
 
 

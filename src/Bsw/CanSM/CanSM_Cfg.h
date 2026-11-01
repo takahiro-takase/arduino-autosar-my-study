@@ -53,6 +53,8 @@
  *  を使っていたが、正しくは 0x07。 */
 #define CANSM_API_ID_CONTROLLER_MODE_INDICATION  0x07U
 #define CANSM_API_ID_MAIN_FUNCTION         0x05U
+#define CANSM_API_ID_START_WAKEUP_SOURCE   0x11U
+#define CANSM_API_ID_STOP_WAKEUP_SOURCE    0x12U
 #define CANSM_API_ID_DEINIT                 0x14U
 #define CANSM_API_ID_GET_VERSION_INFO       0x01U
 
@@ -105,5 +107,19 @@
  *  による誤ウェイクアップとみなして再びスリープへ戻す。 */
 #define CANSM_WAKEUP_VALIDATION_MS  2000UL
 /* @@GEN-END cansm-params */
+
+/** コントローラのモード変更の完了通知を待つ時間 [ms]（CanSMModeRequestRepetitionTime、ECUC_CanSM_00336 相当）。
+ *  S_PRE_FULLCOM / S_PRE_NOCOM で、モード変更の要求を出してから、この時間が過ぎても、完了通知
+ *  （CanSM_ControllerModeIndication）が来なければ、要求を繰り返す（[SWS_CanSM_00490]/[00494]/[00467]/[00471]）。
+ *  CanSM_MainFunction() の周期（10 ms）が、判定の細かさになる。
+ *  起動時は、EcuM_Init() の中（Os のタスクが動き出す前）で FULL_COM への手順が始まり、初期化（ログ出力が多い）に
+ *  約 150 ms かかる。その間は、完了通知（Can_MainFunction_Mode()）が流れないので、これより短いと、毎回の起動で、
+ *  無駄な繰り返し（警告）が出る。繰り返しの上限（CANSM_MODEREQ_REPEAT_MAX）と合わせた、あきらめるまでの時間は、
+ *  手順の 1 段階あたり、この値 × (上限 + 1) になる。 */
+#define CANSM_MODEREQ_REPEAT_TIME_MS  300UL
+
+/** モード変更の要求の繰り返しの上限（CanSMModeRequestRepetitionMax、ECUC_CanSM_00335 相当）。
+ *  完了通知を得られないまま、この回数を超えて繰り返したら、T_REPEAT_MAX（[SWS_CanSM_00495]/[00480]）。 */
+#define CANSM_MODEREQ_REPEAT_MAX  3U
 
 #endif /* CANSM_CFG_H */

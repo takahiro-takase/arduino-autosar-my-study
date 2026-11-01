@@ -168,8 +168,8 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 [SWS_Can_00271]。Can ドライバの `Can_MainFunction_Wakeup()` が、スリープ中の CAN バス活動を
 検出すると `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)` を呼びます（旧 `CanIf_ControllerWakeup()` の
 役割を引き継ぐ）。EcuM は CAN 以外の要因を持たないため、`ECUM_WKSOURCE_CAN` 以外には
-`ECUM_E_INVALID_PAR` を報告します。CAN の場合は `CanSM_ControllerModeIndication()` を呼んで
-ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始め、検証に成功すると ComM 経由で
+`ECUM_E_INVALID_PAR` を報告します。CAN の場合は `CanSM_StartWakeupSource()`（[SWS_CanSM_00609]。以前は `CanSM_ControllerModeIndication()` を起床の合図に
+流用していた）を呼んで、ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始め、検証に成功すると ComM 経由で
 `EcuM_RequestRUN()` が呼ばれて SHUTDOWN から RUN へ戻ります
 （詳細は [`CanSM_Notes.md`](./CanSM_Notes.md) と [can_stack.md](../can_stack.md#can-controller-sleep)）。
 
@@ -196,9 +196,12 @@ EcuM は、起床要因を、仕様（[SWS_EcuM_04091]）の4つの状態で持�
   保持していた要因を `EcuM_ClearWakeupEvent()` で消したとき NONE（何も保持していないときの消去では通知しない）です。
   BswM は、これを `BSWM_MODE_SRC_ECUM_WAKEUP` のモードとして持ち、ルールの条件（`source: "ECUM_WAKEUP"`、
   値は `ECUM_WKSTATUS_*`）に使えます。本番のルール表には、この条件を使うルールはありません。
-- 簡略化: 実仕様は、期限切れのとき、続けて `EcuM_StopWakeupSources()` を呼びますが、本プロジェクトは呼びません
-  （`CanSM_StopWakeupSource()` も未実装で、CanSM が、自分の検証の時間でコントローラをスリープへ戻します）。
-  `EcuM_StartWakeupSources()` / `EcuM_CheckValidation()` も、同じ理由で持ちません（検証は `CanIf_CheckValidation()` の直接呼び出し）。
+- 検証の開始と停止（2026-11）: 起床を検出したとき `EcuM_StartWakeupSources()`（[SWS_EcuM_02924]）が `CanSM_StartWakeupSource()` を、
+  期限切れにしたとき（BswM への EXPIRED 通知のあと）`EcuM_StopWakeupSources()`（[SWS_EcuM_02926]）が `CanSM_StopWakeupSource()` を
+  呼びます（どちらも CAN の要因だけ。ほかの要因は無視）。CanSM は、自分の検証の時間（2000 ms）で先にスリープへ戻しているため、
+  通常は、Stop は何も起こしません（EcuM の期限は 3000 ms）。
+- 検証の問い合わせ（2026-11）: 検証待ちの間、`EcuM_MainFunction()` が毎回 `EcuM_CheckValidation()`（[SWS_EcuM_02925]）を呼び、
+  CAN の要因が含まれていれば `CanIf_CheckValidation()` で、起床後の有効な受信を確認します（CanIf へは CAN のビットだけを渡す）。
   起床要因は CAN だけで、1つのタイマーで足ります（[SWS_EcuM_04004]）。
 
 ## EcuM 設定（`EcuM_Cfg.h`）
