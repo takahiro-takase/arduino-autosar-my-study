@@ -373,6 +373,23 @@ EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void);
 void EcuM_StartWakeupSources(EcuM_WakeupSourceType wakeupSource);
 
 /**
+ * \brief   起床要因の検証を、問い合わせる（コールアウト、[SWS_EcuM_02925]）。
+ *
+ * \details CAN の要因が含まれていれば、CanIf に、起床後の有効な受信があったかを問い合わせる
+ *          （`CanIf_CheckValidation()`。あれば、CanIf が `EcuM_ValidateWakeupEvent()` を呼び返す）。
+ *          CAN 以外の要因は、無視する（CanIf へは、CAN のビットだけを渡す）。
+ *          `EcuM_MainFunction()` が、検証待ちの間、毎回呼ぶ。
+ *
+ * \param[in]  wakeupSource  検証を問い合わせる起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02925, SWS_EcuM_02858, SWS_CANIF_00178}
+ * \ServiceID      {0x47}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_CheckValidation(EcuM_WakeupSourceType wakeupSource);
+
+/**
  * \brief   検証に失敗した起床要因を、止める（コールアウト、[SWS_EcuM_02926]）。
  *
  * \details CAN の要因が含まれていれば、CanSM の検証を止める（`CanSM_StopWakeupSource()`）。

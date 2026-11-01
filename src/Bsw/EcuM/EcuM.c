@@ -365,10 +365,8 @@ void EcuM_MainFunction(void)
     if (EcuM_PendingWakeupSources != 0U)
     {
         /* 起床要因の検証（[SWS_CANIF_00178]）。起床後に有効な受信があれば、CanIf が
-         * EcuM_ValidateWakeupEvent() を呼び返す。実仕様では EcuM_CheckValidation() という
-         * コールアウト経由だが、ウェイクアップソース管理を持たない本プロジェクトでは、
-         * CAN の起床だけなので CanIf を直接呼ぶ。 */
-        (void)CanIf_CheckValidation(EcuM_PendingWakeupSources);
+         * EcuM_ValidateWakeupEvent() を呼び返す。 */
+        EcuM_CheckValidation(EcuM_PendingWakeupSources);
 
         /* 検証のタイムアウト（[SWS_EcuM_04081]）。上の問い合わせで検証されなかった要因は、期限切れにし、
          * BswM_EcuM_CurrentWakeup(要因, EXPIRED) で BswM へ通知する（[SWS_EcuM_04082]）。
@@ -1067,7 +1065,28 @@ void EcuM_StartWakeupSources(EcuM_WakeupSourceType wakeupSource)
  * EcuM_CheckValidation
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床要因の検証を、問い合わせる（コールアウト、[SWS_EcuM_02925]）。
+ *
+ * \details CAN の要因が含まれていれば、CanIf に、起床後の有効な受信があったかを問い合わせる
+ *          （`CanIf_CheckValidation()`。あれば、CanIf が `EcuM_ValidateWakeupEvent()` を呼び返す）。
+ *          CAN 以外の要因は、無視する（CanIf へは、CAN のビットだけを渡す）。
+ *          `EcuM_MainFunction()` が、検証待ちの間、毎回呼ぶ。
+ *
+ * \param[in]  wakeupSource  検証を問い合わせる起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02925, SWS_EcuM_02858, SWS_CANIF_00178}
+ * \ServiceID      {0x47}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_CheckValidation(EcuM_WakeupSourceType wakeupSource)
+{
+    if ((wakeupSource & ECUM_WKSOURCE_CAN) != 0U)
+    {
+        (void)CanIf_CheckValidation(ECUM_WKSOURCE_CAN);
+    }
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_StopWakeupSources

@@ -200,7 +200,8 @@ EcuM は、起床要因を、仕様（[SWS_EcuM_04091]）の4つの状態で持�
   期限切れにしたとき（BswM への EXPIRED 通知のあと）`EcuM_StopWakeupSources()`（[SWS_EcuM_02926]）が `CanSM_StopWakeupSource()` を
   呼びます（どちらも CAN の要因だけ。ほかの要因は無視）。CanSM は、自分の検証の時間（2000 ms）で先にスリープへ戻しているため、
   通常は、Stop は何も起こしません（EcuM の期限は 3000 ms）。
-- 簡略化: `EcuM_CheckValidation()` は持ちません（検証は `CanIf_CheckValidation()` の直接呼び出し）。
+- 検証の問い合わせ（2026-11）: 検証待ちの間、`EcuM_MainFunction()` が毎回 `EcuM_CheckValidation()`（[SWS_EcuM_02925]）を呼び、
+  CAN の要因が含まれていれば `CanIf_CheckValidation()` で、起床後の有効な受信を確認します（CanIf へは CAN のビットだけを渡す）。
   起床要因は CAN だけで、1つのタイマーで足ります（[SWS_EcuM_04004]）。
 
 ## EcuM 設定（`EcuM_Cfg.h`）
