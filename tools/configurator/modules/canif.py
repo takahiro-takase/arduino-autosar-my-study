@@ -10,7 +10,7 @@ from .common import doc_comment, hex_literal, note_lines, ruled_comment, struct_
 # 上位層ごとの、送信確認・受信通知の関数名と、それを宣言するヘッダ
 UPPER_LAYERS = {
     "PDUR":    {"txConfirm": "PduR_CanIfTxConfirmation", "rxIndication": "PduR_CanIfRxIndication",
-                "header": "PduR_CanIf.h"},
+                "triggerTransmit": "PduR_CanIfTriggerTransmit", "header": "PduR_CanIf.h"},
     "CANNM":   {"txConfirm": "CanNm_TxConfirmation", "rxIndication": "CanNm_RxIndication",
                 "header": "CanNm.h"},
     "CANTSYN": {"txConfirm": "CanTSyn_TxConfirmation", "rxIndication": "CanTSyn_RxIndication",
@@ -28,6 +28,10 @@ def validate(cfg):
             errors.append("%s: name が重複している" % key)
     for p in cfg["txPdus"]:
         # 上位層へ返す ID は、PduR 宛てのときだけ数値で指定する（NM 宛ては CanNm.json の名前から引く）
+        if p.get("triggerTransmit") and "triggerTransmit" not in UPPER_LAYERS.get(p["txConfirm"], {}):
+            capable = sorted(k for k, v in UPPER_LAYERS.items() if "triggerTransmit" in v)
+            errors.append("%s: triggerTransmit は、トリガ送信に対応する上位層（%s）が txConfirm のときだけ指定できる"
+                          % (p["name"], ", ".join(capable)))
         if (p["txConfirm"] == "PDUR") != ("upperLayerTxPduId" in p):
             errors.append("%s: upperLayerTxPduId は txConfirm が PDUR のときだけ指定する" % p["name"])
     for p in cfg["rxPdus"]:
@@ -86,18 +90,19 @@ def tx_table(cfg, ctx):
         out += ruled_comment(
             ["TxPduId=%d: %s" % (i, p["title"]), "DaVinci: " + DAVINCI_TX + p["name"]] + p.get("note", []), 8
         )
-        out += struct_fields(
-            [
-                ("UpperLayerTxPduId", upper_tx_value(p, i, ctx),
-                 note_lines("DaVinci: CanIfTxPduId", nt.get("upperLayerTxPduId"))),
-                ("CanId", hex_literal(can_id), note_lines("DaVinci: CanIfTxPduCanId")),
-                ("Dlc", "%dU" % dlc, note_lines("DaVinci: CanIfTxPduDlc", nt.get("dlc"))),
-                ("Hth", "%dU" % p["hth"], note_lines("DaVinci: CanIfTxPduHthIdRef")),
-                ("TxConfirmFct", UPPER_LAYERS[p["txConfirm"]]["txConfirm"],
-                 note_lines("DaVinci: CanIfTxPduUserTxConfirmationName", nt.get("txConfirm"))),
-            ],
-            8,
-        )
+        fields = [
+            ("UpperLayerTxPduId", upper_tx_value(p, i, ctx),
+             note_lines("DaVinci: CanIfTxPduId", nt.get("upperLayerTxPduId"))),
+            ("CanId", hex_literal(can_id), note_lines("DaVinci: CanIfTxPduCanId")),
+            ("Dlc", "%dU" % dlc, note_lines("DaVinci: CanIfTxPduDlc", nt.get("dlc"))),
+            ("Hth", "%dU" % p["hth"], note_lines("DaVinci: CanIfTxPduHthIdRef")),
+            ("TxConfirmFct", UPPER_LAYERS[p["txConfirm"]]["txConfirm"],
+             note_lines("DaVinci: CanIfTxPduUserTxConfirmationName", nt.get("txConfirm"))),
+        ]
+        if p.get("triggerTransmit"):
+            fields.append(("TriggerTransmitFct", UPPER_LAYERS[p["txConfirm"]]["triggerTransmit"],
+                           note_lines("DaVinci: CanIfTxPduTriggerTransmit, CanIfTxPduUserTriggerTransmitName")))
+        out += struct_fields(fields, 8)
         out.append("    }" + ("," if i < n - 1 else ""))
     out += ["};", ""]
     return out

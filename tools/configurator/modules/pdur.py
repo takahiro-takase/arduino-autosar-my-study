@@ -5,6 +5,8 @@ from .common import block_comment, doc_comment, struct_fields
 
 RX_FCT = {"COM": "Com_RxIndication", "CANTP": "CanTp_RxIndication", "SECOC": "SecOC_RxIndication"}
 TX_FCT = {"COM": "Com_TxConfirmation", "CANTP": "CanTp_TxConfirmation"}
+# トリガ送信（下位層が送信データを取りに来る）の転送先。対応するのは Com だけ
+TRIGGER_TRANSMIT_FCT = {"COM": "Com_TriggerTransmit"}
 MODULE_HEADER = {"COM": "Com.h", "CANTP": "CanTp.h", "SECOC": "SecOC.h"}
 DAVINCI_ROUTING = "/ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/"
 
@@ -26,6 +28,8 @@ def validate(cfg):
             if ("secocPdu" in d) != (d["module"] == "SECOC"):
                 errors.append("rxPaths %s: secocPdu は SecOC 宛て（module=SECOC）のときだけ指定する" % p["name"])
     for p in cfg["txPaths"]:
+        if p.get("triggerTransmit") and p["confModule"] not in TRIGGER_TRANSMIT_FCT:
+            errors.append("txPaths %s: triggerTransmit は confModule=COM のときだけ指定できる" % p["name"])
         if ("confIpdu" in p) != (p["confModule"] == "COM"):
             errors.append("txPaths %s: confIpdu は confModule=COM のときだけ指定する" % p["name"])
     return errors
@@ -193,6 +197,9 @@ def tx_paths(cfg, ctx):
                 ("TransmitOverrideFct", ov["fct"], ["本プロジェクト独自拡張（TX 経路上の中間モジュール）"]),
                 ("TransmitOverrideId", "%dU" % ov["id"], None),
             ]
+        if p.get("triggerTransmit"):
+            fields.append(("TriggerTransmitFct", TRIGGER_TRANSMIT_FCT[p["confModule"]],
+                           ["本プロジェクト独自の設定（PduR_CanIfTriggerTransmit() の転送先。SWS_PduR_00430）"]))
         out += struct_fields(fields, 8)
         out.append("    }" + ("," if i < n - 1 else ""))
     out += ["};", ""]
