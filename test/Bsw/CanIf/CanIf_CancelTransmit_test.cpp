@@ -146,7 +146,9 @@ TEST_F(CanIf_CancelTransmit_Test, CanIf_CancelTransmit_NG_UninitializedReturnsEr
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // 未初期化では、DET へ報告しない（CanIf_Transmit() と同じ）
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_CANCEL_TRANSMIT);
 }
 
 }  // namespace

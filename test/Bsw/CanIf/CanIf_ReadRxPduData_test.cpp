@@ -173,4 +173,28 @@ TEST_F(CanIf_ReadRxPduData_Test, CanIf_ReadRxPduData_NG_NullSduDataPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_POINTER);
 }
 
+
+TEST_F(CanIf_ReadRxPduData_Test, CanIf_ReadRxPduData_NG_UninitializedReportsDet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 8U };
+    CanIf_DeInit();   // 未初期化にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_ReadRxPduData(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_READ_RX_PDU_DATA);
+}
+
 }  // namespace

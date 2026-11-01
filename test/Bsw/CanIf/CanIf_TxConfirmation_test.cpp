@@ -112,4 +112,25 @@ TEST_F(CanIf_TxConfirmation_Test, CanIf_TxConfirmation_NG_InvalidTxPduId)
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_PARAM_LPDU);
 }
 
+
+TEST_F(CanIf_TxConfirmation_Test, CanIf_TxConfirmation_NG_UninitializedReportsDet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanIf_DeInit();   // 未初期化にする
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanIf_TxConfirmation(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_TX_CONFIRMATION);
+}
+
 }  // namespace

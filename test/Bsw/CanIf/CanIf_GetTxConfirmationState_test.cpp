@@ -125,7 +125,7 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(CanIf_GetTxConfirmationState_Test, GetTxConfirmationState_NG_UninitializedReturnsNoNotificationWithoutDet)
+TEST_F(CanIf_GetTxConfirmationState_Test, GetTxConfirmationState_NG_UninitializedReturnsNoNotificationAndReportsDet)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -141,7 +141,9 @@ TEST_F(CanIf_GetTxConfirmationState_Test, GetTxConfirmationState_NG_Uninitialize
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_GET_TX_CONFIRMATION_STATE);
 }
 
 TEST_F(CanIf_GetTxConfirmationState_Test, GetTxConfirmationState_NG_InvalidControllerIdReturnsNoNotificationAndReportsDet)

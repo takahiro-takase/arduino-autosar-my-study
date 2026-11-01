@@ -258,7 +258,9 @@ TEST_F(CanIf_TriggerTransmit_Test, CanIf_TriggerTransmit_NG_UninitializedReturns
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(gUpperCallCount, 0U);
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // 未初期化では、DET へ報告しない（CanIf_Transmit() と同じ）
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_TRIGGER_TRANSMIT);
 }
 
 }  // namespace

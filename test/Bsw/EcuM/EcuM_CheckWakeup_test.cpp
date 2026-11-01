@@ -219,6 +219,7 @@ TEST_F(EcuM_CheckWakeup_Test, EcuM_CheckWakeup_OK_CanSourceDelegatesToCanSm)
     EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
     const uint8 moduleAfterCheck = static_cast<uint8>(FakeDetHw_LastModuleId);
     const uint8 apiAfterCheck = FakeDetHw_LastApiId;
+    const uint8 errorAfterCheck = FakeDetHw_LastErrorId;
 
     EcuM_MainFunction();
 
@@ -228,7 +229,7 @@ TEST_F(EcuM_CheckWakeup_Test, EcuM_CheckWakeup_OK_CanSourceDelegatesToCanSm)
     // CanSM は未初期化のため、委譲先の CanSM が UNINIT を報告する（委譲された証拠）
     EXPECT_EQ(moduleAfterCheck, static_cast<uint8>(CANSM_MODULE_ID));
     EXPECT_EQ(apiAfterCheck, CANSM_API_ID_CONTROLLER_MODE_INDICATION);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CANSM_E_UNINIT);
+    EXPECT_EQ(errorAfterCheck, CANSM_E_UNINIT);
     EXPECT_EQ(CallCount_Os_SchedulerStep, 1U);
 }
 

@@ -125,7 +125,7 @@ protected:
  * Test Functions
  * ====================================================================== */
 
-TEST_F(CanIf_ReadTxNotifStatus_Test, ReadTxNotifStatus_NG_UninitializedReturnsNoNotificationWithoutDet)
+TEST_F(CanIf_ReadTxNotifStatus_Test, ReadTxNotifStatus_NG_UninitializedReturnsNoNotificationAndReportsDet)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -141,9 +141,9 @@ TEST_F(CanIf_ReadTxNotifStatus_Test, ReadTxNotifStatus_NG_UninitializedReturnsNo
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(status, CANIF_NO_NOTIFICATION);
-    /* CanIf_Cfg.h 冒頭コメントの通り、未初期化チェックは DET 報告なしの
-     * 早期 return（CanIf の他 API と同じ方針）。 */
-    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_READ_TX_NOTIF_STATUS);
 }
 
 TEST_F(CanIf_ReadTxNotifStatus_Test, ReadTxNotifStatus_NG_InvalidIdReturnsNoNotificationAndReportsDet)
