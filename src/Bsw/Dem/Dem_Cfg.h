@@ -114,6 +114,8 @@
 /* cppcheck-suppress misra-c2012-2.5 */
 #define DEM_API_ID_INIT                          0x02U
 #define DEM_API_ID_SET_EVENT_STATUS              0x04U
+#define DEM_API_ID_SET_OPERATION_CYCLE_STATE     0x08U
+#define DEM_API_ID_GET_OPERATION_CYCLE_STATE     0x9EU
 #define DEM_API_ID_GET_DTC_STATUS_AVAILABILITY_MASK 0x16U
 #define DEM_API_ID_GET_EVENT_UDS_STATUS            0xB6U
 #define DEM_API_ID_GET_MONITOR_STATUS              0xB5U
@@ -198,6 +200,16 @@
                                                                     *   （[SWS_CanSM_00664]/[SWS_CanSM_00385]、2026-11 追加） */
 #define DEM_EVENT_COUNT                                       16U  /**< イベント総数 */
 /* @@GEN-END dem-events */
+
+/* -----------------------------------------------------------------------
+ * 操作サイクル（DemOperationCycle、[SWS_Dem_00577] 他）
+ * 本プロジェクトは、全イベントが属する 1 つの操作サイクル（電源サイクル）だけを持つ。
+ * DemOperationCycleAutostart = true（Dem_Init() が開始する、[SWS_Dem_00853]）、
+ * DemOperationCycleStatusStorage = false（状態は不揮発に保存しない）、
+ * DemLeadingCycleRef なし（従属サイクルなし）。
+ * ----------------------------------------------------------------------- */
+#define DemConf_DemOperationCycle_POWER  0U   /**< 電源サイクル（全イベントが属する） */
+#define DEM_OPERATION_CYCLE_COUNT        1U   /**< 操作サイクルの総数 */
 
 /* -----------------------------------------------------------------------
  * DTC コード (24-bit, ISO 14229-1)

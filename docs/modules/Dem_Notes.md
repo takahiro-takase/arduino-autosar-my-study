@@ -91,11 +91,11 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 ログ多発を防ぐ）。
 ```
 
-**カウンタを 0 に戻す条件**: Dem_Init() が、起動ごとに全イベントのカウンタを 0 に戻します（FDC も 0 になります）。
-本プロジェクトの操作サイクルは、起動ごとの Dem_Init() だけなので、「新しい操作サイクルの開始でデバウンスを
-初期化する」（[SWS_Dem_00344]）と、「初期化のときにデバウンスをリセットする」（[SWS_Dem_00438]）の両方を、これで満たします
-（`Dem_Init_OK_NewOperationCycleResetsDebounceCounter`）。ClearDTC のときのリセットは [SWS_Dem_00343] です。
-`Dem_SetOperationCycleState()` を持たないので、起動の途中で操作サイクルを開始し直すことはできません（学習用簡略化）。
+**カウンタを 0 に戻す条件**: 新しい操作サイクルの開始で、全イベントのカウンタを 0 に戻します（FDC も 0 になります）。
+操作サイクルは、Dem_Init()（起動ごと）と `Dem_SetOperationCycleState(START)` が開始するので、「新しい操作サイクルの開始で
+デバウンスを初期化する」（[SWS_Dem_00344]）と、「初期化のときにデバウンスをリセットする」（[SWS_Dem_00438]）の両方を、
+これらで満たします（`Dem_Init_OK_NewOperationCycleResetsDebounceCounter`、`Dem_SetOperationCycleState_OK_RestartResetsCycleBitsAndDebounce`）。
+ClearDTC のときのリセットは [SWS_Dem_00343] です。
 
 > **報告の方向が反転したら中立 (0) からやり直す理由**: 単純に counter++/-- だけだと、
 > 既に確定 PASSED（counter=-limit）の状態から PREFAILED を 1 回報告しても counter は
@@ -218,8 +218,8 @@ statusAvailabilityMask = **0x3D**（本実装がサポートするビットの O
 - TF（bit0）は電源再投入時にクリア。「今は動いているが過去に壊れた」を表現できる。
 - **PDTC（bit2）は CDTC より早く消える**: SWS_Dem_00390 (Figure 7.19) 準拠で、
   「そのサイクル中に FAILED 確定なし・テスト済み」というクリーンな操作サイクルを
-  **1 回**経過するだけで自動クリアされる（`Dem_EvaluatePendingClear()`、`Dem_Init()` から
-  呼び出し）。CDTC のような複数サイクルのエージングカウンタは介さない。
+  **1 回**経過するだけで自動クリアされる（`Dem_EvaluatePendingClear()`、新しい操作サイクルの
+  開始（`Dem_BeginOperationCycle()`）から呼び出し）。CDTC のような複数サイクルのエージングカウンタは介さない。
 - CDTC を消すには SID 0x14 による明示的なクリア、または経年回復（再故障せず複数回の操作サイクルを経過）のいずれか。
 
 ## フレーム例（DTC 操作）
@@ -268,6 +268,32 @@ ENGINE_OVERHEAT（DTC 0x000101）だけをクリアする例:
 FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない）。
 一致する DTC が存在しない場合は NRC 0x31（requestOutOfRange）を返す。
 
+## 操作サイクルの管理（2026-11 追加）
+
+操作サイクルの境界で、TestFailed（TF）・TestFailedThisOperationCycle（TFTOC）・TestNotCompletedThisOperationCycle（TNCTOC）・
+デバウンスを初期化し、経年回復と PendingDTC の自動クリアを評価します。この境界を、2 つの入口が処理します。
+
+| 入口 | 役割 |
+|---|---|
+| `Dem_Init()` | 起動ごとに、電源サイクルを開始する（DemOperationCycleAutostart、[SWS_Dem_00853]）。NvM から復元した状態で、前回のサイクルを評価する |
+| `Dem_SetOperationCycleState(START)` | 起動の途中で、サイクルを（再）開始する（[SWS_Dem_00483]）。直前のサイクルを評価してから、新しいサイクルへ進む |
+| `Dem_SetOperationCycleState(END)` | サイクルを終了する。終了している間、`Dem_SetEventStatus()` の報告は無視され、UDS ステータスもデバウンスも変わらない（[SWS_Dem_00482]）。既に終了済みなら、何もしない（[SWS_Dem_00484]） |
+| `Dem_GetOperationCycleState()` | 現在の状態（START / END）を返す |
+
+共通の処理は `Dem_BeginOperationCycle()` です。START のあと、ステータスか経年回復カウンタが変わったときだけ NvM へ書き込み
+（変わらない再開始で EEPROM を消耗させない）、変化したイベントは FiM へ通知します（TNCTOC が立つので、「テスト済み」を条件にする
+機能は、再び抑止されます）。サイクルの途中での再開始は、その時点までを前サイクルとして評価します（仕様の、END と START を続けて
+行うのと同じ、[SWS_Dem_00483]）。そのため、短い間隔で再開始を繰り返すと、テスト済みのイベントでは、経年回復と PendingDTC の
+自動クリアが、その回数分進みます。
+
+- 簡略化: 操作サイクルは、全イベントが属する電源サイクル 1 つだけ（`DemConf_DemOperationCycle_POWER`）です。
+  イベントごとの操作サイクルの割り当て（DemOperationCycleRef）、従属サイクル（DemLeadingCycleRef、[SWS_Dem_01221]〜）、
+  サイクル状態の不揮発保存（DemOperationCycleStatusStorage）、`InitMonitorForEvent` コールバック（[SWS_Dem_00679]）は持ちません。
+  仕様は、非同期の処理と規定しますが、同期で処理します。
+- 呼び出し元はまだありません（アプリケーションが、イグニッションのような独自のサイクルを導入するときのための入口です）。
+- TFTOC・TNCTOC は、availability mask（0x3D）で、`Dem_GetEventUdsStatus()` からは見えません。TNCTOC は `Dem_GetMonitorStatus()` で、
+  TFTOC は PendingDTC の自動クリアと経年回復の結果で、確かめられます。
+
 ## PendingDTC の自動クリア
 
 PDTC（pendingDTC, bit2）は SID 0x14 によるクリア以外に、**クリーンな操作サイクルを
@@ -277,12 +303,12 @@ Figure 7.19）。CDTC（confirmedDTC）が複数サイクルのエージング�
 無く、かつテスト済みだった」という条件さえ満たせば即座にクリアされる、より
 軽量な保留フラグです。
 
-判定は `Dem_Init()` が起動ごとに「直前の操作サイクルの最終状態」を見て行います
-（`Dem_EvaluatePendingClear()`、経年回復の評価と同じタイミング・同じ理由で
+判定は、新しい操作サイクルの開始（`Dem_Init()`、`Dem_SetOperationCycleState(START)`）が、「直前の操作サイクルの
+最終状態」を見て行います（`Dem_EvaluatePendingClear()`、経年回復の評価と同じタイミング・同じ理由で
 TF/TFTOC/TNCTC を新サイクル用にリセットする直前の値を見る必要があります）。
 
 ```
-Dem_Init()（起動時、TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
+新しい操作サイクルの開始時（TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
   PDTC=0                          → 対象外
   PDTC=1 かつ TFTOC=0 かつ TNCTC=0 → 「クリーンな操作サイクル」として即座に PDTC クリア
   PDTC=1 かつ (TFTOC=1 または TNCTC=1) → クリアしない（このサイクル中に FAILED 確定
@@ -301,10 +327,11 @@ CDTC（confirmedDTC）は SID 0x14 によるクリアだけでなく、**再故�
 「一度故障した部品は永久にDTCが残り続ける」のではなく「故障が再発しなければ
 時間とともに記録が薄れていく」という、実車の診断システムが持つ考え方です。
 
-判定は `Dem_Init()` が起動ごとに「直前の操作サイクルの最終状態」を見て行います。
+判定は、新しい操作サイクルの開始（`Dem_Init()`、`Dem_SetOperationCycleState(START)`）が、「直前の操作サイクルの
+最終状態」を見て行います。
 
 ```
-Dem_Init()（起動時、TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
+新しい操作サイクルの開始時（TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
   CDTC=0                        → エージング対象外、カウンタ=0
   CDTC=1 かつ TF=1（再故障）      → 連続性が途切れたためカウンタ=0
   CDTC=1 かつ TNCTC=1（未テスト）  → このサイクルは数えない（カウンタ維持）
