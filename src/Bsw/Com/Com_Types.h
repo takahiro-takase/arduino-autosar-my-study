@@ -349,18 +349,25 @@ typedef enum
 // -------------------------------------------------------
 // Com_TxClearUpdateBitType（DaVinci: ComTxIPduClearUpdateBit、ECUC_Com_00230 相当）
 //
-//   TX I-PDU の update-bit を、いつクリアするか。実 AUTOSAR は Transmit /
-//   Confirmation / TriggerTransmit の 3 択（本実装は Confirmation を持たない）。
+//   TX I-PDU の update-bit を、いつクリアするか。実 AUTOSAR と同じ Transmit /
+//   Confirmation / TriggerTransmit の 3 択。
 //   COM_CLEAR_UPDATE_BIT_TRANSMIT（0、既定）: PduR_ComTransmit() が E_OK を返した直後
 //     （SWS_Com_00062）。
 //   COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT: Com_TriggerTransmit() が I-PDU の内容を
 //     呼び出し元へ渡した後（SWS_Com_00578）。この設定の I-PDU は、Transmit 直後には
 //     クリアしない。
+//   COM_CLEAR_UPDATE_BIT_CONFIRMATION: PduR_ComTransmit() が E_OK を返し、その送信が
+//     確認された（Com_TxConfirmation() が E_OK で呼ばれた）後（SWS_Com_00577）。
+//     Transmit 直後にはクリアしない。ComTxModeNumberOfRepetitions の再送（SWS_Com_00305）が
+//     ある I-PDU は、最後の送信の確認でクリアする。送信してから確認が届くまでの間に、
+//     Com_SendSignal() などが update-bit を立て直したときは、クリアしない
+//     （新しい値の update-bit を消さないため。次の送信の確認でクリアする）。
 // -------------------------------------------------------
 typedef enum
 {
     COM_CLEAR_UPDATE_BIT_TRANSMIT         = 0,
-    COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT = 1
+    COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT = 1,
+    COM_CLEAR_UPDATE_BIT_CONFIRMATION     = 2
 } Com_TxClearUpdateBitType;
 
 // -------------------------------------------------------
@@ -462,12 +469,13 @@ typedef enum
 //                   セットする（いずれも値が実際に変化したかどうかは問わない）。
 //                   クリアタイミングは実 AUTOSAR の ComTxIPduClearUpdateBit
 //                   （Transmit/Confirmation/TriggerTransmit の 3 択）のうち、
-//                   本実装は Transmit と TriggerTransmit を実装する
+//                   本実装は 3 択すべてを実装する
 //                   （Com_TxClearUpdateBitType 参照。Transmit は SWS_Com_00062:
 //                   PduR_ComTransmit 呼び出し直後にクリア、TriggerTransmit は
 //                   SWS_Com_00578: Com_TriggerTransmit() が内容を渡した後に
-//                   クリア。Confirmation は未実装。詳細は Com_DoTransmit()/
-//                   Com_TriggerTransmit() 参照）。
+//                   クリア、Confirmation は SWS_Com_00577: 送信の確認の後に
+//                   クリア。詳細は Com_DoTransmit()/Com_TriggerTransmit()/
+//                   Com_TxConfirmation() 参照）。
 //                   クリア処理自体は Signal Group かどうかを区別しない。
 //                 RX（受信側、SWS_Com_00324/00802、Signal Group のみ）:
 //                   Com_ReceiveSignalGroup() はこのビットが 0 の場合、
