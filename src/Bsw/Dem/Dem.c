@@ -693,31 +693,30 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  * \brief   イベントの発生/消滅を DEM に通知する (モニタからの生のテスト結果、
  *          [SWS_Dem_00183])。
  *
- * \details FAILED/PASSED の生の報告をそのまま確定はせず、まずデバウンスカウンタを
- *          ±1 する。カウンタがイベントごとの確定閾値 (Dem_DebounceLimitTable[EventId])
+ * \details counter-based debouncing（仕様どおり）。モニタの報告に応じて、デバウンスカウンタを動かす。
+ *          - PREFAILED: カウンタを +1（失敗側）。PREPASSED: カウンタを -1（成功側）。ステップ幅は 1
+ *            （SWS_Dem_00418/00419）。反対側にいるときは、先に 0 へ戻す（jump-up / jump-down の値が 0。
+ *            SWS_Dem_00422〜00425）。
+ *          - FAILED: カウンタを、失敗側のしきい値（+limit）へ、直接ジャンプさせる。PASSED: 成功側のしきい値
+ *            （-limit）へ、直接ジャンプさせる（SWS_Dem_00420/00421）。
+ *          カウンタがイベントごとの確定閾値 (Dem_DebounceLimitTable[EventId])
  *          に達した瞬間にのみ、DTC ステータスの TF/TFTOC/PDTC/CDTC/TFSLC を確定し
  *          NvM_WriteBlock() でステータステーブル全体を永続化する
  *          (FAILED 確定時は併せて FreezeFrame も更新し、ExtendedData の
  *          故障確定回数カウンタを +1 する)。
  *          まだ閾値に達していない間 (PRE-FAILED / PRE-PASSED) は
  *          DTC ステータスビットを変更しない。
- *          DEM_EVENT_STATUS_PREPASSED / PREFAILED はモニタからの入力としては
- *          受け付けない。これは AUTOSAR 仕様上の制約ではなく（仕様では逆にこれらが
- *          段階的 debounce 入力として正当。SWS_Dem_00418/00419、Dem.h の
- *          Dem_EventStatusType コメント参照）、本実装が「モニタは毎回 FAILED/PASSED
- *          の生の単発判定を報告し、Dem が報告回数を数えて閾値到達で確定する」という
- *          学習用簡略方式を採用しているための制約。
+ *          以前は、FAILED/PASSED を、毎回の判定として、報告のたびに ±1 で数える独自の方式で、
+ *          PREPASSED/PREFAILED を受け付けなかった（2026-11 に仕様どおりへ変更）。
  *
  * \param[in]  EventId      イベント ID (DemConf_DemEventParameter_* 定数)。
- * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED または DEM_EVENT_STATUS_PASSED。
- *                          PREPASSED / PREFAILED は受け付けない。
+ * \param[in]  EventStatus  DEM_EVENT_STATUS_FAILED / PASSED / PREFAILED / PREPASSED。
  *
  * \retval  E_OK      正常に受理した（デバウンス未確定・DTC設定無効化中の
  *                    無視も含む。実仕様も「呼び出し元のBSWモジュールは戻り値を
  *                    無視してよい」と明記しているため、実質的な失敗のみを
  *                    E_NOT_OK とする）。
- * \retval  E_NOT_OK  EventId が範囲外、または EventStatus が
- *                    DEM_EVENT_STATUS_FAILED/PASSED 以外。
+ * \retval  E_NOT_OK  EventId が範囲外、または EventStatus が上の 4 値以外。
  *
  * \note    実仕様は「異なる EventId 間では Reentrant」と規定するが、本実装は
  *          確定 (デバウンス閾値到達) の都度 `Dem_StatusTable[]`/
@@ -741,7 +740,8 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
         (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_WRONG_CONFIGURATION);
         return E_NOT_OK;
     }
-    if ((EventStatus != DEM_EVENT_STATUS_FAILED) && (EventStatus != DEM_EVENT_STATUS_PASSED))
+    if ((EventStatus != DEM_EVENT_STATUS_FAILED) && (EventStatus != DEM_EVENT_STATUS_PASSED)
+        && (EventStatus != DEM_EVENT_STATUS_PREFAILED) && (EventStatus != DEM_EVENT_STATUS_PREPASSED))
     {
         (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_EVENT_STATUS, DEM_E_PARAM_DATA);
         return E_NOT_OK;
@@ -763,10 +763,19 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
 
     if (EventStatus == DEM_EVENT_STATUS_FAILED)
     {
-        /* 確定 PASSED 側 (負) からの遷移は中立 (0) からやり直す。
-         * そうしないと、反対側の確定状態から数え始めるせいで
-         * 反転に 2*limit 回分の報告が必要になってしまう
-         * (limit=1 の「1 回で即確定」が実質機能しなくなる)。 */
+        /* [SWS_Dem_00420]: 失敗側のしきい値へ、直接ジャンプさせて、すぐに確定する。 */
+        counter = limit;
+    }
+    else if (EventStatus == DEM_EVENT_STATUS_PASSED)
+    {
+        /* [SWS_Dem_00421]: 成功側のしきい値へ、直接ジャンプさせて、すぐに確定する。 */
+        counter = (sint8)(-limit);
+    }
+    else if (EventStatus == DEM_EVENT_STATUS_PREFAILED)
+    {
+        /* [SWS_Dem_00418]: 失敗側へ 1 つ進める。成功側（負）にいたら、先に 0 へ戻す
+         * （jump-up。[SWS_Dem_00424]/[SWS_Dem_00425]。値は 0）。そうしないと、反対側の確定状態から
+         * 数え始めるせいで、反転に 2*limit 回分の報告が必要になってしまう。 */
         if (counter < 0)
         {
             counter = 0;
@@ -776,9 +785,10 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
             counter++;
         }
     }
-    else /* DEM_EVENT_STATUS_PASSED */
+    else /* DEM_EVENT_STATUS_PREPASSED */
     {
-        /* 確定 FAILED 側 (正) からの遷移も同様に中立からやり直す */
+        /* [SWS_Dem_00419]: 成功側へ 1 つ進める。失敗側（正）にいたら、先に 0 へ戻す
+         * （jump-down。[SWS_Dem_00422]/[SWS_Dem_00423]。値は 0）。 */
         if (counter > 0)
         {
             counter = 0;

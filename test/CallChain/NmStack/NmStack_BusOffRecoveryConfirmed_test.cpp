@@ -239,7 +239,8 @@ TEST_F(NmStack_BusOffRecoveryConfirmed_Test, OK_ConfirmationBeforeRestartIsNotCo
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CanIf_GetTxConfirmationState(0U), CANIF_NO_NOTIFICATION);   // 再起動でリセットされている
-    EXPECT_EQ(CallCount_Dem_SetEventStatus, 0U);                           // 2 回目の回復は、まだ確定しない
+    EXPECT_EQ(CallCount_Dem_SetEventStatus, 1U);                           // 2 回目の Bus-Off の PREFAILED だけ
+    EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PREFAILED);   // 2 回目の回復は、まだ確定しない（PASSED なし）
 }
 
 }  // namespace

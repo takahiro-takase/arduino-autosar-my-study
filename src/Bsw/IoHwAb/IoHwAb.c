@@ -268,11 +268,11 @@ void IoHwAb_MainFunction(void)
             s_adcMv = (uint16)((uint32)raw * ADC_REF_VOLTAGE_MV / ADC_RESOLUTION_MAX);
             if (s_adcMv < IOHWAB_ADC_LOW_VOLT_THRESHOLD_MV)
             {
-                (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_FAILED);
+                (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_PREFAILED);
             }
             else
             {
-                (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_PASSED);
+                (void)Dem_SetEventStatus(DemConf_DemEventParameter_ADC_VOLT_LOW, DEM_EVENT_STATUS_PREPASSED);
             }
         }
         /* else: 変換できなかった（結果なし）。0 V の測定値と誤認して電圧低下を報告しないよう、

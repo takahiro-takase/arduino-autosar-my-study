@@ -188,12 +188,12 @@ TEST_F(Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReturnsZeroForFreshEven
     EXPECT_EQ(fdc, 0);  /* カウンタ0の写像は0(正負どちらの式でも0) */
 }
 
-TEST_F(Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCounterAfterFailedReport)
+TEST_F(Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCounterAfterPreFailedReport)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_PREFAILED);
 
     sint8 fdc = 0;
 
@@ -206,7 +206,7 @@ TEST_F(Dcm_ReadDtcInfo_Test, GetFaultDetectionCounter_OK_ReflectsDebounceCounter
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
-    /* 中立(0)から FAILED 方向へ1回分だけ進んだ生カウンタ1を、
+    /* 中立(0)から PREFAILED 方向へ1回分だけ進んだ生カウンタ1を、
      * limit=2 で線形写像: (1*127)/2 = 63 (整数除算)。 */
     EXPECT_EQ(fdc, 63);
 }

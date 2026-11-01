@@ -2,7 +2,7 @@
  * \file    IoHwAb_AdcLowVoltage_test.cpp
  * \brief   IoHwAb_MainFunction() の ADC 読み取りと電圧低下の検出の単体テスト
  * \details IoHwAb_MainFunction() は、ADC のグループ変換（Adc_StartGroupConversion → Adc_ReadGroup）の結果を、mV へ換算し
- *          （raw * 5000 / 1023）、1000 mV 未満なら ADC_VOLT_LOW を FAILED、以上なら PASSED で Dem へ報告する。
+ *          （raw * 5000 / 1023）、1000 mV 未満なら ADC_VOLT_LOW を PREFAILED、以上なら PREPASSED で Dem へ報告する。
  */
 
 /* ======================================================================
@@ -99,9 +99,9 @@ TEST_F(IoHwAb_AdcLowVoltage_Test, IoHwAb_MainFunction_OK_ConvertsRawToMvAndRepor
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(mvLow, 488U);
-    EXPECT_EQ(statusLow, DEM_EVENT_STATUS_FAILED);   // 電圧低下
+    EXPECT_EQ(statusLow, DEM_EVENT_STATUS_PREFAILED);   // 電圧低下
     EXPECT_EQ(mvOk, 2502U);
-    EXPECT_EQ(statusOk, DEM_EVENT_STATUS_PASSED);    // 回復
+    EXPECT_EQ(statusOk, DEM_EVENT_STATUS_PREPASSED);    // 回復
     EXPECT_EQ(FakeAdcHw_LastChannel, ADC_CHANNEL_SENSOR);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);            // ADC のエラー（バッファ未登録など）が出ていない
 }

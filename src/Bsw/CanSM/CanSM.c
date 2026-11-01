@@ -142,6 +142,10 @@
 #include "Det.h"
 #include "Os.h"
 
+#if DEM_DEBOUNCE_LIMIT_CAN_BUSOFF != (CANSM_BUSOFF_L1_TO_L2_COUNT + 1)
+#error "DEM_DEBOUNCE_LIMIT_CAN_BUSOFF (config/data/Dem.json) must be CANSM_BUSOFF_L1_TO_L2_COUNT + 1"
+#endif
+
 /* ======================================================================
  * Definitions
  * ====================================================================== */
@@ -342,8 +346,6 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
             CanSM_BusOffRetries     = 0U;
             CanSM_BorPassivePending = 0U;   /* 新しく FULL_COM へ入り直すので、前の回復の確定待ちは破棄する */
             DET_LOGI(TAG, "->FULL_COM");
-            /* 通信確立を報告。デバウンス確定すれば CAN_BUSOFF の TF をクリアする */
-            (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);
             ComM_BusSM_ModeIndication(network, COMM_FULL_COMMUNICATION);
             break;
 
@@ -528,14 +530,13 @@ void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
  *          SILENT_COM は EcuM の RUN 状態を変化させない（`ComM_BusSM_ModeIndication()`
  *          参照）ため、回復試行中も RUN は維持される。
  *
- *          Dem への通知（SWS_CanSM_00522: `Dem_SetEventStatus(..., PRE_FAILED)`）は
- *          あえて行わない。本プロジェクトの `Dem_SetEventStatus()` は
- *          FAILED/PASSED のみを外部入力として受け付け、PRE_FAILED/PRE_PASSED は
- *          Dem 内部のデバウンスカウンタが導出する値として意図的に拒否する設計
- *          （Dem.c 参照）。ここで代わりに FAILED を渡すと
- *          `DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1` により単発の一時的な Bus-Off でも
- *          即座に DTC が確定してしまい、「L1 リトライの間は一時的障害として
- *          確定を待つ」という設計（CanSM_MainFunction 参照）と矛盾するため。
+ *          [SWS_CanSM_00522]/[00605]: Bus-Off を検出するたびに、Dem へ
+ *          `Dem_SetEventStatus(CAN_BUSOFF, DEM_EVENT_STATUS_PREFAILED)` を報告する。
+ *          Dem のデバウンスカウンタが、確定回数（DEM_DEBOUNCE_LIMIT_CAN_BUSOFF
+ *          = CANSM_BUSOFF_L1_TO_L2_COUNT + 1）に達した瞬間に、DTC が確定する
+ *          （単発の一時的な Bus-Off では確定せず、L1 の回復で戻れば確定しない）。
+ *          回復が確定したとき（G_BUS_OFF_PASSIVE）は、PASSED を報告して、
+ *          カウンタを戻す（CanSM_MainFunction 参照）。
  *
  *          CanNm 協調スリープ待ち中（ComM が CanNm_NetworkRelease() を送信済みだが
  *          CanNm がまだ Bus-Sleep Mode へ到達していない期間、ComM.c の
@@ -601,6 +602,9 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
 
     CanSM_State         = CANSM_STATE_BUS_OFF;
     CanSM_BusOffTimerMs = CanSM_GetNowMs();
+
+    /* [SWS_CanSM_00522]/[00605]: Bus-Off のたびに PREFAILED。確定は Dem のデバウンスカウンタが決める。 */
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PREFAILED);
 
     ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);
 
@@ -767,10 +771,10 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  *            試行回数 <= CANSM_BUSOFF_L1_TO_L2_COUNT の間は
  *            CANSM_BUSOFF_RECOVERY_L1_MS（短い周期）でリトライする。
  *            この回数を超えたら、一時的なバス障害ではなく持続的な Bus-Off と
- *            判断し、Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, FAILED) を
- *            1 回だけ報告した上で（Dem 側は DEM_DEBOUNCE_LIMIT_CAN_BUSOFF=1
- *            のため即座に確定する）、以降は CANSM_BUSOFF_RECOVERY_L2_MS
- *            （長い周期）でリトライを継続する。AUTOSAR 仕様には「回復を諦めて
+ *            判断し、以降は CANSM_BUSOFF_RECOVERY_L2_MS
+ *            （長い周期）でリトライを継続する（DTC の確定は、この時点の Bus-Off の
+ *            検出で、Dem のデバウンスが行う。CanSM_ControllerBusOff() 参照）。
+ *            AUTOSAR 仕様には「回復を諦めて
  *            二度と復帰しない」状態は存在しないため、L2 に切り替わった後も
  *            回復試行そのものは無期限に続ける。
  *
@@ -860,11 +864,11 @@ void CanSM_MainFunction(void)
     if (CanSM_BusOffRetries == (CANSM_BUSOFF_L1_TO_L2_COUNT + 1U))
     {
         /* L1→L2 に降格するちょうどこの瞬間: 一時的なバス障害ではなく持続的な
-         * Bus-Off と判断し DTC を確定する（FreezeFrame にはこの時点の車両状態が
-         * 残る）。回復試行そのものは止めない（下へ続く）。 */
+         * Bus-Off と判断する。DTC は、Bus-Off 検出ごとの PREFAILED が、
+         * Dem のデバウンスで確定済み（DEM_DEBOUNCE_LIMIT_CAN_BUSOFF）。
+         * 回復試行そのものは止めない（下へ続く）。 */
         DET_LOGE(TAG, "BusOff: L1(%u) exceeded, degrade to L2 (%lums)",
                  (unsigned)CANSM_BUSOFF_L1_TO_L2_COUNT, (unsigned long)CANSM_BUSOFF_RECOVERY_L2_MS);
-        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
     }
 
     DET_LOGI(TAG, "BusOff: restart attempt %u (%s, next in %lums)",

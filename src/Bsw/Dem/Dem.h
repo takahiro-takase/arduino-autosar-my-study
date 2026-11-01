@@ -126,21 +126,17 @@ typedef enum
 /**
  * \brief   イベントステータス型 (Dem_EventStatusType は AUTOSAR SWS_Dem_00926 で定義)
  *
- * \details 本実装は counter-based debouncing の学習用簡略版。AUTOSAR 仕様では
- *          PREPASSED/PREFAILED もモニタが報告してよい正当な入力であり
- *          （SWS_Dem_00418/00419: 報告のたびにカウンタを step-size 分だけ増減させる、
- *          段階的な debounce 進行を表す値）、逆に本来の FAILED/PASSED
- *          （SWS_Dem_00420/00421）は「モニタ側で既に確定した単発の結果」を意味し、
- *          報告されるとカウンタを閾値へ直接ジャンプさせて即座に確定させる
- *          （繰り返し報告してカウントする値ではない）。
- *
- *          本実装はこれと異なり、モニタが毎回 FAILED/PASSED（1 周期分の生の判定）を
- *          報告し、Dem 側がその報告回数をカウントして閾値到達時に確定するという、
- *          仕様上は PREFAILED/PREPASSED に割り当てられた段階的カウント挙動に近い方式を
- *          FAILED/PASSED の名前のまま採用している。PREPASSED/PREFAILED 自体は
- *          Dem_SetEventStatus() への入力として受け付けない
- *          （AUTOSAR がこれらを入力不可と規定しているのではなく、本プロジェクト独自の
- *          簡略化。詳細は Dem.c の実装コメント参照）。
+ * \details counter-based debouncing（仕様どおり）。
+ *          - PREFAILED / PREPASSED: モニタが、1 回分の判定を、段階的に報告する。報告のたびに、
+ *            デバウンスカウンタを、1 つ（ステップ幅 1）だけ、失敗側 / 成功側へ進める
+ *            （SWS_Dem_00418/00419）。しきい値（Dem_Cfg.h の DEM_DEBOUNCE_LIMIT_*）に達した
+ *            瞬間に、DTC のステータスを確定する。反対向きの報告で、カウンタが反対側にあるときは、
+ *            先に 0 へ戻す（jump-up / jump-down の値が 0。SWS_Dem_00422〜00425）。
+ *          - FAILED / PASSED: モニタが、既に確定した結果を報告する。カウンタを、失敗側 / 成功側の
+ *            しきい値へ、直接、ジャンプさせて、すぐに確定する（SWS_Dem_00420/00421）。
+ *          しきい値が 1 のイベントは、PREFAILED と FAILED（PREPASSED と PASSED）の効果が同じ。
+ *          以前は、FAILED/PASSED を、毎回の判定として、報告のたびに数える独自の方式で、
+ *          PREFAILED/PREPASSED を受け付けなかった（2026-11 に仕様どおりへ変更）。
  */
 typedef enum
 {

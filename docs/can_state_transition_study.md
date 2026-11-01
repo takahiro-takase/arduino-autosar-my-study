@@ -44,12 +44,13 @@ CAN の通信モードが、どのきっかけで、どう変わり、その結�
 | FULL_COM / SILENT_COM | `RequestComMode(NO_COM)` | NO_COM | `CAN_CS_SLEEP`、ComM へ NO_COM |
 | FULL_COM / SILENT_COM | `CanSM_ControllerBusOff()` | BUS_OFF | `CAN_CS_STOPPED`、直前の状態を覚える、ComM へ SILENT_COM |
 | BUS_OFF | `CanSM_MainFunction()` で、L1 / L2 の時間が経過 | 直前の状態(FULL_COM または SILENT_COM) | `CAN_CS_STARTED`、回復の確定待ちを開始、ComM へ通知 |
-| BUS_OFF | `RequestComMode(...)` | 変わらない | 受け付けず、`E_NOT_OK`(実装の設計) |
+| BUS_OFF | `RequestComMode(NO_COM)` | NO_COM | 受け付けて回復を取り消し、`CAN_CS_SLEEP`、ComM へ NO_COM([SWS_CanSM_00182]) |
+| BUS_OFF | `RequestComMode(FULL_COM / SILENT_COM)` | 変わらない | 受け付けて(`E_OK`)、回復の後に戻る状態だけを要求どおりに変える。SILENT_COM は、回復を待たずに TX を止める([SWS_CanSM_00369]) |
 
 Bus-Off の回復の間隔(L1 / L2)は、次のとおりです。
 - 回復の試行が 3 回(`CANSM_BUSOFF_L1_TO_L2_COUNT`)以内なら L1 = 200 ms ごと。それを超えると L2 = 5000 ms ごと。
 - 再起動のあと、TX の確認を 1 回でも受け取ると(`CANSM_BOR_TX_CONFIRMATION_POLLING`)、回復が確定します。そこで試行回数を 0 に戻し、Dem の Bus-Off を PASSED にします([SWS_CanSM_00496]〜[00498])。
-- 確定しないまま 4 回目の試行に入ると、Dem の Bus-Off を FAILED にします(持続的な Bus-Off と判断)。
+- Bus-Off を検出するたびに、Dem の Bus-Off へ PREFAILED を報告します([SWS_CanSM_00522]/[00605])。確定しないまま 4 回目の検出に入ると、Dem のデバウンスが DTC を確定します(持続的な Bus-Off と判断)。
 
 ## 3. ComM のチャネルの状態遷移
 
@@ -148,5 +149,4 @@ BswM のルールは、RX のグループ(`SENSOR_RX`)を、**ComM が NO_COM �
 |---|---|---|
 | `Com_IpduGroupStart()` を、起動中のグループへ呼ぶと、受信の監視を再始動する | 仕様は「停止中のグループを起動する」と書くだけで、起動中への呼び出しは定めていない。BswM の Rule 6 は、Bus-Off の回復のたびに、一度も止めていない RX のグループへ、起動を呼ぶ(上の 4.6 の 14:14:52.172 など) | 仕様が曖昧で、実機の動作が変わる。Bus-Off が短い間隔で続くと、再始動のたびにタイムアウトが遅れる点は、設計の選択として残す |
 | `BswM_CanSM_CurrentState()` が未実装 | 仕様の E_BUS_OFF / E_TX_ON の効果は、BswM への通知を求める。このプロジェクトでは、ComM 経由の通知で、同じルールを動かしている | 影響が小さく、規模が大きい(BswM の状態の入力元が増える) |
-| Bus-Off の検出で、Dem へ PRE_FAILED を報告しない([SWS_CanSM_00522]) | 実装は、回復の確定で PASSED、L1 超過で FAILED だけを報告する | Dem が PRE_FAILED / PRE_PASSED を外部入力として受けない設計(BswM.c のコメント参照) |
 | `CanSM_StartWakeupSource` / `CanSM_StopWakeupSource` が未実装 | EcuM の `Start/StopWakeupSources` の前提 | 既知の残件(EcuM の項目) |

@@ -82,11 +82,11 @@ stateDiagram-v2
 
 | 遷移 | CanSM が行うこと |
 |------|------------------|
-| `RequestComMode(FULL_COM)` | `CanIf_SetControllerMode(STARTED)`（失敗したら状態を変えず `E_NOT_OK`）→ `CanIf_SetPduMode(ONLINE)`（ベストエフォート）→ Bus-Off リトライ回数を 0 に戻し `DemConf_DemEventParameter_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
+| `RequestComMode(FULL_COM)` | `CanIf_SetControllerMode(STARTED)`（失敗したら状態を変えず `E_NOT_OK`）→ `CanIf_SetPduMode(ONLINE)`（ベストエフォート）→ Bus-Off リトライ回数を 0 に戻す → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `RequestComMode(SILENT_COM)` | FULL_COM からのときだけ `CanIf_SetPduMode(TX_OFFLINE)`（コントローラは `CAN_CS_STARTED` のまま、PDU の送信だけを止める）→ `ComM_BusSM_ModeIndication(SILENT_COM)` |
 | `RequestComMode(NO_COM)` | `CanIf_SetControllerMode(SLEEP)` → `ComM_BusSM_ModeIndication(NO_COM)` |
 | `ControllerModeIndication()`（ウェイクアップ） | NO_COM のときだけ受け付ける。`CanIf_SetControllerMode(STOPPED)`（Listen-Only）にして `WAKEUP_VALIDATING` へ。それ以外の状態では無視（ログのみ） |
-| `RequestComMode(FULL_COM)`（検証中に有効フレームを確認した後、`ComM_EcuM_WakeUpIndication()` から） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `DemConf_DemEventParameter_CAN_BUSOFF` を PASSED → `ComM_BusSM_ModeIndication(FULL_COM)` |
+| `RequestComMode(FULL_COM)`（検証中に有効フレームを確認した後、`ComM_EcuM_WakeUpIndication()` から） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `MainFunction()`（検証タイムアウト） | `CanIf_SetControllerMode(SLEEP)` で再スリープ（ウェイクアップ割り込みを再武装）し NO_COM へ戻る |
 
 `CanSM_MainFunction()` は Os Task 4（10ms 周期）です。設定値（`CanSM_Cfg.h`）:
@@ -95,7 +95,7 @@ stateDiagram-v2
 |------|--------|------|
 | `CANSM_BUSOFF_RECOVERY_L1_MS` | 200 ms | Bus-Off 回復リトライの間隔（L1） |
 | `CANSM_BUSOFF_RECOVERY_L2_MS` | 5000 ms | L2 の間隔（L1 を使い切った後） |
-| `CANSM_BUSOFF_L1_TO_L2_COUNT` | 3 回 | L1 のリトライ回数。超えた時点で `DemConf_DemEventParameter_CAN_BUSOFF` を FAILED にして L2 へ |
+| `CANSM_BUSOFF_L1_TO_L2_COUNT` | 3 回 | L1 のリトライ回数。超えると L2 へ（`DemConf_DemEventParameter_CAN_BUSOFF` のデバウンス閾値は、この値 + 1。Bus-Off の検出ごとの PREFAILED が、この回数に達すると DTC が確定する） |
 | `CANSM_BOR_TX_CONFIRMATION_POLLING` | 1 | 回復の確定に TX 確認のポーリングを使う（1）か、時間で判定する（0）か |
 | `CANSM_BOR_TIME_TX_ENSURED_MS` | 1000 ms | 回復の確定までの待ち時間。ポーリングを使わない（上が 0 の）とき、および SILENT_COM に戻った場合に使う |
 | `CANSM_WAKEUP_VALIDATION_MS` | 2000 ms | ウェイクアップ検証の待ち時間。この間に有効な RX が無ければ再スリープ |
@@ -113,9 +113,13 @@ stateDiagram-v2
 確定したとき（[SWS_CanSM_00498]）、Dem へ `DEM_EVENT_STATUS_PASSED` を報告し、回復試行回数を 0 に戻します。
 確定する前に再度 Bus-Off が起きると、確定しないまま次の回復試行へ進み、回数は持ち越されます
 （[SWS_CanSM_00514]/[00515] の回数は「G_BUS_OFF_PASSIVE を通らずに繰り返した回数」）。
-そのため、単発の Bus-Off が、起動後に累積して、突然 L2（長い間隔）や DTC の FAILED になることはなくなりました。
+そのため、単発の Bus-Off が、起動後に累積して、突然 L2（長い間隔）や DTC の確定になることはなくなりました。
+Bus-Off を検出するたびに、Dem へ `DEM_EVENT_STATUS_PREFAILED` を報告します（[SWS_CanSM_00522]/[00605]）。
+Dem のデバウンスカウンタが閾値（`CANSM_BUSOFF_L1_TO_L2_COUNT` + 1）に達した瞬間に DTC が確定し、
+確定（G_BUS_OFF_PASSIVE）の PASSED でカウンタが戻ります。FULL_COM へ入っただけでは PASSED を報告しません
+（以前は報告していた。仕様は E_BUS_OFF_PASSIVE のときだけ）。
 逆に、TX 確認が一度も得られない状況（他のノードが ACK を返さないなど）では、確定せず、回数は増え続け、
-L1 を使い切ると L2 と DTC の FAILED になります。TX 確認の状態は、コントローラを起動し直すたびに CanIf が
+L1 を使い切ると L2 になり、DTC も確定します。TX 確認の状態は、コントローラを起動し直すたびに CanIf が
 リセットする（[SWS_CANIF_00734]）ので、回復の再起動より前の確認は数えません。
 `RequestComMode(FULL_COM)`（新しく FULL_COM に入り直す）は、確定待ちを破棄して、回数を 0 に戻します。
 
