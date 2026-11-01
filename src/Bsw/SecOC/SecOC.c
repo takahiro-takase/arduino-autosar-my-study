@@ -139,14 +139,33 @@ static uint8 SecOC_OverrideRemaining[SECOC_RX_PDU_COUNT];
  *
  * 現在 SECOC_TX_PDU_COUNT は 0（TX 方向で SecOC を使う PDU が無い）。
  * サイズ0の配列宣言 (`T arr[0]`) は ISO C が認めていない GNU 拡張のため、
- * 下記 3 配列は SECOC_TX_STATE_STORAGE_COUNT（最低 1）で確保する。実際の
- * 有効要素数は変わらず SECOC_TX_PDU_COUNT のままで、全ループがこれを上限に
- * するため、確保だけされた添字0は SECOC_TX_PDU_COUNT>0 になるまで一切
- * 参照されない（無害）。 */
-#define SECOC_TX_STATE_STORAGE_COUNT  (((SECOC_TX_PDU_COUNT) > 0U) ? (SECOC_TX_PDU_COUNT) : 1U)
+ * 下記の配列は SECOC_TX_STATE_STORAGE_COUNT（最低 1）で確保する。実際の
+ * 有効要素数は SECOC_TX_PDU_MAX（既定は SECOC_TX_PDU_COUNT。下を参照）で、
+ * 全ループがこれを上限にするため、確保だけされた添字0は SECOC_TX_PDU_MAX>0 に
+ * なるまで一切参照されない（無害）。 */
+#ifndef SECOC_TX_PDU_MAX
+/* SecOC_Init() が受け付ける TX Secured I-PDU の最大数。既定は SECOC_TX_PDU_COUNT（本番の設定の数）。
+ * 単体テストのビルド（CMakeLists.txt）は、TX 方向を確認するために、これを 1 へ上書きする。 */
+#define SECOC_TX_PDU_MAX  SECOC_TX_PDU_COUNT
+#endif
+#define SECOC_TX_STATE_STORAGE_COUNT  (((SECOC_TX_PDU_MAX) > 0U) ? (SECOC_TX_PDU_MAX) : 1U)
 static uint8 SecOC_TxAuthenticBuffer[SECOC_TX_STATE_STORAGE_COUNT][SECOC_TX_AUTH_BUF_MAX];
 static uint8 SecOC_TxPending[SECOC_TX_STATE_STORAGE_COUNT];
 static uint8 SecOC_TxFreshness[SECOC_TX_STATE_STORAGE_COUNT];
+
+/* SecOC_TxSecuredBuffer : SecOC_MainFunctionTx() が組み立てた Secured I-PDU（Authentic I-PDU、Freshness Value、
+ *                         切り詰めた MAC）。SecOC_TriggerTransmit() が、下位層へ複製する（[SWS_SecOC_00068]）。
+ * SecOC_TxSecuredValid    : SecOC_TxSecuredBuffer に、組み立て済みの Secured I-PDU がある（1）。
+ *                         SecOC_MainFunctionTx() の組み立てで 1、SecOC_Init()/SecOC_DeInit() で 0。 */
+static uint8 SecOC_TxSecuredBuffer[SECOC_TX_STATE_STORAGE_COUNT][SECOC_TX_AUTH_BUF_MAX];
+static uint8 SecOC_TxSecuredValid[SECOC_TX_STATE_STORAGE_COUNT];
+
+/* SecOC_TxTriggered : 組み立てた Secured I-PDU を、SecOC_TriggerTransmit() が下位層へ渡した（トリガ送信で取り出された）。
+ *                     SecOC_TxConfirmation() が E_OK で呼ばれたとき、1 なら、保持している Authentic I-PDU を、
+ *                     上位層が新しく設定したものとして扱い、次の SecOC_MainFunctionTx() で再び認証する
+ *                     （[SWS_SecOC_00069]、7.4.2 節）。取り出された Secured I-PDU は、下位層へ渡した時点で、解放する。
+ *                     SecOC_Init()/SecOC_DeInit() で 0。 */
+static uint8 SecOC_TxTriggered[SECOC_TX_STATE_STORAGE_COUNT];
 
 /* ======================================================================
  * Function Prototypes
@@ -288,7 +307,7 @@ void SecOC_Init(const SecOC_ConfigType* config)
         (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_INIT, SECOC_E_INIT_FAILED);
         return;
     }
-    if (config->TxPduCount > SECOC_TX_PDU_COUNT)
+    if (config->TxPduCount > SECOC_TX_PDU_MAX)
     {
         /* [SWS_SecOC_00101]（RxPduCount と同じ理由。2026-09 追加） */
         DET_LOGE(TAG, "Init E: TxPduCount>max");
@@ -307,10 +326,12 @@ void SecOC_Init(const SecOC_ConfigType* config)
     }
 
     /* cppcheck-suppress unsignedLessThanZero */
-    for (uint8 i = 0U; i < SECOC_TX_PDU_COUNT; i++)
+    for (uint8 i = 0U; i < SECOC_TX_PDU_MAX; i++)
     {
-        SecOC_TxPending[i]    = 0U;
-        SecOC_TxFreshness[i]  = 0U;
+        SecOC_TxPending[i]      = 0U;
+        SecOC_TxFreshness[i]    = 0U;
+        SecOC_TxSecuredValid[i] = 0U;
+        SecOC_TxTriggered[i]    = 0U;
     }
 
     DET_LOGI(TAG, "Init ok RX=%u TX=%u", (unsigned)config->RxPduCount, (unsigned)config->TxPduCount);
@@ -345,10 +366,13 @@ void SecOC_DeInit(void)
     /* cppcheck-suppress unsignedLessThanZero */
     for (uint8 i = 0U; i < SECOC_TX_STATE_STORAGE_COUNT; i++)
     {
-        SecOC_TxPending[i]   = 0U;
-        SecOC_TxFreshness[i] = 0U;
+        SecOC_TxPending[i]      = 0U;
+        SecOC_TxFreshness[i]    = 0U;
+        SecOC_TxSecuredValid[i] = 0U;
+        SecOC_TxTriggered[i]    = 0U;
     }
     (void)memset(SecOC_TxAuthenticBuffer, 0, sizeof(SecOC_TxAuthenticBuffer));
+    (void)memset(SecOC_TxSecuredBuffer, 0, sizeof(SecOC_TxSecuredBuffer));
 
     SecOC_ConfigPtr = NULL;
     DET_LOGI(TAG, "DeInit ok");
@@ -688,6 +712,9 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
         SecOC_TxAuthenticBuffer[tableIndex][b] = PduInfoPtr->SduDataPtr[b];
     }
     SecOC_TxPending[tableIndex] = 1U;
+    /* 新しい Authentic I-PDU を受け取ったので、保持している古い Secured I-PDU は、次の SecOC_MainFunctionTx() が
+     * 組み立て直すまで、下位層へ渡さない（SecOC_TriggerTransmit() は E_NOT_OK。[SWS_SecOC_00150]）。 */
+    SecOC_TxSecuredValid[tableIndex] = 0U;
 
     return E_OK;
 }
@@ -727,6 +754,19 @@ void SecOC_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
      * [SWS_SecOC_00064] のバッファ解放については SecOC.h の宣言側コメント
      * 参照（本実装は既に解放済み扱いのため追加処理不要）。 */
     PduR_SecOCTxConfirmation(cfg->PduRSrcPduId, result);
+
+    /* [SWS_SecOC_00069]: トリガ送信で、Secured I-PDU を下位層へ渡し（SecOC_TriggerTransmit()）、その送信が確認された
+     * ときは、保持している Authentic I-PDU を、上位層が新しく設定したものとして扱い、次の SecOC_MainFunctionTx() で
+     * 再び認証する（新しい Freshness Value の Secured I-PDU を作る。7.4.2 節の「繰り返しの送信」）。
+     * 直接の送信（SecOC_TriggerTransmit() を使わない）では、再び認証しない。 */
+    if (SecOC_TxTriggered[tableIndex] != 0U)
+    {
+        SecOC_TxTriggered[tableIndex] = 0U;
+        if (result == E_OK)
+        {
+            SecOC_TxPending[tableIndex] = 1U;
+        }
+    }
 }
 
 /* ----------------------------------------------------------------------
@@ -785,7 +825,7 @@ void SecOC_MainFunctionTx(void)
         /* Secured I-PDU = Authentic Payload | Freshness Value | 切り詰め MAC
          * （SecOC_RxPduConfigType の FreshnessOffset/MacOffset と同じレイアウト
          * 規約。Authentic のすぐ後ろに Freshness、その後ろに MAC が続く）。 */
-        uint8 secured[SECOC_TX_AUTH_BUF_MAX];
+        uint8* secured = SecOC_TxSecuredBuffer[t];   /* SecOC_TriggerTransmit() が下位層へ複製できるよう、保持する */
         for (uint8 b = 0U; b < cfg->AuthenticPduLength; b++)
         {
             secured[b] = SecOC_TxAuthenticBuffer[t][b];
@@ -804,6 +844,7 @@ void SecOC_MainFunctionTx(void)
                                &secured[cfg->MacOffset], &macLen);
 
         SecOC_TxFreshness[t] = (uint8)(freshness + 1U);
+        SecOC_TxSecuredValid[t] = 1U;   /* 組み立て済みの Secured I-PDU を、保持する（[SWS_SecOC_00068]） */
 
         DET_LOGI(TAG, "MainFunction: iPdu=%u secured OK (freshness=%u)",
                  (unsigned)cfg->SecOCTxPduId, (unsigned)freshness);
@@ -924,7 +965,97 @@ void SecOC_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * SecOC_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   組み立て済みの Secured I-PDU を、下位層（PduR 経由で CanIf など）へ複製する（トリガ送信。[SWS_SecOC_00068]）。
+ *
+ * \details 下位層が、送信の直前に、PduR_<Lo>TriggerTransmit を通して、SecOC へ Secured I-PDU を取りに来る
+ *          （[7.4.2] 節 "Authentication during triggered transmission"）。SecOC は、上位層の役割を自分で持ち、
+ *          SecOC_MainFunctionTx() が組み立てて保持している Secured I-PDU を、呼び出し元のバッファへ複製し、
+ *          SduLength を Secured I-PDU の長さへ更新する。トリガ送信の呼び出しを、上位層へは転送しない。
+ *
+ *          複製した Secured I-PDU は、下位層へ渡した時点で解放する（同じ Freshness Value の Secured I-PDU を、
+ *          2 回送ると、受信側がリプレイとして棄却するため）。その送信が確認された（SecOC_TxConfirmation() が
+ *          E_OK で呼ばれた）ときに、保持している Authentic I-PDU を、新しく設定されたものとして扱い、次の
+ *          SecOC_MainFunctionTx() で再び認証する（[SWS_SecOC_00069]。下位層が、上位層の更新を待たずに、
+ *          再び要求しても、新しい Freshness Value の Secured I-PDU を渡せる）。
+ *
+ *          保持している Secured I-PDU が無い（まだ組み立てていない、複製済み、または、新しい Authentic I-PDU を
+ *          受け取って、組み立て直し待ち）ときは、何も複製せず E_NOT_OK を返す（[SWS_SecOC_00150]）。
+ *          バッファが Secured I-PDU の長さより小さいときも、何も複製せず、PduInfoPtr を変えずに E_NOT_OK を返す。
+ *
+ * \param[in]     TxPduId     データを要求された SecOC TX Secured I-PDU の ID（SecOC_TxPduConfigType.SecOCTxPduId）。
+ * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。
+ *                            NULL 禁止。SduDataPtr も NULL 禁止。
+ *
+ * \retval  E_OK      Secured I-PDU を複製した。SduLength が複製した長さを示す。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、TxPduId が不正、保持している Secured I-PDU が無い、またはバッファが小さい。
+ *                    何も複製していない。
+ *
+ * \pre        SecOC_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_SecOC_00127, SWS_SecOC_00068, SWS_SecOC_00069, SWS_SecOC_00150}
+ * \ServiceID      {0x41}
+ * \Reentrancy     {Reentrant for different PduIds. Non reentrant for the same PduId.}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType SecOC_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    if (SecOC_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TRIGGER_TRANSMIT, SECOC_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    {
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TRIGGER_TRANSMIT, SECOC_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    uint8 tableIndex = 0U;
+    const SecOC_TxPduConfigType* cfg = SecOC_FindTxPdu(TxPduId, &tableIndex);
+    if (cfg == NULL)
+    {
+        DET_LOGW(TAG, "TriggerTransmit W: no matching SecOC TX PDU for id=%u", (unsigned)TxPduId);
+        (void)Det_ReportError(SECOC_MODULE_ID, 0U, SECOC_API_ID_TRIGGER_TRANSMIT, SECOC_E_INVALID_PDU_SDU_ID);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_SecOC_00150]: 渡せる Secured I-PDU が無いときは、E_NOT_OK。 */
+    if (SecOC_TxSecuredValid[tableIndex] == 0U)
+    {
+        DET_LOGD(TAG, "TriggerTransmit iPdu=%u: no secured I-PDU available", (unsigned)TxPduId);
+        return E_NOT_OK;
+    }
+
+    /* 保持するバッファに収まらない長さの設定は、SecOC_MainFunctionTx() が拒否するので、ここへは来ない。念のため、
+     * 複製のループが、バッファの外を読まないように、同じ上限で守る。 */
+    if (cfg->SecuredPduLength > SECOC_TX_AUTH_BUF_MAX)
+    {
+        return E_NOT_OK;
+    }
+
+    /* 収まらないときは、何もコピーせず、PduInfoPtr も変えない。 */
+    if (PduInfoPtr->SduLength < cfg->SecuredPduLength)
+    {
+        DET_LOGW(TAG, "TriggerTransmit W: iPdu=%u buffer too small (%u < %u)",
+                 (unsigned)TxPduId, (unsigned)PduInfoPtr->SduLength, (unsigned)cfg->SecuredPduLength);
+        return E_NOT_OK;
+    }
+
+    /* [SWS_SecOC_00068] */
+    for (uint8 b = 0U; b < cfg->SecuredPduLength; b++)
+    {
+        PduInfoPtr->SduDataPtr[b] = SecOC_TxSecuredBuffer[tableIndex][b];
+    }
+    PduInfoPtr->SduLength = cfg->SecuredPduLength;
+
+    /* 下位層へ渡したので、保持している Secured I-PDU を解放する。送信の確認で、再び認証する（[SWS_SecOC_00069]）。 */
+    SecOC_TxSecuredValid[tableIndex] = 0U;
+    SecOC_TxTriggered[tableIndex]    = 1U;
+
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * SecOC_CopyRxData

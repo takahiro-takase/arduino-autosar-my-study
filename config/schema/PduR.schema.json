@@ -79,7 +79,7 @@
         "confDestPduId": { "$ref": "#/$defs/pduId", "description": "送信完了の通知先の PDU ID。COM 宛ては confIpdu で指定する" },
         "confIpdu": { "$ref": "#/$defs/shortName", "description": "confModule が COM の場合の、Com の TX I-PDU の name。confDestPduId は Com の設定の並び順から引く" },
         "confModule": { "enum": ["COM", "CANTP"], "description": "送信確認の通知先モジュール（PduRTxConfirmation）" },
-        "triggerTransmit": { "type": "boolean", "description": "true のとき、下位層（CanIf）のトリガ送信の要求を、上位層の TriggerTransmit（confModule が COM なら Com_TriggerTransmit）へ転送する。confModule が COM のときだけ指定できる。省略または false なら、トリガ送信に対応しない" },
+        "triggerTransmit": { "type": "boolean", "description": "true のとき、下位層（CanIf）のトリガ送信の要求を、上位層の TriggerTransmit（confModule が COM なら Com_TriggerTransmit。transmitOverride が SecOC_IfTransmit の経路では、SecOC_TriggerTransmit）へ転送する。confModule が COM のときだけ指定できる。省略または false なら、トリガ送信に対応しない" },
         "transmitOverride": {
           "type": "object",
           "additionalProperties": false,

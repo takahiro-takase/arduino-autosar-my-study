@@ -169,6 +169,37 @@ E2E Profile05 単体保護に切り替えました（`E2EXf_PBCfg.c`/`SecOC_PBCf
 - **`SecOC_MainFunctionRx()` は NOP** です（RX の検証は `SecOC_RxIndication()` の中で
   同期的に完了するため。周期タスクとしては登録しています）。
 
+## トリガ送信（`SecOC_TriggerTransmit()`、2026-11）
+
+下位層が、送信の直前に、PduR（`PduR_CanIfTriggerTransmit()`）を通して、SecOC が保持する Secured I-PDU を
+取りに来る経路です（[SWS_SecOC_00068]、7.4.2 節）。SecOC は、上位層の役割を自分で持ち、`SecOC_MainFunctionTx()` が
+組み立てた Secured I-PDU（Authentic I-PDU、Freshness Value、切り詰めた MAC）を、呼び出し元のバッファへ複製して、
+`SduLength` を Secured I-PDU の長さへ更新します。トリガ送信の呼び出しを、上位層（Com）へは転送しません。
+
+- `SecOC_MainFunctionTx()` は、組み立てた Secured I-PDU を TX PDU ごとのバッファ（`SecOC_TxSecuredBuffer`）に保持します
+  （以前は、スタック上の作業用の配列で、`PduR_SecOCTransmit()` の呼び出しの後に失われていました）。
+- **複製した Secured I-PDU は、下位層へ渡した時点で解放します。** 同じ Freshness Value の Secured I-PDU を 2 回送ると、
+  受信側がリプレイとして棄却するためです。続けて要求しても、`E_NOT_OK` です。
+- **その送信が確認されたとき**（`SecOC_TxConfirmation()` が `E_OK`）、保持している Authentic I-PDU を、上位層が新しく
+  設定したものとして扱い、次の `SecOC_MainFunctionTx()` で再び認証します（[SWS_SecOC_00069]、7.4.2 節の「繰り返しの送信」）。
+  下位層が、上位層の更新を待たずに、再び要求しても、新しい Freshness Value の Secured I-PDU を渡せます。
+  トリガ送信で取り出していない（直接の送信の）ときは、再び認証しません。
+- まだ組み立てていない、複製済み、または、新しい Authentic I-PDU（`SecOC_IfTransmit()`）を受け取って組み立て直し待ち
+  （古い Secured I-PDU を渡さない）のときは、何も複製せず `E_NOT_OK`（[SWS_SecOC_00150]。DET へは報告しません）。
+- バッファが Secured I-PDU の長さより小さいときも、何も複製せず `E_NOT_OK`（`PduInfoPtr` を変えません）。
+  `TxPduId` が不正なときは `SECOC_E_INVALID_PDU_SDU_ID`、NULL のポインタは `SECOC_E_PARAM_POINTER`、
+  未初期化は `SECOC_E_UNINIT` を報告します。`SecOC_Init()` と `SecOC_DeInit()` は、保持している Secured I-PDU を捨てます。
+- PduR は、SecOC を経由する経路（`TransmitOverrideFct` あり）では、上位層の PDU ID に、SecOC の TX PDU の ID
+  （`TransmitOverrideId`）を渡します（[`PduR_Notes.md`](./PduR_Notes.md) の「トリガ送信」参照）。
+
+**本番コードからは呼ばれません**: 本番の設定は、TX 方向で SecOC を使う PDU を持ちません（`SECOC_TX_PDU_COUNT=0`）。
+単体テストは、TX Secured I-PDU を 1 件持つテスト専用の設定で確認します。そのために、`SecOC.c` が受け付ける TX PDU の
+最大数を `SECOC_TX_PDU_MAX`（既定は `SECOC_TX_PDU_COUNT`）としてあり、`CMakeLists.txt` の単体テストのビルドだけが、
+`SecOC.c` に限って、これを 1 に上書きします（本番の `uno_r4` のビルドには影響しません）。
+これにより、これまで本番の設定が持たないために、単体テストで確認できなかった SecOC の TX の経路
+（`SecOC_IfTransmit()` と `SecOC_MainFunctionTx()`）も、`SecOC_TriggerTransmit_test.cpp` で、実際に通ります
+（Csm のジョブは、本番にある検証用のジョブを指すだけなので、MAC の値は確認していません）。
+
 ## 検証結果の通知とオーバーライド
 
 **検証ステータスの通知（`VerificationStatusCallout`、[SWS_SecOC_00048]/[SWS_SecOC_00119]）**:

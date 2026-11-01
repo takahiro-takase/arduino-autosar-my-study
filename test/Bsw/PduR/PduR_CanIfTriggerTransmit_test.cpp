@@ -46,6 +46,14 @@ Std_ReturnType FakeUpperTriggerTransmit(PduIdType DestPduId, PduInfoType* PduInf
     return gUpperReturn;
 }
 
+// SecOC を経由する経路の、TransmitOverrideFct（偽物。トリガ送信の確認では呼ばれない）。
+Std_ReturnType FakeOverrideTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
+{
+    (void)TxPduId;
+    (void)PduInfoPtr;
+    return E_OK;
+}
+
 // TX パス: SrcPduId 10（トリガ送信に対応。上位層の PDU ID は 20）、SrcPduId 11（対応しない）。
 PduR_TxRoutingPathType gTxPaths[2];
 const PduR_RxDestType kRxDest = { PDUR_MODULE_COM, 30U, NULL };
@@ -134,6 +142,29 @@ TEST_F(PduR_CanIfTriggerTransmit_Test, PduR_CanIfTriggerTransmit_OK_ForwardsToUp
     EXPECT_EQ(gUpperPduId, 20U);        // パスの ConfDestPduId（上位層の PDU ID）へ読み替える
     EXPECT_EQ(gUpperPduInfo, &info);    // PduInfoPtr は、そのまま渡す
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(PduR_CanIfTriggerTransmit_Test, PduR_CanIfTriggerTransmit_OK_PathViaSecOCPassesOverrideId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    gTxPaths[0].TransmitOverrideFct = FakeOverrideTransmit;   // SecOC を経由する経路にする
+    gTxPaths[0].TransmitOverrideId  = 77U;                    // SecOC の TX PDU の ID（ConfDestPduId=20 とは別）
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 8U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = PduR_CanIfTriggerTransmit(10U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(gUpperCallCount, 1U);
+    EXPECT_EQ(gUpperPduId, 77U);   // SecOC の TX PDU の ID を渡す（SecOC が Secured I-PDU を保持する。[SWS_SecOC_00068]）
 }
 
 TEST_F(PduR_CanIfTriggerTransmit_Test, PduR_CanIfTriggerTransmit_OK_ReturnsUpperLayerReturnValue)

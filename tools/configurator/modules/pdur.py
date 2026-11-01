@@ -7,6 +7,10 @@ RX_FCT = {"COM": "Com_RxIndication", "CANTP": "CanTp_RxIndication", "SECOC": "Se
 TX_FCT = {"COM": "Com_TxConfirmation", "CANTP": "CanTp_TxConfirmation"}
 # トリガ送信（下位層が送信データを取りに来る）の転送先。対応するのは Com だけ
 TRIGGER_TRANSMIT_FCT = {"COM": "Com_TriggerTransmit"}
+# SecOC を経由する経路（transmitOverride.fct が SecOC_IfTransmit）のトリガ送信は、SecOC が、組み立てた Secured I-PDU を
+# 自分で複製する（上位層の Com へは転送しない。SWS_SecOC_00068）。上位層の PDU ID は、SecOC の TX PDU の ID（transmitOverride.id）
+SECOC_TRIGGER_TRANSMIT_FCT = "SecOC_TriggerTransmit"
+SECOC_OVERRIDE_FCT = "SecOC_IfTransmit"
 MODULE_HEADER = {"COM": "Com.h", "CANTP": "CanTp.h", "SECOC": "SecOC.h"}
 DAVINCI_ROUTING = "/ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/"
 
@@ -30,6 +34,10 @@ def validate(cfg):
     for p in cfg["txPaths"]:
         if p.get("triggerTransmit") and p["confModule"] not in TRIGGER_TRANSMIT_FCT:
             errors.append("txPaths %s: triggerTransmit は confModule=COM のときだけ指定できる" % p["name"])
+        ov = p.get("transmitOverride")
+        if p.get("triggerTransmit") and ov and ov["fct"] != SECOC_OVERRIDE_FCT:
+            errors.append("txPaths %s: triggerTransmit と transmitOverride を併用できるのは、transmitOverride.fct が %s のときだけ"
+                          % (p["name"], SECOC_OVERRIDE_FCT))
         if ("confIpdu" in p) != (p["confModule"] == "COM"):
             errors.append("txPaths %s: confIpdu は confModule=COM のときだけ指定する" % p["name"])
     return errors
@@ -198,7 +206,8 @@ def tx_paths(cfg, ctx):
                 ("TransmitOverrideId", "%dU" % ov["id"], None),
             ]
         if p.get("triggerTransmit"):
-            fields.append(("TriggerTransmitFct", TRIGGER_TRANSMIT_FCT[p["confModule"]],
+            fct = SECOC_TRIGGER_TRANSMIT_FCT if ov else TRIGGER_TRANSMIT_FCT[p["confModule"]]
+            fields.append(("TriggerTransmitFct", fct,
                            ["本プロジェクト独自の設定（PduR_CanIfTriggerTransmit() の転送先。SWS_PduR_00430）"]))
         out += struct_fields(fields, 8)
         out.append("    }" + ("," if i < n - 1 else ""))

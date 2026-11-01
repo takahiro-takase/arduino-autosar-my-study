@@ -478,8 +478,8 @@ BswM のルールは `perValue` で、値ごとに 1 本ずつ展開できる（
 |------|------|-------------|
 | `Com.json` `txIpdus[]` | `clearUpdateBit`（`COM_CLEAR_UPDATE_BIT_*`） | `ClearUpdateBit`（`ComTxIPduClearUpdateBit`） |
 | `Com.json` `txIpdus[]` | `triggerTransmitCalloutCbk`（関数名） | `TriggerTransmitCalloutCbk`（`ComIPduTriggerTransmitCallout`） |
-| `PduR.json` `txPaths[]` | `triggerTransmit: true`（`confModule` が `COM` のとき） | `TriggerTransmitFct = Com_TriggerTransmit` |
-| `CanIf.json` `txPdus[]` | `triggerTransmit: true`（`txConfirm` が `PDUR` のとき） | `TriggerTransmitFct = PduR_CanIfTriggerTransmit`（`CanIfTxPduTriggerTransmit`） |
+| `PduR.json` `txPaths[]` | `triggerTransmit: true`（`confModule` が `COM` のとき） | `TriggerTransmitFct = Com_TriggerTransmit`（`transmitOverride` が `SecOC_IfTransmit` の経路では `SecOC_TriggerTransmit`） |
+| `CanIf.json` `txPdus[]` | `triggerTransmit: true`（`txConfirm` が `PDUR` または `CANNM` のとき） | `TriggerTransmitFct = PduR_CanIfTriggerTransmit`（PDUR）または `CanNm_TriggerTransmit`（CANNM）（`CanIfTxPduTriggerTransmit`） |
 
 整合性検査（`checks.py`）が、次の食い違いをエラーにする。
 - PduR の経路の `triggerTransmit` と、対応する CanIf の TX PDU の `triggerTransmit` が一致しない（片方だけ `true` だと、要求が途中で止まる、または使われない）。

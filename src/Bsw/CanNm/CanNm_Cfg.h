@@ -68,6 +68,7 @@
 #define CANNM_E_UNINIT           0x01U  /* [SWS_CanNm_00002/00191]: 未初期化時の API 呼び出し */
 #define CANNM_E_INVALID_CHANNEL  0x02U  /* [SWS_CanNm_00192]: NetworkHandle が
                                       *  CANNM_MAIN_NETWORK_HANDLE 以外 */
+#define CANNM_E_INVALID_PDUID    0x03U  /* [SWS_CanNm_00195]: 不正な PDU ID の API 呼び出し（CanNm_TriggerTransmit()） */
 #define CANNM_E_NET_START_IND    0x04U  /* [SWS_CanNm_00336]: Bus-Sleep Mode 中に NM PDU を受信 */
 #define CANNM_E_NETWORK_TIMEOUT  0x11U  /* [SWS_CanNm_00193/00194]: Repeat Message/Normal
                                       *  Operation State で NM-Timeout Timer が満了 */
@@ -89,6 +90,7 @@
 #define CANNM_API_ID_DISABLE_COMMUNICATION    0x0CU
 #define CANNM_API_ID_ENABLE_COMMUNICATION     0x0DU
 #define CANNM_API_ID_MAIN_FUNCTION            0x13U
+#define CANNM_API_ID_TRIGGER_TRANSMIT         0x41U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CANNM_API_ID_TX_CONFIRMATION          0x40U
 #define CANNM_API_ID_RX_INDICATION            0x42U

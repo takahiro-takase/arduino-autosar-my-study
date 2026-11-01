@@ -67,6 +67,11 @@ Com と CanTp は同じ `SrcPduId` の空間を共有するため、衝突しな
 - 一致するパスが無いときは `PDUR_E_PDU_ID_INVALID`、NULL のポインタは `PDUR_E_PARAM_POINTER`、
   未初期化は `PDUR_E_UNINIT` を報告して `E_NOT_OK` です。
 
+SecOC を経由する経路（`TransmitOverrideFct` を持つ経路）は、上位層の PDU ID に、`ConfDestPduId` ではなく、
+SecOC の TX PDU の ID（`TransmitOverrideId`）を渡します。この経路の `TriggerTransmitFct` は `SecOC_TriggerTransmit()` で、
+SecOC が組み立てて保持している Secured I-PDU を、下位層へ複製します（上位層の Com へは転送しません。
+[SWS_SecOC_00068]。[`SecOC_Notes.md`](./SecOC_Notes.md) の「トリガ送信」参照）。
+
 本番の設定は、どのパスも `TriggerTransmitFct` を持たないので、本番コードからは呼ばれません。
 全体の流れは、[`Com_Notes.md`](./Com_Notes.md) の「Com_TriggerTransmit」を参照してください。
 

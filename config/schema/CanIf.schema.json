@@ -37,7 +37,7 @@
         "upperLayerTxPduId": { "$ref": "#/$defs/pduId", "description": "TxConfirmation で上位層へ返す PDU ID。txConfirm が PDUR のときだけ書く（CANNM のときは CanNm.json の nmTxPduId から引く）" },
         "hth": { "type": "integer", "minimum": 0, "maximum": 255 },
         "txConfirm": { "enum": ["PDUR", "CANNM", "CANTSYN"], "description": "送信完了通知の宛先（CANTSYN は時刻同期 CanTSyn。上位層へ返す ID は CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID）" },
-        "triggerTransmit": { "type": "boolean", "description": "true のとき、CanIf_TriggerTransmit() がこの TX PDU の送信データの要求を、上位層（PduR の PduR_CanIfTriggerTransmit）へ転送する（CanIfTxPduTriggerTransmit）。txConfirm が PDUR のときだけ指定できる。PduR の経路でも triggerTransmit を true にすること。省略または false なら、トリガ送信に対応しない" },
+        "triggerTransmit": { "type": "boolean", "description": "true のとき、CanIf_TriggerTransmit() がこの TX PDU の送信データの要求を、上位層（PduR の PduR_CanIfTriggerTransmit）へ転送する（CanIfTxPduTriggerTransmit）。txConfirm が PDUR（PduR_CanIfTriggerTransmit へ転送）または CANNM（CanNm_TriggerTransmit へ転送）のときだけ指定できる。PDUR のときは、PduR の経路でも triggerTransmit を true にすること。省略または false なら、トリガ送信に対応しない" },
         "notes": {
           "type": "object",
           "additionalProperties": false,
