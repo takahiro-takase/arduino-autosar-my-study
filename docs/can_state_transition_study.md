@@ -36,7 +36,7 @@ CAN の通信モードが、どのきっかけで、どう変わり、その結�
 | 現在の状態 | きっかけ | 次の状態 | 行うこと |
 |---|---|---|---|
 | NO_COM | `CanSM_ControllerModeIndication()`(バス活動の検知) | WAKEUP_VALIDATING | `CAN_CS_STOPPED` にして、検証タイマを開始 |
-| WAKEUP_VALIDATING | 有効な受信を確認し、ComM が `CanSM_RequestComMode(FULL_COM)` | FULL_COM | `CAN_CS_STARTED`、`CANIF_ONLINE`、Dem の Bus-Off を PASSED、ComM へ FULL_COM |
+| WAKEUP_VALIDATING | 有効な受信を確認し、ComM が `CanSM_RequestComMode(FULL_COM)` | FULL_COM | `CAN_CS_STARTED`、`CANIF_ONLINE`、ComM へ FULL_COM(Dem の Bus-Off の PASSED は報告しない。回復の確定のときだけ) |
 | WAKEUP_VALIDATING | 検証タイムアウト(`CANSM_WAKEUP_VALIDATION_MS` = 2000 ms) | NO_COM | `CAN_CS_SLEEP` へ戻す |
 | NO_COM | `RequestComMode(FULL_COM)` | FULL_COM | 同上 |
 | FULL_COM | `RequestComMode(SILENT_COM)` | SILENT_COM | `CanIf_SetPduMode(TX_OFFLINE)`、ComM へ SILENT_COM |
@@ -56,17 +56,25 @@ Bus-Off の回復の間隔(L1 / L2)は、次のとおりです。
 
 ComM は、`ComM_ChannelMode` として FULL_COM / SILENT_COM / NO_COM の 3 つを持ちます。FULL_COM → NO_COM の間は、CanNm の協調スリープを待つため、`ComM_ChannelMode` は FULL_COM のまま、「解放待ち」(`ComM_NmReleasePending`)になります。
 
+仕様の状態機械は、5 つの状態(NO_COM の 2 つ、FULL_COM の 2 つ、SILENT_COM)で、`ComM_GetState()` が返します。このプロジェクトとの対応は、[ComM_Notes.md「チャネルの状態機械（仕様との対応）」](modules/ComM_Notes.md#チャネルの状態機械仕様との対応と-comm_getstate)にまとめています。
+
 | きっかけ | ComM の動き | CanSM への要求 |
 |---|---|---|
 | アプリが FULL_COM を要求(起動時など) | 集約して、FULL_COM へ(`CommunicationAllowed` が TRUE のとき) | `RequestComMode(FULL_COM)` |
 | アプリが NO_COM を要求(エンジン OFF が続いた) | CanNm へ `NetworkRelease` だけ送って待つ。モードは FULL_COM のまま | なし |
 | CanNm が Prepare Bus-Sleep Mode へ(`ComM_Nm_PrepareBusSleepMode`) | SILENT_COM へ | `RequestComMode(SILENT_COM)` |
 | CanNm が Bus-Sleep Mode へ(`ComM_Nm_BusSleepMode`) | NO_COM へ。EcuM の RUN を解放 | `RequestComMode(NO_COM)` |
-| 他ノードの NM フレームで、スリープを取りやめた(`ComM_Nm_NetworkMode`) | FULL_COM へ戻す | `RequestComMode(FULL_COM)` |
+| 他ノードの NM フレームで、スリープを取りやめた(`ComM_Nm_NetworkMode`) | FULL_COM へ戻す。ユーザが要求していなければ、通信は要求せずに READY_SLEEP(下記) | `RequestComMode(FULL_COM)` |
 | Dcm の診断要求(`ComM_DCM_ActiveDiagnostic`) | 仮想のユーザとして FULL_COM を要求。解放待ちなら取り消す | `RequestComMode(FULL_COM)` |
 | 診断の終了(`ComM_DCM_InactiveDiagnostic`) | 仮想のユーザの要求を取り下げ、再集約 | 結果しだい |
-| 物理ウェイクアップの確定(`ComM_EcuM_WakeUpIndication`) | FULL_COM へ | `RequestComMode(FULL_COM)` |
-| CanSM から `ComM_BusSM_ModeIndication` | 結果を反映。FULL_COM なら EcuM の RUN を要求、NO_COM なら解放 | なし |
+| 物理ウェイクアップの確定(`ComM_EcuM_WakeUpIndication`) | FULL_COM へ(ユーザが要求していなければ、READY_SLEEP) | `RequestComMode(FULL_COM)` |
+| CanSM から `ComM_BusSM_ModeIndication` | 結果を反映。FULL_COM なら EcuM の RUN を要求し、Nm の起こし方を選ぶ(下記)。NO_COM なら解放 | なし |
+| READY_SLEEP のあとで、アプリが FULL_COM を要求 | 通信が必要なことを Nm へ伝える(`Nm_NetworkRequest`)。チャネルは FULL_COM のまま | なし |
+
+FULL_COM に入るときの Nm の起こし方(2026-11、[SWS_ComM_00665]/[SWS_ComM_00869]/[SWS_ComM_00903]):
+- ユーザ(アプリ、診断)が FULL_COM を要求しているなら、`Nm_NetworkRequest`。CanNm は Repeat Message State から Normal Operation State へ進みます(NETWORK_REQUESTED)。
+- 誰も要求していない起床(他ノードの通信だけで起きた場合)なら、`Nm_PassiveStartUp`。CanNm は Repeat Message State から Ready Sleep State へ進み、誰も通信を要求しなければ、そのままスリープへ向かいます(READY_SLEEP。`ComM_FullComSubState`)。
+- 以前は、起床のたびに、アプリの要求を FULL_COM へそろえて、`Nm_NetworkRequest` を呼んでいました(ユーザが要求していないのに、ComM が要求を作っていた)。
 
 CanSM が Bus-Off の間に出す SILENT_COM は、ComM から見ると、協調スリープの SILENT_COM と区別できません。（2026-11 までは、Bus-Off の回復中は、CanSM が ComM の要求を断る(`E_NOT_OK`)ことと合わせて、特別な扱い(`ComM_RetryNmReleaseAfterBusOff`)がありました。今は、CanSM が回復中の要求を受け付ける([SWS_CanSM_00182])ので、この扱いは不要になり、削除しました。）
 
