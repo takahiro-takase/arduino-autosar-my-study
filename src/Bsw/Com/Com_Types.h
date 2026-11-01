@@ -909,15 +909,16 @@ typedef struct
 //   4) エンディアン変換」の順であり、ComDataInvalidAction/ComFilterAlgorithm
 //   （NEW_IS_WITHIN 等、Com_ReceiveSignal() 側のみのゲート）は経由しない
 //   （[SWS_Com_00701]: デッドライン監視タイムアウト中でもゲートウェイは
-//   ルーティングを行う、という要求とも整合する。本実装はフレーム受信直後の
-//   同期呼び出しのため、そもそもタイムアウト状態になり得ない）。
+//   ルーティングを行う、という要求とも整合する。転送は Com_MainFunctionRouteSignals() が
+//   受信デッドラインの状態を見ずに行う）。
 //
-//   本実装は非 Signal Group のシグナル同士（1 RX シグナル → 1 TX シグナル）
-//   のみをサポートする。Signal Group のゲートウェイ（[SWS_Com_00361]/
-//   [SWS_Com_00383]: グループを一貫した集合として転送する要求）や
-//   update-bit 連動（[SWS_Com_00702]〜[SWS_Com_00706]）は、具体的な
-//   実機検証シナリオが無いため未実装（本プロジェクトの他機能と同じ
-//   「実利より学習効果、ただし検証可能な範囲に留める」方針）。
+//   Signal Group（[SWS_Com_00361]/[SWS_Com_00383]/[SWS_Com_00735]/[SWS_Com_00833]）:
+//   転送元・転送先のシグナルが Signal Group のメンバーでもよい。転送先の TX Signal Group は、
+//   1 回の転送処理で書くメンバーをすべて書いた後に、グループごとに 1 回コミットする
+//   （グループの一部のメンバーだけを書くマッピングは、縮小したグループへの転送）。
+//   update-bit（[SWS_Com_00702]〜[SWS_Com_00706]）: 転送元の I-PDU の update-bit が立っていないフレームは転送せず、
+//   転送先の update-bit は、転送先のシグナルの UpdateBitContributor と I-PDU の ClearUpdateBit に従う
+//   （詳細は Com_GatewayRoute() 参照）。
 //
 //   SrcSignalId  : ゲートウェイ元の RX シグナル ID
 //                  （Com_SignalConfigType.Direction=RX のシグナルであること）。
