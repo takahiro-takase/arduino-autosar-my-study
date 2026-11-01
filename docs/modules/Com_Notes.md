@@ -2003,7 +2003,8 @@ sends it.
 行うよう求めます（`[SWS_Com_00359]`、7.11.5 節）。以前の本実装は、`Com_RxIndication()` の中で
 `Com_GatewayRoute()` を同期的に呼んでいたので、次のように変更しました。
 
-- `Com_RxIndication()` は、RX I-PDU の受信ごとに、保留フラグ `Com_RxGwPending[IPduId]` を立てるだけです。
+- `Com_RxIndication()` は、RX I-PDU の受信ごとに、保留フラグ `Com_RxGwPending[IPduId]` を立てるだけです
+  （受信した I-PDU が update-bit を持つときは、update-bit が立っているフレームだけ）。
 - `Com_MainFunctionRouteSignals()`（Os の 100 ms タスク）が、保留が立っている RX I-PDU ごとに、保留を
   下ろして `Com_GatewayRoute()` を呼びます。保留は I-PDU ごとに 1 つなので、呼ばれる前に同じ I-PDU を
   何度受信しても、最新の値を 1 回だけ転送します。途中のフレームの値は転送されません（転送の遅れは、
@@ -2073,12 +2074,48 @@ Signal Gateway 自体（`ImmobilizerCmd`→`ImmobilizerStatus`）は `SecureComm
 「デッドライン監視タイムアウト中でもゲートウェイはルーティングを行う」とも
 整合します（`Com_MainFunctionRouteSignals()` は、受信デッドラインの状態を見ずに、保留を処理します）。
 
+### Signal Group と update-bit の転送（2026-11 追加）
+
+以前は未実装でしたが、次を実装しました（`Com_GatewayRoute()`）。
+
+**Signal Group**（`[SWS_Com_00361]`/`[SWS_Com_00383]`/`[SWS_Com_00735]`/`[SWS_Com_00833]`）:
+- 転送元は、RX Signal Group のメンバーでもよい。RX の Signal Group は、I-PDU 全体が受信できたときだけ
+  RX バッファへ取り込まれる（`[SWS_Com_00575]`）ので、RX バッファは、常に一貫した 1 組のデータです。
+  長さが足りないフレームは棄却され、転送されません。
+- 転送先が TX Signal Group のメンバーのときは、1 回の転送処理の中で、そのグループへ書くメンバーを
+  すべて `Com_SendSignal()` で書いた後、グループごとに 1 回だけ `Com_SendSignalGroup()` でコミットします
+  （`[SWS_Com_00383]`。メンバーは、そろって実バッファへ入ります）。
+- グループの一部のメンバーだけを転送するマッピングは、縮小したグループへの転送です（`[SWS_Com_00735]`。
+  転送しないメンバーは変わりません）。グループのメンバーを、グループでない単独のシグナルへ転送するのは、
+  `[SWS_Com_00833]` です。
+
+**update-bit**（`[SWS_Com_00702]`〜`[SWS_Com_00706]`）:
+
+| 転送元 | 転送先 | 転送元の update-bit | 動作 |
+|--------|--------|--------------------|------|
+| あり | あり | 立っている | 転送する。転送先の update-bit は立つ（`[SWS_Com_00702]`）。送信の後（または確認の後）にクリア |
+| あり | あり | 立っていない | 転送しない（`[SWS_Com_00703]`） |
+| あり | なし | 立っている | update-bit なしで転送する（`[SWS_Com_00704]`） |
+| あり | なし | 立っていない | 転送しない（`[SWS_Com_00705]`） |
+| なし | あり | － | 受信のたびに転送し、転送先の update-bit を立てる（`[SWS_Com_00706]`） |
+
+転送元の update-bit の判定は、転送の時点ではなく、受信の時点（`Com_RxIndication()`）で行います。保留から
+転送までの間に、update-bit が立っていないフレームが続けて届いても、先に届いた「更新あり」の
+フレームの転送を失わないためです（保留は、転送で下りるまで、残ります）。
+
+転送先の update-bit は、`Com_SendSignal()` が、転送先のシグナルの `UpdateBitContributor` に従って立てます。
+そのため、転送先のシグナルを `UpdateBitContributor=1` にしておく必要があります。クリアは、転送先 I-PDU の
+`ClearUpdateBit`（Transmit / TriggerTransmit / Confirmation）に従います。
+
 ### 明示する簡略化（Signal Gateway）
 
-- **非 Signal Group のシグナル同士（1:1）のみサポート**します。Signal Group の
-  ゲートウェイ（`[SWS_Com_00361]`/`[SWS_Com_00383]`: グループを一貫した集合と
-  して転送する要求）や update-bit 連動（`[SWS_Com_00702]`〜`[SWS_Com_00706]`）は、
-  具体的な実機検証シナリオが無いため未実装です。
+- **update-bit は I-PDU ごとに 1 つ**です（本実装の update-bit の単位）。仕様のシグナル・
+  シグナルグループごとの update-bit の判定（`[SWS_Com_00702]`〜`[SWS_Com_00706]`）は、
+  I-PDU 単位の判定になります（転送元の I-PDU の update-bit が立っていなければ、その I-PDU の
+  どのシグナルも転送しません）。
+- 本番のゲートウェイ（`ImmobilizerCmd` → `ImmobilizerStatus`）は、Signal Group も update-bit も
+  使いません。Signal Group と update-bit の転送（上の節）は、単体テストで確認しています
+  （具体的な実機検証シナリオが無いため、本番の設定には使っていません）。
 - **1:n のうち n=1 のみ設定**しています（`Com_GwMappingType` 自体は 1 つの
   ソースシグナルに対し複数のマッピングエントリを追加すれば 1:n に対応できる
   設計ですが、具体的な複数転送シナリオが無いため config は 1 件のみ）。

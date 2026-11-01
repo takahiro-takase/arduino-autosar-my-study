@@ -2653,8 +2653,13 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         /* Signal Gateway（[SWS_Com_00872]: I-PDU callout の次の処理段階）。
          * 転送そのものは、受信割り込みから切り離して Com_MainFunctionRouteSignals() で行う
          * （[SWS_Com_00359]）ので、ここでは保留を立てるだけにする。ゲートウェイの設定が 1 つも無いときは、
-         * 転送する先がないので、立てない。 */
-        if (Com_ConfigPtr->GwMappingCount != 0U)
+         * 転送する先がないので、立てない。I-PDU が update-bit を持つときは、update-bit が立っているフレームだけ、
+         * 保留を立てる（[SWS_Com_00703]/[SWS_Com_00705]）。転送の時点ではなく、受信の時点で判定するのは、
+         * 保留から転送までの間に、update-bit が立っていないフレームが続けて届いても、先に届いた
+         * 「更新あり」のフレームの転送を失わないため（保留は、転送で下りるまで、残る）。 */
+        if ((Com_ConfigPtr->GwMappingCount != 0U)
+            && ((ipdu->UpdateBitPosition == COM_UPDATE_BIT_NONE)
+                || (Com_UnpackSignal(Com_RxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN) != 0U)))
         {
             Com_RxGwPending[ipdu->IPduId] = 1U;
         }
@@ -3614,7 +3619,7 @@ static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_Signa
 /**
  * \brief   Signal Gateway: RX I-PDU の受信を機に、紐づく TX シグナルへ値を転送する。
  *
- * \details Com_RxIndication() が RX バッファを更新した直後に呼ばれる。
+ * \details Com_MainFunctionRouteSignals() が、Com_RxIndication() の立てた保留ごとに呼ぶ。
  *          `Com_ConfigPtr->GwMappings[]` を線形検索し、`SrcSignalId` が
  *          rxIPduId に属するエントリごとに、RX バッファから生値を直接
  *          アンパックして `Com_SendSignal(DestSignalId, ...)` を呼ぶ
@@ -3626,18 +3631,45 @@ static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_Signa
  *          行う（SWC が直接呼ぶ場合と全く同じ経路。7.2.5 節 "the signal
  *          processing does not differ ..." のとおり）。
  *
+ *          update-bit（[SWS_Com_00702]〜[SWS_Com_00706]）: 受信した I-PDU が update-bit を持つとき
+ *          （UpdateBitPosition が COM_UPDATE_BIT_NONE でないとき）、その update-bit が立っていないフレームは、
+ *          転送の保留自体を立てない（[SWS_Com_00703]/[SWS_Com_00705]。Com_RxIndication() が受信の時点で
+ *          判定する。保留から転送までの間に、update-bit が立っていないフレームが続けて届いても、先に届いた
+ *          「更新あり」のフレームの転送を失わないため）。本関数が呼ばれたときは、更新ありの受信があったので、
+ *          その時点の RX バッファの内容を転送する（[SWS_Com_00702]/[SWS_Com_00704]）。
+ *          転送先の update-bit は、Com_SendSignal() が、転送先のシグナルの UpdateBitContributor に従って、
+ *          立てる（[SWS_Com_00702]/[SWS_Com_00706]。転送元に update-bit が無くても立てる）。転送先に update-bit が
+ *          無ければ、update-bit なしで転送する（[SWS_Com_00704]）。転送先の update-bit は、転送先 I-PDU の
+ *          ClearUpdateBit に従って、送信の後（または確認の後）にクリアされる（[SWS_Com_00702]）。
+ *          本実装の update-bit は I-PDU ごとに 1 つなので、判定も I-PDU 単位である。
+ *
+ *          Signal Group（[SWS_Com_00361]/[SWS_Com_00383]/[SWS_Com_00735]/[SWS_Com_00833]）: 転送元は、
+ *          RX Signal Group のメンバー（RX I-PDU の IsSignalGroup=1）でも、通常のシグナルと同じに読む。RX の
+ *          Signal Group は、I-PDU 全体が受信できたときだけ RX バッファへ取り込まれる（[SWS_Com_00575]）ので、
+ *          RX バッファの内容は、常に一貫した 1 組のデータである。転送先が TX Signal Group のメンバーのときは、
+ *          1 回の転送処理（本関数の 1 回の呼び出し）の中で、そのグループへ書くメンバーをすべて
+ *          Com_SendSignal() で書いた後、グループごとに 1 回だけ Com_SendSignalGroup() でコミットする
+ *          （[SWS_Com_00383]。グループの一部のメンバーだけを転送するマッピングは、縮小したグループへの転送になる。
+ *          [SWS_Com_00735]。グループのメンバーを、グループでない単独のシグナルへ転送するのは、[SWS_Com_00833]）。
+ *          Com_SendSignal() が E_NOT_OK（書けなかった）を返したメンバーのグループは、コミットしない
+ *          （古いシャドウバッファの値を送らないため）。
+ *
  * \param[in]  rxIPduId  受信した RX I-PDU の ID（Com_IPduConfigType.IPduId）。
  *
- * \pre        Com_ConfigPtr が NULL でないこと（Com_RxIndication() が保証する）。
+ * \pre        Com_ConfigPtr が NULL でないこと（Com_MainFunctionRouteSignals() が保証する）。
  * \pre        Com_RxBuffer[rxIPduId] が最新の受信データで更新済みであること。
  *
- * \AUTOSARReq     {SWS_Com_00357, SWS_Com_00360, SWS_Com_00377, SWS_Com_00701}
+ * \AUTOSARReq     {SWS_Com_00357, SWS_Com_00360, SWS_Com_00361, SWS_Com_00362, SWS_Com_00377, SWS_Com_00383,
+ *                  SWS_Com_00701, SWS_Com_00702, SWS_Com_00704, SWS_Com_00706, SWS_Com_00735, SWS_Com_00833}
  * \ServiceID      {0xF5}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
 static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
 {
+    /* 今回の転送で書いた、転送先の TX Signal Group（IPduId のビット）。ループの後で、グループごとに 1 回コミットする。 */
+    uint32 destGroupMask = 0U;
+
     for (uint8 g = 0U; g < Com_ConfigPtr->GwMappingCount; g++)
     {
         const Com_GwMappingType* gw = &Com_ConfigPtr->GwMappings[g];
@@ -3675,7 +3707,31 @@ static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
          * value は uint32 のローカル変数のため、その先頭アドレスを渡せば
          * Com_SendSignal() 内部が DestSignalId の BitSize に応じて必要な
          * バイト数だけリトルエンディアンで読み取る（既存の呼び出し規約と同じ）。 */
-        (void)Com_SendSignal(gw->DestSignalId, &value);
+        const uint8 sendResult = Com_SendSignal(gw->DestSignalId, &value);
+
+        /* 転送先が TX Signal Group のメンバーなら、Com_SendSignal() はシャドウバッファへ書いただけなので、
+         * ループの後で、グループごとにコミットする（[SWS_Com_00383]）。書けなかったとき（E_NOT_OK。不正なシグナルなど）は、
+         * 古いシャドウバッファの値を送らないよう、コミットの対象にしない。I-PDU Group の停止中
+         * （COM_SERVICE_NOT_AVAILABLE）は、シャドウバッファへは書けているので、SWC が書くときと同じに、コミットする。 */
+        const uint8 destIdx = Com_FindSignalIndex(gw->DestSignalId);
+        if ((sendResult != E_NOT_OK) && (destIdx < Com_ConfigPtr->SignalCount))
+        {
+            const Com_SignalConfigType* destSig = &Com_ConfigPtr->Signals[destIdx];
+            const Com_IPduConfigType* destIpdu =
+                (destSig->IPduId < COM_TX_IPDU_MAX) ? Com_FindTxIPdu(destSig->IPduId) : NULL;
+            if ((destIpdu != NULL) && (destIpdu->IsSignalGroup != 0U))
+            {
+                destGroupMask |= ((uint32)1U << destSig->IPduId);
+            }
+        }
+    }
+
+    for (uint8 i = 0U; i < COM_TX_IPDU_MAX; i++)
+    {
+        if (((destGroupMask >> i) & 1U) != 0U)
+        {
+            (void)Com_SendSignalGroup(i);
+        }
     }
 }
 
