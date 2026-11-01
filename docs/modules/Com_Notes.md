@@ -855,16 +855,33 @@ Signal Group 側（`Com_SendSignalGroup()`）も同種の問題を抱えてい�
 同じ判断軸）に条件づけました。非 Signal Group 側の `passesFilter` と対になる
 考え方です。
 
-**ComTxIPduClearUpdateBit は Transmit と TriggerTransmit のみ（Confirmation は無し）**:
+**ComTxIPduClearUpdateBit は 3 択すべてを実装（既定は Transmit）**:
 実 AUTOSAR は Transmit（`PduR_ComTransmit` 呼び出し直後にクリア）/ Confirmation
 （送信確認後にクリア）/ TriggerTransmit（トリガ送信後にクリア）の 3 択です。本実装は
 `Com_IPduConfigType.ClearUpdateBit`（`Com_TxClearUpdateBitType`、省略すると Transmit）で
-Transmit と TriggerTransmit を選べます（TriggerTransmit は、下の
-「Com_TriggerTransmit（トリガ送信）」の節）。Confirmation は実装していません。
-本プロジェクトの送信経路は `Com_MainFunctionTx()` →
-`Com_DoTransmit()` → `PduR_ComTransmit()` が同期的に SPI 送信まで完了する
-（実際の送信完了と `PduR_ComTransmit` 呼び出しの間に有意な時間差がない）ため、
-3 つのタイミングの違いを意味のある形で再現できないという判断です。
+3 つを選べます（TriggerTransmit は、下の「Com_TriggerTransmit（トリガ送信）」の節、
+Confirmation は、下の「ClearUpdateBit=Confirmation」）。本番の I-PDU は、すべて既定の Transmit です。
+（以前は Confirmation を未実装として、「本プロジェクトの送信経路は `PduR_ComTransmit()` が同期的に SPI 送信まで
+完了するので、3 つのタイミングの違いを再現できない」と判断していましたが、送信の確認（`Com_TxConfirmation()`）は
+`Can_MainFunction_Write()` が後から届けるので、時間差はあります。2026-11 に実装しました。）
+
+**ClearUpdateBit=Confirmation（[SWS_Com_00577]、2026-11 追加）**:
+`Com_DoTransmit()` は update-bit をクリアせず、`Com_TxConfirmation()` が、確認が E_OK で届いたときにクリアします。
+失敗の通知（`E_NOT_OK`）では、クリアしません（確認されていないため）。実装上の注意が 2 つあります。
+
+- **送信と確認の間に、新しい値が書かれたとき**: 仕様どおりに「確認の後に、すべての update-bit をクリア」すると、
+  送信してから確認が届くまでの間に `Com_SendSignal()` などが立て直した update-bit も消えてしまい、次の送信に
+  載る新しい値が、受信側で「更新なし」として扱われます。そこで、update-bit を立てる処理を
+  `Com_SetTxUpdateBit()` へまとめ、「直前の送信の後に、update-bit が立て直されたか」
+  （`Com_TxUpdatedSinceTx[]`、`Com_DoTransmit()` の成功で 0）を記録し、立て直されていれば、クリアしません
+  （次の送信の確認でクリアします）。
+- **再送（`ComTxModeNumberOfRepetitions`、[SWS_Com_00305]）**: 再送が残っている間（`Com_TxRepeatsRemaining[]` が
+  0 でない間）は、確認でクリアせず、最後の送信の確認でクリアします。再送の残りは、送信の時点で減らす実装
+  （`Com_MainFunctionTx()` の説明参照）なので、再送の間隔が確認の遅れより短いと、最後の 1 つ前の確認で
+  クリアすることがありえます（本プロジェクトの再送の間隔は 100 ms 以上で、確認は 1 ms 周期のタスクが届けるので、
+  実際には起きません）。
+
+本番の I-PDU には、Confirmation を使うものはありません（動作は変わりません）。
 
 **レビューで見つかった問題（update-bit クリアが送信結果を無視していた）**:
 このコード自体は、実際に `WarningStatus` へ試験的に適用していた開発中の段階で

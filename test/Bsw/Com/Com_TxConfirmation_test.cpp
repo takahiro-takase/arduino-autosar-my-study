@@ -15,6 +15,8 @@
 extern "C" {
 #include "Com.h"
 #include "Fake_Det_Hw.h"
+#include "Fake_Millis.h"
+#include "Wrap_PduR.h"
 }
 
 /* ======================================================================
@@ -224,6 +226,73 @@ const Com_ConfigType kTestConfig = {
     NULL, 0U
 };
 
+// ComTxIPduClearUpdateBit=Confirmation の確認用の設定（update-bit は byte1 の bit0）。
+// 設定テーブルは Com が参照し続けるため、静的な領域に置く。
+Com_IPduConfigType   gCuIPdu;
+Com_SignalConfigType gCuSignal;
+Com_ConfigType       gCuConfig;
+
+const Com_SignalIdType kCuSignalId = 5U;
+
+// repetitions: ComTxModeNumberOfRepetitions（SWS_Com_00305）。
+void InitClearUpdateBitConfirmation(Com_TxClearUpdateBitType clearUpdateBit, uint8 repetitions)
+{
+    gCuIPdu = {};
+    gCuIPdu.IPduId             = 0U;
+    gCuIPdu.DLC                = 2U;
+    gCuIPdu.PduRId             = 0U;
+    gCuIPdu.TxModeMode         = COM_TX_MODE_DIRECT;
+    gCuIPdu.TxModeModeTrue     = COM_TX_MODE_DIRECT;
+    gCuIPdu.NumberOfRepetitions = repetitions;
+    gCuIPdu.RepetitionPeriodMs = 100U;
+    gCuIPdu.UpdateBitPosition  = 15U;
+    gCuIPdu.IpduGroupId        = COM_IPDU_GROUP_NONE;
+    gCuIPdu.ClearUpdateBit     = clearUpdateBit;
+
+    gCuSignal = {};
+    gCuSignal.SignalId             = kCuSignalId;
+    gCuSignal.Direction            = COM_SIGNAL_DIRECTION_TX;
+    gCuSignal.IPduId               = 0U;
+    gCuSignal.BitPosition          = 0U;
+    gCuSignal.BitSize              = 8U;
+    gCuSignal.Endian               = COM_BIG_ENDIAN;
+    gCuSignal.FilterAlgorithm      = COM_FILTER_ALWAYS;
+    gCuSignal.Mask                 = 0xFFU;
+    gCuSignal.UpdateBitContributor = 1U;
+    gCuSignal.TransferProperty     = COM_TRANSFER_PROPERTY_TRIGGERED_ON_CHANGE;
+    gCuSignal.RxDataTimeoutAction  = COM_RX_TIMEOUT_ACTION_NONE;
+    gCuSignal.DataInvalidAction    = COM_DATA_INVALID_ACTION_NONE;
+
+    gCuConfig = {};
+    gCuConfig.TxIPdus     = &gCuIPdu;
+    gCuConfig.TxIPduCount = 1U;
+    gCuConfig.Signals     = &gCuSignal;
+    gCuConfig.SignalCount = 1U;
+
+    FakeMillis_Reset();   // Com_Init() が時刻を取り込むため、Init より前にリセットする
+    WrapPduR_Reset();
+    FailFromCallCount_PduR_ComTransmit = 0U;
+    ForcedReturn_PduR_ComTransmit      = E_OK;
+    FakeDetHw_LogSuppressed = 1U;
+    Com_DeInit();
+    Com_Init(&gCuConfig);
+    FakeDetHw_Reset();
+    FakeDetHw_LogSuppressed = 0U;
+}
+
+// update-bit（byte1 の bit0）を返す。
+uint8 UpdateBit()
+{
+    return (uint8)(Com_Test_GetTxBuffer(0U)[1] & 0x01U);
+}
+
+// 値を書いて update-bit を立て、Com_MainFunctionTx() で送信する（PduR_ComTransmit() が 1 回呼ばれる）。
+void WriteAndTransmit(uint8 value)
+{
+    (void)Com_SendSignal(kCuSignalId, &value);
+    Com_MainFunctionTx();
+}
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -361,6 +430,144 @@ TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_SignalGroupAckCallbackIsCa
     /* ----------------------- */
     EXPECT_EQ(gGroupAckCount, 1U);
     EXPECT_EQ(gSignalAckCount, 0U);   // Signal Group では、グループ単位の通知だけを呼ぶ
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_ClearsUpdateBitWhenConfiguredConfirmation)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitClearUpdateBitConfirmation(COM_CLEAR_UPDATE_BIT_CONFIRMATION, 0U);
+    WriteAndTransmit(0x55U);
+    ASSERT_EQ(CallCount_PduR_ComTransmit, 1U);
+    ASSERT_EQ(UpdateBit(), 1U);   // Transmit 直後には、クリアしない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(UpdateBit(), 0U);   // 確認が届いたあとに、クリアする（[SWS_Com_00577]）
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_DoesNotClearUpdateBitWhenConfiguredTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitClearUpdateBitConfirmation(COM_CLEAR_UPDATE_BIT_TRANSMIT, 0U);
+    WriteAndTransmit(0x55U);
+    ASSERT_EQ(UpdateBit(), 0U);   // Transmit 設定は、送信の直後にクリアする
+    const uint8 again = 0x66U;
+    (void)Com_SendSignal(kCuSignalId, &again);   // update-bit を立て直す
+    ASSERT_EQ(UpdateBit(), 1U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(UpdateBit(), 1U);   // Transmit 設定は、確認ではクリアしない
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_NG_FailedConfirmationKeepsUpdateBit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitClearUpdateBitConfirmation(COM_CLEAR_UPDATE_BIT_CONFIRMATION, 0U);
+    WriteAndTransmit(0x55U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_NOT_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(UpdateBit(), 1U);   // 送信の失敗の通知では、クリアしない（確認されていない）
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_KeepsUpdateBitSetAgainAfterTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitClearUpdateBitConfirmation(COM_CLEAR_UPDATE_BIT_CONFIRMATION, 0U);
+    WriteAndTransmit(0x55U);
+    const uint8 newer = 0x66U;
+    (void)Com_SendSignal(kCuSignalId, &newer);   // 送信してから確認が届くまでの間に、新しい値を書く
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(UpdateBit(), 1U);                              // 新しい値の update-bit は、消さない
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x66U);
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_ClearsUpdateBitAtNextConfirmationAfterNewerTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitClearUpdateBitConfirmation(COM_CLEAR_UPDATE_BIT_CONFIRMATION, 0U);
+    WriteAndTransmit(0x55U);
+    const uint8 newer = 0x66U;
+    (void)Com_SendSignal(kCuSignalId, &newer);
+    Com_TxConfirmation(0U, E_OK);                // 1 回目の確認では、クリアしない
+    ASSERT_EQ(UpdateBit(), 1U);
+    Com_MainFunctionTx();                        // 新しい値を送信する
+    ASSERT_EQ(CallCount_PduR_ComTransmit, 2U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(UpdateBit(), 0U);   // 新しい値の送信の確認で、クリアする
+}
+
+TEST_F(Com_TxConfirmation_Test, Com_TxConfirmation_OK_ClearsUpdateBitAtLastConfirmationOfRealRepeatSequence)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    InitClearUpdateBitConfirmation(COM_CLEAR_UPDATE_BIT_CONFIRMATION, 1U);   // 1 回の再送（合計 2 回の送信）
+    WriteAndTransmit(0x55U);                       // 1 回目の送信（再送が 1 回残る）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Com_TxConfirmation(0U, E_OK);                  // 1 回目の確認
+    const uint8 afterFirstConfirm = UpdateBit();
+    FakeMillis_Value += 100U;                      // 再送の間隔（RepetitionPeriodMs）を経過させる
+    Com_MainFunctionTx();                          // 2 回目の送信（再送を使い切る）
+    const uint32 transmits = CallCount_PduR_ComTransmit;
+    const uint8 afterSecondTransmit = UpdateBit();
+    Com_TxConfirmation(0U, E_OK);                  // 2 回目の確認
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(afterFirstConfirm, 1U);              // 再送が残っている間は、クリアしない
+    EXPECT_EQ(transmits, 2U);
+    EXPECT_EQ(afterSecondTransmit, 1U);            // 再送の送信の直後にも、クリアしない
+    EXPECT_EQ(UpdateBit(), 0U);                    // 最後の送信の確認で、クリアする
 }
 
 }  // namespace

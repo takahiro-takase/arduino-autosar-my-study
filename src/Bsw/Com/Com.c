@@ -151,6 +151,11 @@ static uint8 Com_TxIPduStarted[COM_TX_IPDU_MAX];
  * そのときの RX バッファの最新値が転送される。Com_Init() で 0、Com_IpduGroupStop() で I-PDU ごとに 0。 */
 static uint8 Com_RxGwPending[COM_RX_IPDU_MAX];
 
+/* ClearUpdateBit=COM_CLEAR_UPDATE_BIT_CONFIRMATION の TX I-PDU 用（[SWS_Com_00577]）。直前の送信（Com_DoTransmit()）の後に、
+ * update-bit が立て直された（Com_SetTxUpdateBit() が呼ばれた）ら 1。1 のとき、Com_TxConfirmation() は、
+ * 新しい値の update-bit を消さないように、クリアしない。Com_DoTransmit() の成功で 0、Com_Init()/Com_IpduGroupStart() で 0。 */
+static uint8 Com_TxUpdatedSinceTx[COM_TX_IPDU_MAX];
+
 /* Com_EnableReceptionDM()/Com_DisableReceptionDM()（SRS_Com_00192、2026-08
  * 追加）用。Com_RxIPduStarted とは独立した軸で、I-PDU Group の起動/停止
  * （送受信処理そのもの）とは別に、受信デッドライン監視の評価だけを
@@ -296,6 +301,8 @@ static uint8 Com_ServiceResult(uint8 started);
 static void Com_PackInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir);
 static void Com_ResetBufferToInitValues(uint8* buf, Com_IPduIdType id, Com_SignalDirectionType dir);
 static void Com_GatewayRoute(Com_IPduIdType rxIPduId);
+static void Com_SetTxUpdateBit(const Com_IPduConfigType* ipdu);
+static void Com_ClearTxUpdateBit(const Com_IPduConfigType* ipdu);
 static const Com_IPduConfigType* Com_FindTxIPdu(Com_IPduIdType IPduId);
 static const Com_IPduConfigType* Com_FindRxIPdu(Com_IPduIdType IPduId);
 static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId);
@@ -414,6 +421,7 @@ void Com_Init(const Com_ConfigType* config)
         Com_TxTimedOut[i]           = 0U;
         Com_TxUsingFirstTimeout[i]  = 1U;
         Com_GroupTriggerPending[i] = 0U;
+        Com_TxUpdatedSinceTx[i]    = 0U;
         Com_TxIPduStarted[i] = 1U;  /* 上と同じ理由 */
     }
 
@@ -651,8 +659,9 @@ void Com_IpduGroupStart(Com_IpduGroupIdType IpduGroupId, boolean initialize)
         /* [SWS_Com_00787] 項目4: update-bit をクリアする。 */
         if (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
         {
-            Com_PackSignal(Com_TxBuffer[id], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+            Com_ClearTxUpdateBit(ipdu);
         }
+        Com_TxUpdatedSinceTx[id] = 0U;
 
         if (initialize)
         {
@@ -1223,7 +1232,7 @@ uint8 Com_SendSignal(Com_SignalIdType SignalId, const void* SignalDataPtr)
          * 見つかり対応した）。 */
         if (passesFilter && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE) && (sig->UpdateBitContributor == 1U))
         {
-            Com_PackSignal(Com_TxBuffer[sig->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+            Com_SetTxUpdateBit(ipdu);
         }
 
         /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もバッファ更新・TMS/
@@ -1609,7 +1618,7 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId)
      * の条件には含めない（groupTriggered のみで判定する）。 */
     if (groupTriggered && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE))
     {
-        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        Com_SetTxUpdateBit(ipdu);
     }
 
     /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
@@ -1880,7 +1889,7 @@ uint8 Com_SendSignalGroupArray(Com_SignalGroupIdType SignalGroupId, const uint8*
 
     if (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
     {
-        Com_PackSignal(Com_TxBuffer[SignalGroupId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+        Com_SetTxUpdateBit(ipdu);
     }
 
     /* [SWS_Com_00334]/Table 3: I-PDU Group 停止中もコミット・TMS 評価は
@@ -2392,7 +2401,7 @@ Std_ReturnType Com_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
     if ((ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
         && (ipdu->ClearUpdateBit == COM_CLEAR_UPDATE_BIT_TRIGGER_TRANSMIT))
     {
-        Com_PackSignal(Com_TxBuffer[TxPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+        Com_ClearTxUpdateBit(ipdu);
     }
 
     DET_LOGD(TAG, "TriggerTransmit iPdu=%u len=%u", (unsigned)TxPduId, (unsigned)PduInfoPtr->SduLength);
@@ -2696,6 +2705,17 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  *          で発生した WDT リセット障害と同じ問題は起きない（呼び出しチェーンを
  *          実際にたどって確認済み）。
  *
+ *          ClearUpdateBit が COM_CLEAR_UPDATE_BIT_CONFIRMATION の I-PDU は、確認が E_OK で届いたときに、
+ *          update-bit をクリアする（[SWS_Com_00577]）。ただし、送信の後に update-bit が立て直されたとき
+ *          （Com_TxUpdatedSinceTx）は、新しい値の update-bit を消さないよう、クリアしない。また、
+ *          ComTxModeNumberOfRepetitions の再送が残っている間（Com_TxRepeatsRemaining が 0 でない間）は、
+ *          最後の送信の確認を待つ（[SWS_Com_00305]）。
+ *
+ *          前提: 同じ I-PDU の送信が、確認の前に 2 つ以上、積み残されることはない。送信は Com_MainFunctionTx()
+ *          （100 ms 周期。1 回の呼び出しで、1 つの I-PDU を送るのは多くても 1 回）だけが行い、確認は
+ *          Can_MainFunction_Write()（1 ms 周期）が、キューから取り出して届けるため。この前提が崩れると
+ *          （送信の間隔が、確認の遅れより短い構成にすると）、確認の対応が取れなくなる。
+ *
  * \param[in]  TxPduId  送信が完了した TX I-PDU の PduR 層 PDU ID
  *                      （= Com_IPduIdType と同一の値空間）。
  * \param[in]  result   CanIf から転送された送信結果。
@@ -2720,7 +2740,7 @@ void Com_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  *             Can_Write() は送信成功時のみ CanIf_TxConfirmation() を呼ぶ。
  *             MCP2515 との SPI 通信が同期的なため）。
  *
- * \AUTOSARReq     {SWS_Com_00124, SWS_Com_00468, SWS_Com_00880}
+ * \AUTOSARReq     {SWS_Com_00124, SWS_Com_00468, SWS_Com_00880, SWS_Com_00577}
  * \ServiceID      {0x40}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -2764,6 +2784,17 @@ void Com_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
     }
 
     const Com_IPduConfigType* ipdu = Com_FindTxIPdu(TxPduId);
+
+    /* [SWS_Com_00577]: 確認が届いたあとに、update-bit をクリアする。 */
+    if ((ipdu != NULL) && (TxPduId < COM_TX_IPDU_MAX)
+        && (ipdu->UpdateBitPosition != COM_UPDATE_BIT_NONE)
+        && (ipdu->ClearUpdateBit == COM_CLEAR_UPDATE_BIT_CONFIRMATION)
+        && (Com_TxRepeatsRemaining[TxPduId] == 0U)
+        && (Com_TxUpdatedSinceTx[TxPduId] == 0U))
+    {
+        Com_ClearTxUpdateBit(ipdu);
+    }
+
     Com_InvokeTxNotification(ipdu, TxPduId, COM_TX_NOTIFY_ACK);
 }
 
@@ -3649,6 +3680,52 @@ static void Com_GatewayRoute(Com_IPduIdType rxIPduId)
 }
 
 /* ----------------------------------------------------------------------
+ * Com_SetTxUpdateBit
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   TX I-PDU の update-bit を立てる（[SWS_Com_00061]/[SWS_Com_00801]）。
+ *
+ * \details Com_SendSignal()/Com_SendSignalGroup()/Com_SendSignalGroupArray() が、値の更新のたびに呼ぶ。
+ *          update-bit を TX バッファへ書き、「直前の送信の後に、update-bit が立て直された」ことを
+ *          Com_TxUpdatedSinceTx[] に記録する（ClearUpdateBit=COM_CLEAR_UPDATE_BIT_CONFIRMATION の
+ *          I-PDU で、Com_TxConfirmation() が新しい値の update-bit を消さないため）。
+ *
+ * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止。UpdateBitPosition が COM_UPDATE_BIT_NONE でないこと。
+ *
+ * \ServiceID      {0xF7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_SetTxUpdateBit(const Com_IPduConfigType* ipdu)
+{
+    Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 1U);
+    Com_TxUpdatedSinceTx[ipdu->IPduId] = 1U;
+}
+
+/* ----------------------------------------------------------------------
+ * Com_ClearTxUpdateBit
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   TX I-PDU の update-bit をクリアする（[SWS_Com_00062]/[SWS_Com_00577]/[SWS_Com_00578]/[SWS_Com_00787]）。
+ *
+ * \details クリアするタイミング（ClearUpdateBit）の判定は呼び出し元が行う（Com_DoTransmit()、Com_TxConfirmation()、
+ *          Com_TriggerTransmit()、Com_IpduGroupStart()）。本関数は、TX バッファの update-bit を 0 にするだけ。
+ *          Com_SetTxUpdateBit() の対になる。
+ *
+ * \param[in]  ipdu  対象 TX I-PDU 設定。NULL 禁止。UpdateBitPosition が COM_UPDATE_BIT_NONE でないこと。
+ *
+ * \ServiceID      {0xF8}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+static void Com_ClearTxUpdateBit(const Com_IPduConfigType* ipdu)
+{
+    Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+}
+
+/* ----------------------------------------------------------------------
  * Com_FindTxIPdu
  * ---------------------------------------------------------------------- */
 
@@ -3767,7 +3844,9 @@ static uint8 Com_FindSignalIndex(Com_SignalIdType SignalId)
  *          「送信すべきかどうかの判断」は呼び出し元（`Com_MainFunctionTx()`）が
  *          既に済ませてから呼ぶ。
  *
- *          update-bit クリア（ipdu->UpdateBitPosition が 0xFF 以外の場合、
+ *          update-bit クリア（ClearUpdateBit が TRANSMIT の I-PDU のみ。TriggerTransmit は
+ *          Com_TriggerTransmit()、Confirmation は Com_TxConfirmation() が行う。
+ *          ipdu->UpdateBitPosition が 0xFF 以外の場合、
  *          SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当）: PduR_ComTransmit()
  *          が E_OK を返した場合のみクリアする（SWS_Com_00062 原文 "after this
  *          I-PDU was sent out via PduR_ComTransmit and PduR_ComTransmit
@@ -3842,7 +3921,7 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
     }
 
     /* update-bit クリア（SWS_Com_00062: ComTxIPduClearUpdateBit=Transmit 相当。
-     * TriggerTransmit は Com_TriggerTransmit() 側で処理する。Confirmation は未実装）。原文は "after this I-PDU
+     * TriggerTransmit は Com_TriggerTransmit() 側、Confirmation は Com_TxConfirmation() 側で処理する）。原文は "after this I-PDU
      * was sent out via PduR_ComTransmit and PduR_ComTransmit returned E_OK"
      * であり、ret==E_OK のときのみクリアする（ret を無視して無条件にクリア
      * していた過去の実装は誤り。失敗時にもクリアすると、update-bit だけが
@@ -3864,7 +3943,14 @@ static Std_ReturnType Com_DoTransmit(const Com_IPduConfigType* ipdu, unsigned lo
     {
         /* ClearUpdateBit=TRIGGER_TRANSMIT の I-PDU は、ここではクリアしない
          * （Com_TriggerTransmit() が内容を渡した後にクリアする。[SWS_Com_00578]）。 */
-        Com_PackSignal(Com_TxBuffer[ipdu->IPduId], ipdu->UpdateBitPosition, 1U, COM_BIG_ENDIAN, 0U);
+        Com_ClearTxUpdateBit(ipdu);
+    }
+
+    /* ClearUpdateBit=CONFIRMATION の I-PDU: この送信の後に update-bit が立て直されたかを、ここから記録し直す
+     * （Com_TxConfirmation() が、確認の時点でクリアしてよいかの判定に使う）。 */
+    if (ret == E_OK)
+    {
+        Com_TxUpdatedSinceTx[ipdu->IPduId] = 0U;
     }
 
     return ret;
