@@ -286,9 +286,13 @@ void Com_SwitchIpduTxMode(Com_IPduIdType PduId, boolean Mode);
 /* [SWS_Com_00398]: 受信デッドライン監視タイムアウト検出。Os の 100ms タスクから呼び出す。
  * 実仕様は Com_MainFunctionRx/Tx/RouteSignals の3関数に分かれており（単体の
  * Com_MainFunction は4.3.1仕様書に存在しない）、本プロジェクトも合わせて
- * 分割した（2026-08、RouteSignalsはComのSignal GatewayをRxIndication内で
- * 同期的に転送する設計のため対象外、Com.c 冒頭コメント参照）。 */
+ * 分割した（2026-08）。Com_MainFunctionRouteSignals は、当初は Signal Gateway を
+ * Com_RxIndication() 内で同期的に転送する設計のため対象外だったが、後に追加した
+ * （受信割り込みからの切り離し、[SWS_Com_00359]）。 */
 void Com_MainFunctionRx(void);
+/* [SWS_Com_00400]: Signal Gateway の転送（Com_RxIndication() が立てた保留を処理する）。
+ * Os の 100ms タスクから、Com_MainFunctionRx() の後、Com_MainFunctionTx() の前に呼び出す。 */
+void Com_MainFunctionRouteSignals(void);
 /* [SWS_Com_00399]: 送信スケジューリング（周期送信・変化時送信・TxTMS再送）と
  * 送信確認デッドライン監視。Os の 100ms タスクから呼び出す。 */
 void Com_MainFunctionTx(void);

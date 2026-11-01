@@ -333,7 +333,7 @@ TEST_F(Com_RxIndication_Test, Com_RxIndication_NG_NullSduDataPtr)
     EXPECT_EQ(FakeDetHw_LastErrorId, COM_E_PARAM_POINTER);
 }
 
-TEST_F(Com_RxIndication_Test, Com_RxIndication_OK_GatewayForwardsReceivedSignalToTransmitSignal)
+TEST_F(Com_RxIndication_Test, Com_RxIndication_OK_GatewayDefersForwardingToMainFunctionRouteSignals)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -349,43 +349,7 @@ TEST_F(Com_RxIndication_Test, Com_RxIndication_OK_GatewayForwardsReceivedSignalT
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0x5AU);   // 受信した値が、宛先の TX シグナルへ書かれる
-}
-
-TEST_F(Com_RxIndication_Test, Com_RxIndication_OK_GatewayIgnoresFramesOfOtherReceiveIPdu)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    InitWithGateway(kGwRxSignalOnPdu0);
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    ReceiveOn(1U, 0x5AU);   // 中継元のシグナルを含まない I-PDU のフレーム
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0U);   // 中継しない
-}
-
-TEST_F(Com_RxIndication_Test, Com_RxIndication_OK_GatewayIgnoresUnknownSourceSignal)
-{
-    /* ----------------------- */
-    /* ---- 準備 (Arrange) --- */
-    /* ----------------------- */
-    InitWithGateway(99U);   // 中継元に、存在しないシグナルを指定している
-
-    /* ----------------------- */
-    /* ---- 実行 (Act) ------- */
-    /* ----------------------- */
-    ReceiveOn(0U, 0x5AU);
-
-    /* ----------------------- */
-    /* ---- 評価 (Assert) ---- */
-    /* ----------------------- */
-    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0U);   // 中継しない
+    EXPECT_EQ(Com_Test_GetTxBuffer(0U)[0], 0U);   // 転送は、Com_MainFunctionRouteSignals() が行う（受信の中では書かない。[SWS_Com_00359]）
 }
 
 }  // namespace

@@ -80,6 +80,8 @@
 #define BSWM_OS_TASK_CANSM_MAIN  OsConf_OsTask_CanSM_MainFunction  /**< CanSM_MainFunction (10 ms) */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define BSWM_OS_TASK_COM_MAIN  OsConf_OsTask_Com_MainFunctionRx  /**< Com_MainFunctionRx (100 ms) */
+/* cppcheck-suppress misra-c2012-2.5 */
+#define BSWM_OS_TASK_COM_ROUTE_SIGNALS  OsConf_OsTask_Com_MainFunctionRouteSignals  /**< Com_MainFunctionRouteSignals (100 ms) */
 /* Com_MainFunctionTx は Com_MainFunctionRx の直後に挿入した
  * （2026-08、単体だった Com_MainFunction を実仕様準拠の Rx/Tx へ分割した際に
  * 新設）。SecOC_MainFunctionTxが同一 Os_SchedulerStep() パス内で
@@ -120,7 +122,7 @@
  * 制御不能になっていたバグを修正した経緯がある）。
  * ----------------------------------------------------------------------- */
 /** 全タスク（osTasks に挙げたタスクすべて）。挙げていない Os のタスクは意図的に除外している——上記の注記参照。 */
-#define BSWM_TASK_MASK_ALL  0xC3FFFFUL
+#define BSWM_TASK_MASK_ALL  0x187FFFFUL
 
 /** アプリ Runnable タスク: RTE_ENGINE + RTE_WARNING
  *   POST_RUN 時に停止し、アプリロジックを凍結する */

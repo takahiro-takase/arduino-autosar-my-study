@@ -1980,6 +1980,27 @@ sends it.
 （フィルタ・TMS・送信要否判定は `Com_SendSignal()` 既存のロジックがそのまま
 適用されるため、ゲートウェイ専用の特別なパス分岐は不要です）。
 
+### 転送のタイミング（`Com_MainFunctionRouteSignals()`、2026-11）
+
+仕様は、ゲートウェイの処理を受信割り込みから切り離し、すべて `Com_MainFunctionRouteSignals()` の中で
+行うよう求めます（`[SWS_Com_00359]`、7.11.5 節）。以前の本実装は、`Com_RxIndication()` の中で
+`Com_GatewayRoute()` を同期的に呼んでいたので、次のように変更しました。
+
+- `Com_RxIndication()` は、RX I-PDU の受信ごとに、保留フラグ `Com_RxGwPending[IPduId]` を立てるだけです。
+- `Com_MainFunctionRouteSignals()`（Os の 100 ms タスク）が、保留が立っている RX I-PDU ごとに、保留を
+  下ろして `Com_GatewayRoute()` を呼びます。保留は I-PDU ごとに 1 つなので、呼ばれる前に同じ I-PDU を
+  何度受信しても、最新の値を 1 回だけ転送します。途中のフレームの値は転送されません（転送の遅れは、
+  最大で 100 ms です）。ゲートウェイの設定が 1 つも無いときは、保留を立てません。
+- BswM が `Com_MainFunctionRouteSignals()` のタスクを止めている間（SHUTDOWN など）は、保留が残り、
+  タスクの再開後に転送します（起こした直後のコマンドも失われません。実機ログで確認済み）。
+- Os のタスク表では、`Com_MainFunctionRx` の直後、`Com_MainFunctionTx` の前に置きます。転送で立った
+  送信要求は、同じティックの `Com_MainFunctionTx()` が拾うので、転送の遅れは、最大でも 100 ms（受信 →
+  次の `Com_MainFunctionRouteSignals()`）で、送信までの遅れは増えません。
+- `Com_IpduGroupStop()` は、停止する RX I-PDU の保留を捨てます（停止中に受信した分は転送しません）。
+- 未初期化のときは、何もせずに戻ります（`[SWS_Com_00666]`。DET へも報告しません）。
+- `[SWS_Com_00539]`（1 回の呼び出しで、I-PDU を送るのは多くても 1 回）は、本関数が I-PDU を直接
+  送信せず、`Com_SendSignal()` が送信要求を立てるだけ（実送信は `Com_MainFunctionTx()`）なので、自然に満たされます。
+
 ### 適用例 — ImmobilizerCmd（SecOC 検証済み）→ ImmobilizerStatus
 
 SecOC 検証に成功した `ImmobilizerCmd`（RX、CAN 0x120、KeyFobEcu 想定）を、
@@ -1988,7 +2009,8 @@ SecOC 検証に成功した `ImmobilizerCmd`（RX、CAN 0x120、KeyFobEcu 想定
 ```
 KeyFobEcu → SecOC（MAC・フレッシュネス検証） → Com_RxIndication(ComRxIPduId=2)
   → Rte_COMRxInd_SecureCommand()（ログのみ、既存のデモ用グルー）
-  → Com_GatewayRoute()（新規）
+  → （Com_RxIndication() は保留を立てるだけ。次の Com_MainFunctionRouteSignals() が転送する）
+  → Com_GatewayRoute()（Com_MainFunctionRouteSignals() の中）
       RX バッファから ImmobilizerCmd の生値をアンパック
       → Com_SendSignal(ComConf_ComSignal_ImmobilizerStatus_Tx, &value)
           （SWC が直接呼ぶ場合と全く同じ経路。COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD
@@ -2032,8 +2054,7 @@ Signal Gateway 自体（`ImmobilizerCmd`→`ImmobilizerStatus`）は `SecureComm
 `ComFilterAlgorithm(NEW_IS_WITHIN)` はいずれも `[SWS_Com_00872]` の処理段階に
 含まれておらず、ゲートウェイは経由しません。`[SWS_Com_00701]`
 「デッドライン監視タイムアウト中でもゲートウェイはルーティングを行う」とも
-整合します（本実装はフレーム受信直後の同期呼び出しのため、そもそも
-タイムアウト状態になり得ません）。
+整合します（`Com_MainFunctionRouteSignals()` は、受信デッドラインの状態を見ずに、保留を処理します）。
 
 ### 明示する簡略化（Signal Gateway）
 
@@ -2052,6 +2073,10 @@ Signal Gateway 自体（`ImmobilizerCmd`→`ImmobilizerStatus`）は `SecureComm
 
 `uds_tester` で「ImmobilizerCmd」ボタンから UNLOCK/LOCK を送信すると、Arduino
 ログに次のように出力されます。
+（`Gateway src=...` と `TX iPdu=3`、`PduR`/`CanIf`/`Can_Hw` の TX の行は DEBUG レベルのため、
+実機の既定（INFO）では出力されません。実機では、`Rte_COMRxInd_SecureCommand` の UNLOCK の行の後で、
+最大 100 ms 遅れて CAN 0x230 の ImmobilizerStatus（UNLOCK なら `01`）がバスに出ることで確認します。
+2026-11 以降は、転送が `Com_MainFunctionRouteSignals()` の周期（100 ms）で行われます。）
 
 ```
 [NNNNms] INFO  SecOC: RxInd: iPdu=0 verified OK (freshness=N)
