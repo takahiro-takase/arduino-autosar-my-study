@@ -582,8 +582,9 @@ Std_ReturnType CanSM_StartWakeupSource(NetworkHandleType network)
  *          トリガとして扱う（[SWS_CanSM_00622]/[SWS_CanSM_00608]）。トリガが効くのは WAKEUP_VALIDATING（検証中）だけで、
  *          コントローラを再びスリープさせて、NO_COM へ戻る（検証失敗と同じ。CanSM_MainFunction() の検証タイムアウトと
  *          共通の処理）。それ以外の状態では、何もしない（要求自体は受理する）。
- *          本プロジェクトの EcuM は、現在この関数を呼ばない（検証の失敗は、CanSM_MainFunction() の検証タイムアウトが
- *          自分で検出して、再スリープする）。
+ *          EcuM は、起床の検証が期限切れになったときに、EcuM_StopWakeupSources() からこの関数を呼ぶ（[SWS_EcuM_02926]）。
+ *          通常は、CanSM_MainFunction() の検証タイムアウト（CANSM_WAKEUP_VALIDATION_MS）が、EcuM の期限より先に
+ *          再スリープしているので、何も起こらない。
  *
  * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
  *

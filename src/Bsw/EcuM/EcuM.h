@@ -358,6 +358,36 @@ EcuM_WakeupSourceType EcuM_GetValidatedWakeupEvents(void);
 EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void);
 
 /**
+ * \brief   起床要因を、検証できる状態にする（コールアウト、[SWS_EcuM_02924]）。
+ *
+ * \details CAN の要因が含まれていれば、CanSM の検証を始める（`CanSM_StartWakeupSource()`）。
+ *          `EcuM_CheckWakeup()` が、起床を検出したときに呼ぶ。
+ *
+ * \param[in]  wakeupSource  検証を始める起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02924, SWS_EcuM_02858}
+ * \ServiceID      {0x46}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_StartWakeupSources(EcuM_WakeupSourceType wakeupSource);
+
+/**
+ * \brief   検証に失敗した起床要因を、止める（コールアウト、[SWS_EcuM_02926]）。
+ *
+ * \details CAN の要因が含まれていれば、CanSM の検証を止める（`CanSM_StopWakeupSource()`）。
+ *          検証が期限切れになったときに、`EcuM_MainFunction()` が呼ぶ。
+ *
+ * \param[in]  wakeupSource  止める起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02926, SWS_EcuM_02858}
+ * \ServiceID      {0x48}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_StopWakeupSources(EcuM_WakeupSourceType wakeupSource);
+
+/**
  * \brief   指定した起床要因を、検証待ち・検証済み・期限切れのすべてから消す（[SWS_EcuM_02683]）。
  *
  * \param[in]  sources  消す起床要因のビットマスク。

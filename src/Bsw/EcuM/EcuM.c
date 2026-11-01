@@ -372,8 +372,8 @@ void EcuM_MainFunction(void)
 
         /* 検証のタイムアウト（[SWS_EcuM_04081]）。上の問い合わせで検証されなかった要因は、期限切れにし、
          * BswM_EcuM_CurrentWakeup(要因, EXPIRED) で BswM へ通知する（[SWS_EcuM_04082]）。
-         * 簡略化: 実仕様は、続けて EcuM_StopWakeupSources() を呼ぶが、本プロジェクトは呼ばない
-         * （CanSM が、自分の検証の時間でコントローラをスリープへ戻す）。 */
+         * 続けて、EcuM_StopWakeupSources() で、検証を止める（[SWS_EcuM_02926]。CanSM は、自分の検証の時間で、
+         * 先にコントローラをスリープへ戻しているので、通常は、何も起こらない）。 */
         if ((EcuM_PendingWakeupSources != 0U)
             && ((EcuM_GetNowMs() - EcuM_ValidationStartMs) >= ECUM_VALIDATION_TIMEOUT_MS))
         {
@@ -384,6 +384,7 @@ void EcuM_MainFunction(void)
                      (unsigned long)expired, (unsigned long)ECUM_VALIDATION_TIMEOUT_MS);
             EcuM_PendingWakeupSources = 0U;
             BswM_EcuM_CurrentWakeup(expired, ECUM_WKSTATUS_EXPIRED);
+            EcuM_StopWakeupSources(expired);
         }
     }
 
@@ -696,9 +697,8 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
         /* 検証待ちになったことを、BswM へ通知する（検証を始める CanSM への通知より前。仕様の PENDING は、検出した時点の状態）。 */
         BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING);
     }
-    /* [SWS_CanSM_00609]: 起床の検証を始める（CanSM は、NO_COM から WAKEUP_VALIDATING へ進む）。
-     * 以前は、CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を、起床の合図として呼んでいた。 */
-    (void)CanSM_StartWakeupSource(0U);
+    /* 起床の検証を始める（[SWS_EcuM_02924]。CanSM は、NO_COM から WAKEUP_VALIDATING へ進む） */
+    EcuM_StartWakeupSources(ECUM_WKSOURCE_CAN);
 }
 
 /* ----------------------------------------------------------------------
@@ -1041,7 +1041,27 @@ void EcuM_ValidateWakeupEvent(EcuM_WakeupSourceType sources)
  * EcuM_StartWakeupSources
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   起床要因を、検証できる状態にする（コールアウト、[SWS_EcuM_02924]）。
+ *
+ * \details 本プロジェクトの起床要因は CAN のみ。CAN の要因が含まれていれば、CanSM の検証を始める
+ *          （`CanSM_StartWakeupSource()`、[SWS_CanSM_00609]。CanSM は、NO_COM から WAKEUP_VALIDATING へ進み、
+ *          コントローラを STOPPED にして、Listen-Only で受信を待つ）。CAN 以外の要因は、無視する。
+ *
+ * \param[in]  wakeupSource  検証を始める起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02924, SWS_EcuM_02858}
+ * \ServiceID      {0x46}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_StartWakeupSources(EcuM_WakeupSourceType wakeupSource)
+{
+    if ((wakeupSource & ECUM_WKSOURCE_CAN) != 0U)
+    {
+        (void)CanSM_StartWakeupSource(0U);
+    }
+}
 
 /* ----------------------------------------------------------------------
  * EcuM_CheckValidation
@@ -1053,7 +1073,27 @@ void EcuM_ValidateWakeupEvent(EcuM_WakeupSourceType sources)
  * EcuM_StopWakeupSources
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   検証に失敗した起床要因を、止める（コールアウト、[SWS_EcuM_02926]）。
+ *
+ * \details 検証が期限切れになった（EXPIRED）ときに、`EcuM_MainFunction()` が呼ぶ。CAN の要因が含まれていれば、
+ *          CanSM の検証を止める（`CanSM_StopWakeupSource()`、[SWS_CanSM_00610]。検証中なら、コントローラを
+ *          再びスリープさせて、NO_COM へ戻る。検証中でなければ、何もしない）。CAN 以外の要因は、無視する。
+ *
+ * \param[in]  wakeupSource  止める起床要因のビットマスク。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02926, SWS_EcuM_02858}
+ * \ServiceID      {0x48}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_StopWakeupSources(EcuM_WakeupSourceType wakeupSource)
+{
+    if ((wakeupSource & ECUM_WKSOURCE_CAN) != 0U)
+    {
+        (void)CanSM_StopWakeupSource(0U);
+    }
+}
 
 /* ======================================================================
  * Internal Functions

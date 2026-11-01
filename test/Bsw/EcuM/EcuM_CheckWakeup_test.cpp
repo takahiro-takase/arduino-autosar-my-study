@@ -31,6 +31,7 @@ extern "C" {
 #include "Wrap_Dem.h"
 #include "Wrap_Os.h"
 #include "Wrap_BswM.h"
+#include "Wrap_CanSM.h"
 #include "Wrap_WdgM.h"
 }
 
@@ -80,6 +81,7 @@ protected:
         FakeWdgHw_Reset();
         WrapOs_Reset();
         WrapBswM_Reset();
+        WrapCanSM_Reset();
         WrapWdgM_Reset();
         WrapDem_Reset();
         EcuM_Test_ResetInitState();
@@ -297,6 +299,32 @@ TEST_F(EcuM_CheckWakeup_Test, EcuM_MainFunction_OK_PendingWakeupExpiresAfterVali
     EXPECT_EQ(EcuM_GetPendingWakeupEvents(), 0U);
     EXPECT_EQ(EcuM_GetExpiredWakeupEvents(), ECUM_WKSOURCE_CAN);
     EXPECT_EQ(EcuM_GetValidatedWakeupEvents(), 0U);
+}
+
+// OK: 検証が期限切れになると、CanSM の検証を止める（EcuM_StopWakeupSources、[SWS_EcuM_02926]）。タイムアウトの前は、止めない。
+TEST_F(EcuM_CheckWakeup_Test, EcuM_MainFunction_OK_ExpiryStopsCanSmValidationOnce)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    EcuM_Test_SetState(ECUM_STATE_RUN);
+    EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
+    Advance(ECUM_VALIDATION_TIMEOUT_MS - 100UL);
+    EcuM_MainFunction();
+    const uint32 stopsBeforeTimeout = CallCount_CanSM_StopWakeupSource;
+    Advance(200UL);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    EcuM_MainFunction();   // 期限切れ
+    EcuM_MainFunction();   // 期限切れのあとは、もう止めない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(stopsBeforeTimeout, 0U);
+    EXPECT_EQ(CallCount_CanSM_StopWakeupSource, 1U);
 }
 
 // OK: 検証待ちの間に、同じ要因を再び検出しても、検証のタイムアウトは起算し直さない（[SWS_EcuM_02712]）。
