@@ -91,6 +91,12 @@ counter == -limit に達した瞬間のみ → 確定 PASSED（TF クリア。CD
 ログ多発を防ぐ）。
 ```
 
+**カウンタを 0 に戻す条件**: Dem_Init() が、起動ごとに全イベントのカウンタを 0 に戻します（FDC も 0 になります）。
+本プロジェクトの操作サイクルは、起動ごとの Dem_Init() だけなので、「新しい操作サイクルの開始でデバウンスを
+初期化する」（[SWS_Dem_00344]）と、「初期化のときにデバウンスをリセットする」（[SWS_Dem_00438]）の両方を、これで満たします
+（`Dem_Init_OK_NewOperationCycleResetsDebounceCounter`）。ClearDTC のときのリセットは [SWS_Dem_00343] です。
+`Dem_SetOperationCycleState()` を持たないので、起動の途中で操作サイクルを開始し直すことはできません（学習用簡略化）。
+
 > **報告の方向が反転したら中立 (0) からやり直す理由**: 単純に counter++/-- だけだと、
 > 既に確定 PASSED（counter=-limit）の状態から PREFAILED を 1 回報告しても counter は
 > -limit+1 にしかならず、+limit に届くまで実質 2×limit 回分の反対方向の報告が必要に
