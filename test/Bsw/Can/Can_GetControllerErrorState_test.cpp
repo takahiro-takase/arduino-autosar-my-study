@@ -73,7 +73,7 @@ protected:
  * ====================================================================== */
 
 // ------------------------------------------------------------
-// Can_GetControllerErrorState() の単体テスト（AUTOSAR 非標準の拡張。
+// Can_GetControllerErrorState() の単体テスト（[SWS_Can_91004]〜[91008]。
 // Can.c の Can_GetControllerErrorState() ドキュメント参照）
 // ------------------------------------------------------------
 TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_NullConfig)
@@ -94,6 +94,7 @@ TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_NullConf
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
+    EXPECT_EQ(FakeDetHw_LastApiId, 0x11U);   // [SWS_Can_91004] の Service ID（定数ではなく、仕様の値で確かめる）
 }
 
 TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_InvalidController)
@@ -114,6 +115,7 @@ TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_InvalidC
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_CONTROLLER);
+    EXPECT_EQ(FakeDetHw_LastApiId, 0x11U);
 }
 
 TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_NullPointer)
@@ -133,6 +135,7 @@ TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_NullPoin
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
+    EXPECT_EQ(FakeDetHw_LastApiId, 0x11U);
 }
 
 TEST_F(Can_GetControllerErrorState_Test, Can_GetControllerErrorState_NG_HwFailurePropagates)

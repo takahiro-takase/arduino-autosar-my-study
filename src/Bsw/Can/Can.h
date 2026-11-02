@@ -43,7 +43,7 @@ extern "C" {
 void           Can_Init(const Can_ConfigType* Config);
 void           Can_GetVersionInfo(Std_VersionInfoType* versioninfo);
 Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition);
-Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr);
+Std_ReturnType Can_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr);
 void           Can_DisableControllerInterrupts(uint8 Controller);
 void           Can_EnableControllerInterrupts(uint8 Controller);
 Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);

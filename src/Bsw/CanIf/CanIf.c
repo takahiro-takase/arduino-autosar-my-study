@@ -372,8 +372,7 @@ Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateTy
  * \brief   CAN コントローラのエラー状態 (Active/Passive/Bus-Off) を取得する。
  *
  * \details [SWS_CANIF_91001] の通り、対応する CAN ドライバのサービス
- *          （本プロジェクトでは Can_GetControllerErrorState()、AUTOSAR
- *          非標準の拡張。Can.c 参照）へそのまま転送する。
+ *          （Can_GetControllerErrorState()、[SWS_Can_91004]。Can.c 参照）へそのまま転送する。
  *
  * \param[in]   ControllerId   対象コントローラの ID。
  * \param[out]  ErrorStatePtr  エラー状態の格納先。NULL 禁止。
