@@ -166,7 +166,7 @@ static uint8 Dem_FilterNextEvent  = 0U;  /**< 次に調べるイベント ID（D
  * Function Prototypes
  * ====================================================================== */
 
-static void Dem_ClearOne(Dem_EventIdType EventId);
+static uint8 Dem_ClearOne(Dem_EventIdType EventId);
 static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit);
 static uint8 Dem_FilterMatches(Dem_EventIdType EventId);
 static void Dem_EvaluateAging(Dem_EventIdType EventId);
@@ -338,9 +338,18 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
 
     if (DTC == DEM_GROUP_ALL_DTCS)
     {
+        uint8 changed = 0U;
         for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
         {
-            Dem_ClearOne(i);
+            changed |= Dem_ClearOne(i);
+        }
+        if (changed != 0U)
+        {
+            /* 全イベントをクリアし終えてから、まとめて通知する（途中の、中途半端な状態で、FiM に評価させない） */
+            for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+            {
+                FiM_DemTriggerOnMonitorStatus(i);
+            }
         }
         DET_LOGI(TAG, "ClearDTC all ok");
     }
@@ -353,7 +362,10 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
             return DEM_WRONG_DTC;
         }
 
-        Dem_ClearOne(eventId);
+        if (Dem_ClearOne(eventId) != 0U)
+        {
+            FiM_DemTriggerOnMonitorStatus(eventId);
+        }
         DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)DTC);
     }
 
@@ -1946,17 +1958,23 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 /**
  * \brief   指定イベントの DTC ステータス・デバウンスカウンタ・経年回復カウンタ・
  *          ExtendedData・FreezeFrame を初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
+ *          FiM への通知（[SWS_Dem_01282]/[SWS_Dem_01284]: クリアで、モニタステータスも戻る）は、呼び出し元の責務。
  *
  * \param[in]  EventId  イベント ID (DemConf_DemEventParameter_* 定数)。範囲チェックは呼び出し元の責務。
+ * \retval  1  ステータスが変わった。0  変わらなかった。
  */
-static void Dem_ClearOne(Dem_EventIdType EventId)
+static uint8 Dem_ClearOne(Dem_EventIdType EventId)
 {
+    const uint8 prevStatus = Dem_StatusTable[EventId];
+
     Dem_StatusTable[EventId] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
     Dem_DebounceCounter[EventId]    = 0;
     Dem_AgingCounter[EventId]       = 0U;
     Dem_OccurrenceCounter[EventId]  = 0U;
     Dem_FreezeFrameValid[EventId]   = 0U;
+
+    return (Dem_StatusTable[EventId] != prevStatus) ? 1U : 0U;
 }
 
 /* ----------------------------------------------------------------------
