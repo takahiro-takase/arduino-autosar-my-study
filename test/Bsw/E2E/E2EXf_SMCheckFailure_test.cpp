@@ -6,7 +6,7 @@
  *
  * \details 対象は `E2EXf_ReportSMVerdict()`（E2EXf.c）内の、`E2E_SMCheck()`
  *          が `E2E_E_OK` 以外を返した場合の分岐（E2EXf.c 47〜59 行目）。
- *          `E2EXf_PBCfg_Init()` が全インスタンスに対し `E2E_SMCheckInit()` を
+ *          `E2EXf_Init()` が全インスタンスに対し `E2E_SMCheckInit()` を
  *          呼んでから使うため「到達しないはず」の防御的コードとしてコメント
  *          だけが残り、一度もテストで踏まれたことがなかった
  *          （`Wrap_CanIf.h`/`CanSM_BusOffRecovery_test.cpp`
@@ -67,7 +67,7 @@ const E2E_P05ConfigType kRefEngineInfoCfg = {
  * ====================================================================== */
 
 /* E2EXf が E2E の状態機械（E2E_SMCheck）の失敗を扱う経路の単体テスト用フィクスチャ。
- * SetUp(): Dem と E2E の wrap を初期化し、Dem_Init(NULL) と E2EXf_PBCfg_Init() を呼ぶ。BuildFrame() は、Profile05 で保護したフレームを作る補助関数。
+ * SetUp(): Dem と E2E の wrap を初期化し、Dem_Init(NULL) と E2EXf_Init() を呼ぶ。BuildFrame() は、Profile05 で保護したフレームを作る補助関数。
  * TearDown(): E2EXf_DeInit() で未初期化へ戻す。 */
 class E2EXf_SMCheckFailure_Test : public ::testing::Test
 {
@@ -79,9 +79,9 @@ protected:
         Dem_Init(NULL);  // Demの内部状態を毎テスト決定的にリセットする（Fake_NvM.cにより常に「初回起動」）
         WrapE2E_Reset();
 
-        // E2EXf_PBCfg_Init() が E2EXf_EngineInfoRxCfg の CheckState/SMState/
+        // E2EXf_Init() が E2EXf_EngineInfoRxCfg の CheckState/SMState/
         // WaitForFirstData をすべて初期状態へ戻す（E2E_SMCheckInit() 込み）。
-        E2EXf_PBCfg_Init();
+        E2EXf_Init(NULL);
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }

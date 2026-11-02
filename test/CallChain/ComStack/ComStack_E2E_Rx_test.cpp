@@ -142,7 +142,7 @@ const E2E_P05ConfigType kRefEngineInfoCfg = {
  * ====================================================================== */
 
 /* E2E Profile05 の受信チェック（Com_RxIndication → E2E Transformer → E2E_P05Check）のコールチェーンのテスト用フィクスチャ。
- * SetUp(): Com_Init(&kTestComConfig) と E2EXf_PBCfg_Init() を呼び、E2E の受信結果を受けるコールバックの記録（呼び出し回数、直近のチェック結果）を初期化する（Init 中の DET ログは抑制する）。BuildFrame() は、Profile05 で保護した 7 バイトのフレームを作る補助関数。
+ * SetUp(): Com_Init(&kTestComConfig) と E2EXf_Init() を呼び、E2E の受信結果を受けるコールバックの記録（呼び出し回数、直近のチェック結果）を初期化する（Init 中の DET ログは抑制する）。BuildFrame() は、Profile05 で保護した 7 バイトのフレームを作る補助関数。
  * TearDown(): E2EXf_DeInit() と Com_DeInit() で未初期化へ戻す。 */
 class ComStack_E2E_Rx_Check_Test : public ::testing::Test
 {
@@ -152,9 +152,9 @@ protected:
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         Com_Init(&kTestComConfig);
-        // E2EXf_PBCfg_Init() は E2EXf_EngineInfoRxCfg が指す CheckState
+        // E2EXf_Init() は E2EXf_EngineInfoRxCfg が指す CheckState
         // （Counter）と WaitForFirstData を毎回リセットする。
-        E2EXf_PBCfg_Init();
+        E2EXf_Init(NULL);
 
         g_CallbackCallCount = 0U;
         g_LastCheckStatus   = E2E_P05STATUS_ERROR;

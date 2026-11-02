@@ -100,6 +100,7 @@ protected:
  * Test Functions
  * ====================================================================== */
 
+// フィルタ未設定で、件数・次の DTC・次の DTC と FDC を取ると、E_NOT_OK と DEM_E_WRONG_CONDITION（[SWS_Dem_01300]/[SWS_Dem_01267]）
 TEST_F(Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_NG_NoFilterSetReturnsNotOk)
 {
     /* ----------------------- */
@@ -110,18 +111,54 @@ TEST_F(Dem_DtcFilter_Test, Dem_GetNextFilteredDTC_NG_NoFilterSetReturnsNotOk)
     uint16 count = 0U;
     sint8  fdc = 0;
 
-    EXPECT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_NOT_OK);
-
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+    const Std_ReturnType retCount = Dem_GetNumberOfFilteredDTC(0U, &count);
+    const uint8 errCount = FakeDetHw_LastErrorId;
+    FakeDetHw_Reset();
+    const Std_ReturnType retNext = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+    const uint8 errNext = FakeDetHw_LastErrorId;
+    FakeDetHw_Reset();
+    const Std_ReturnType retFdc = Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc);
+    const uint8 errFdc = FakeDetHw_LastErrorId;
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(Dem_GetNextFilteredDTCAndFDC(0U, &dtc, &fdc), E_NOT_OK);
+    EXPECT_EQ(retCount, E_NOT_OK);
+    EXPECT_EQ(errCount, DEM_E_WRONG_CONDITION);
+    EXPECT_EQ(retNext, E_NOT_OK);
+    EXPECT_EQ(errNext, DEM_E_WRONG_CONDITION);
+    EXPECT_EQ(retFdc, E_NOT_OK);
+    EXPECT_EQ(errFdc, DEM_E_WRONG_CONDITION);
+}
+
+// Dem_SetDTCFilter() が失敗したら、前に設定したフィルタは残らない。後続の API は、E_NOT_OK を返す（[SWS_Dem_01266]）
+TEST_F(Dem_DtcFilter_Test, Dem_SetDTCFilter_NG_FailureInvalidatesPreviousFilter)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(SetFilter(0x00U), E_OK);   // 有効なフィルタを、いったん設定する
+    uint16 count = 0U;
+    ASSERT_EQ(Dem_GetNumberOfFilteredDTC(0U, &count), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType retSet = Dem_SetDTCFilter(0U, 0x00U, DEM_DTC_FORMAT_UDS, (Dem_DTCOriginType)0xFFU, FALSE, 0U, FALSE);
+    uint32 dtc = 0U;
+    uint8  status = 0U;
+    const Std_ReturnType retNext  = Dem_GetNextFilteredDTC(0U, &dtc, &status);
+    const Std_ReturnType retCount = Dem_GetNumberOfFilteredDTC(0U, &count);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(retSet, E_NOT_OK);
+    EXPECT_EQ(retNext, E_NOT_OK);
+    EXPECT_EQ(retCount, E_NOT_OK);
 }
 
 TEST_F(Dem_DtcFilter_Test, Dem_SetDTCFilter_OK_CallingAgainRestartsFromTheFirstDtc)

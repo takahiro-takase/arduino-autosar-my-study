@@ -99,6 +99,7 @@
 #define DEM_E_PARAM_POINTER        0x11U  /* NULL ポインタチェック */
 #define DEM_E_PARAM_DATA           0x12U  /* 不正なパラメータ値（例: EventStatus） */
 #define DEM_E_UNINIT               0x20U  /* [SWS_Dem_00124]: 未初期化時の API 呼び出し */
+#define DEM_E_WRONG_CONDITION      0x40U  /* [SWS_Dem_01300]: DTC フィルタ未設定での API 呼び出し */
 
 /** ApiId（各関数の Doxygen \ServiceID タグをそのまま使う。本モジュールは実際の
  *  SWS_Dem の個々の関数シグネチャとは大きく異なる学習用簡略実装のため、
@@ -321,6 +322,9 @@
 #define DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR 0x10U  /**< bit4: testNotCompletedSinceLastClear    */
 #define DEM_STATUS_FAILED_SINCE_CLEAR        0x20U  /**< bit5: testFailedSinceLastClear          */
 #define DEM_STATUS_NOT_COMPLETED_THIS_CYCLE  0x40U  /**< bit6: testNotCompletedThisOperationCycle */
+/** bit7: 内部用。サイクルの最終ステータスを、評価済み（経年回復・PendingDTC）。NvM に保存し、次の起動の二重評価を防ぐ。
+ *  availability mask（0x3D）で、外には見えない。 */
+#define DEM_STATUS_CYCLE_EVALUATED           0x80U
 
 /** SID 0x19 応答の statusAvailabilityMask: bits 0,2,3,4,5 をサポート */
 #define DEM_STATUS_AVAILABILITY_MASK         0x3DU

@@ -36,16 +36,19 @@
  *            経年回復 (Aging) 完了 → CDTC を自動クリア (詳細は下記)
  *
  *          PendingDTC (PDTC) の操作サイクル境界での自動クリア:
- *            SWS_Dem_00390 (Figure 7.19) 準拠。Dem_Init() が起動ごとに
- *            「直前の操作サイクル」の最終ステータスを評価し (TF/TFTOC/TNCTC を
- *            新サイクル用にリセットする直前の値を見る)、PDTC=1 かつ
+ *            SWS_Dem_00390 (Figure 7.19) 準拠。操作サイクルの終了
+ *            （Dem_SetOperationCycleState(END)、Dem_EndOperationCycle()）で、
+ *            そのサイクルの最終ステータスを評価し、PDTC=1 かつ
  *            TFTOC=0（このサイクル中に FAILED 確定なし）かつ TNCTC=0（テスト済み）
- *            であれば即座に PDTC をクリアする。CDTC のような多サイクルの
- *            エージングカウンタは介さず、クリーンなサイクルが 1 回来た時点で
- *            即クリアする点が CDTC との違い（Dem_EvaluatePendingClear()）。
+ *            であれば即座に PDTC をクリアする。電源 OFF で終わる電源サイクルは END が呼ばれないので、
+ *            次の起動の Dem_Init() が、前回の最終ステータスで評価する（再開始も同じ）。
+ *            CDTC のような多サイクルのエージングカウンタは介さず、クリーンなサイクルが
+ *            1 回来た時点で即クリアする点が CDTC との違い（Dem_EvaluatePendingClear()）。
  *
  *          経年回復 (Aging) — 操作サイクルベースの CDTC 自動回復:
- *            Dem_Init() が起動ごとに「直前の操作サイクル」の最終ステータスを評価する
+ *            操作サイクルの終了（Dem_SetOperationCycleState(END)、Dem_EndOperationCycle()）で、
+ *            そのサイクルの最終ステータスを評価する（電源 OFF で終わるサイクルは END が呼ばれないので、
+ *            次の起動の Dem_Init() が、前回の最終ステータスで評価する。再開始も同じ）。
  *            (TF/TFTOC/TNCTC を新サイクル用にリセットする直前の値を見る)。
  *              CDTC=0                      → エージング対象外、カウンタ=0
  *              CDTC=1 かつ TF=1（再故障）    → 連続性が途切れたためカウンタ=0
@@ -156,7 +159,8 @@ static uint8 Dem_DTCSettingEnabled = 1U;
 /** Dem_SetDTCFilter() で設定された DTC フィルタ条件（[SWS_Dem_00057]）。
  *  単一ECU・単一診断クライアント構成のため 1 組だけ保持する。
  *  Dem_FilterActive==0 は「フィルタ未設定」で、Dem_GetNumberOfFilteredDTC() 等は
- *  E_NOT_OK を返す。Dem_Init() で未設定へ戻す。 */
+ *  DEM_E_WRONG_CONDITION を報告して E_NOT_OK を返す（[SWS_Dem_01300]）。Dem_Init() で未設定へ戻す。
+ *  Dem_SetDTCFilter() が E_OK 以外を返したときも、未設定へ戻す（[SWS_Dem_01266]）。 */
 static uint8 Dem_FilterActive     = 0U;
 static uint8 Dem_FilterStatusMask = 0U;  /**< 0x00 はステータスによる絞り込みなし */
 static uint8 Dem_FilterForFdc     = 0U;  /**< 1 = FDC が 1〜0x7E の DTC のみ */
@@ -166,12 +170,15 @@ static uint8 Dem_FilterNextEvent  = 0U;  /**< 次に調べるイベント ID（D
  * Function Prototypes
  * ====================================================================== */
 
-static void Dem_ClearOne(Dem_EventIdType EventId);
+static uint8 Dem_ClearOne(Dem_EventIdType EventId);
 static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit);
 static uint8 Dem_FilterMatches(Dem_EventIdType EventId);
 static void Dem_EvaluateAging(Dem_EventIdType EventId);
 static void Dem_EvaluatePendingClear(Dem_EventIdType EventId);
 static uint8 Dem_BeginOperationCycle(uint8 notifyFim);
+static uint8 Dem_EndOperationCycle(uint8 notifyFim);
+static void Dem_EvaluateCycleEnd(Dem_EventIdType EventId);
+static void Dem_NotifyFimIfStatusChanged(Dem_EventIdType EventId, uint8 prevStatus);
 
 /* ======================================================================
  * Functions
@@ -243,7 +250,7 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
         (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_AGING,    Dem_AgingCounter);
         (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
 
-        /* 新しい操作サイクルの開始（前サイクルの最終結果での経年回復・PendingDTC の判定を含む） */
+        /* 新しい操作サイクルの開始（前サイクルの最終結果での、経年回復・PendingDTC の判定を含む。END で評価済みなら、しない） */
         (void)Dem_BeginOperationCycle(0U);   /* FiM は、Dem より後に初期化されるので、通知しない */
 
         /* 経年回復判定とサイクル開始処理で変化した内容を反映する */
@@ -338,9 +345,18 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
 
     if (DTC == DEM_GROUP_ALL_DTCS)
     {
+        uint8 changed = 0U;
         for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
         {
-            Dem_ClearOne(i);
+            changed |= Dem_ClearOne(i);
+        }
+        if (changed != 0U)
+        {
+            /* 全イベントをクリアし終えてから、まとめて通知する（途中の、中途半端な状態で、FiM に評価させない） */
+            for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+            {
+                FiM_DemTriggerOnMonitorStatus(i);
+            }
         }
         DET_LOGI(TAG, "ClearDTC all ok");
     }
@@ -353,7 +369,10 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
             return DEM_WRONG_DTC;
         }
 
-        Dem_ClearOne(eventId);
+        if (Dem_ClearOne(eventId) != 0U)
+        {
+            FiM_DemTriggerOnMonitorStatus(eventId);
+        }
         DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)DTC);
     }
 
@@ -1070,10 +1089,11 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
  * \brief   操作サイクルの状態を設定する（[SWS_Dem_00194]、Dem.h 参照）。
  *
  * \details START: 操作サイクルを（再）開始する。既に開始済みなら、再開始する（[SWS_Dem_00483]）。直前の操作サイクルの
- *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し、イベントごとに TestFailed・
- *          TestFailedThisOperationCycle をクリア、TestNotCompletedThisOperationCycle を立て、デバウンスカウンタを
+ *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し（END で評価済みなら、しない）、
+ *          イベントごとに TestFailed・TestFailedThisOperationCycle をクリア、TestNotCompletedThisOperationCycle を立て、デバウンスカウンタを
  *          0 へ戻す。開始してから、`Dem_SetEventStatus()` の報告を、再び受け付ける（[SWS_Dem_00481]）。
- *          END: 操作サイクルを終了する。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
+ *          END: 操作サイクルを終了する。そのサイクルの最終ステータスで、経年回復（Aging）と PendingDTC の
+ *          自動クリアを評価する（[SWS_Dem_00390]）。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
  *          UDS ステータスの変化は起きない（[SWS_Dem_00482]。`Dem_ClearDTC()` のような、明示的な操作は、サイクルの
  *          状態に関係なく働く）。既に終了済みなら、何もしない（[SWS_Dem_00484]）。
  *
@@ -1113,6 +1133,11 @@ Std_ReturnType Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationC
         if (Dem_OperationCycleState[OperationCycleId] != DEM_CYCLE_STATE_END)
         {
             Dem_OperationCycleState[OperationCycleId] = DEM_CYCLE_STATE_END;
+            if (Dem_EndOperationCycle(1U) != 0U)
+            {
+                (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
+                (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING,  Dem_AgingCounter);
+            }
             DET_LOGI(TAG, "operation cycle %u ended", (unsigned)OperationCycleId);
         }
         return E_OK;
@@ -1295,8 +1320,9 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
  *
  * \retval  E_OK      フィルタを設定した。
  * \retval  E_NOT_OK  未初期化、または DTCFormat / DTCOrigin / FilterWithSeverity が非対応の値。
+ *                    非対応の値のときは、前に設定したフィルタも無効にする（[SWS_Dem_01266]）。
  *
- * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057}
+ * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057, SWS_Dem_01266}
  * \ServiceID      {0x13}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous}
@@ -1313,6 +1339,9 @@ Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCForm
         (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_DTC_FILTER, DEM_E_UNINIT);
         return E_NOT_OK;
     }
+
+    /* [SWS_Dem_01266]: 設定に失敗したら、前のフィルタを残さず、後続の API を E_NOT_OK にする。 */
+    Dem_FilterActive = 0U;
 
     /* [SWS_Dem_00208]: 構成に合わない DTCFormat / DTCOrigin は DEM_E_WRONG_CONFIGURATION を
      * 報告して E_NOT_OK を返す。Severity を持たない本プロジェクトでは
@@ -1344,9 +1373,9 @@ Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCForm
  * \param[out]  NumberOfFilteredDTC  一致した DTC の件数。NULL 禁止。
  *
  * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  未初期化、NumberOfFilteredDTC が NULL、またはフィルタ未設定。
+ * \retval  E_NOT_OK  未初期化、NumberOfFilteredDTC が NULL、またはフィルタ未設定（DEM_E_WRONG_CONDITION）。
  *
- * \AUTOSARReq     {SWS_Dem_00214}
+ * \AUTOSARReq     {SWS_Dem_00214, SWS_Dem_01300}
  * \ServiceID      {0x17}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
@@ -1369,7 +1398,9 @@ Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilter
 
     if (Dem_FilterActive == 0U)
     {
-        return E_NOT_OK;  /* [SWS_Dem_00214]: No DTC filter set */
+        /* [SWS_Dem_00214]: No DTC filter set。[SWS_Dem_01300]/[SWS_Dem_01267]: DEM_E_WRONG_CONDITION を報告する */
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_NUMBER_OF_FILTERED_DTC, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
     }
 
     uint16 count = 0U;
@@ -1398,10 +1429,10 @@ Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilter
  * \param[out]  DTCStatus  DTC のステータスバイト。NULL 禁止。
  *
  * \retval  E_OK                次の DTC を返した。
- * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定（DEM_E_WRONG_CONDITION）。
  * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
  *
- * \AUTOSARReq     {SWS_Dem_00215}
+ * \AUTOSARReq     {SWS_Dem_00215, SWS_Dem_01300}
  * \ServiceID      {0x18}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous（本実装は DEM_PENDING を返さない）}
@@ -1424,7 +1455,9 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
 
     if (Dem_FilterActive == 0U)
     {
-        return E_NOT_OK;  /* [SWS_Dem_00215]: No DTC filter set */
+        /* [SWS_Dem_00215]: No DTC filter set。[SWS_Dem_01300]/[SWS_Dem_01267]: DEM_E_WRONG_CONDITION を報告する */
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_NEXT_FILTERED_DTC, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
     }
 
     while (Dem_FilterNextEvent < DEM_EVENT_COUNT)
@@ -1456,10 +1489,10 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
  * \param[out]  DTCFaultDetectionCounter Fault Detection Counter。NULL 禁止。
  *
  * \retval  E_OK                次の DTC を返した。
- * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定（DEM_E_WRONG_CONDITION）。
  * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
  *
- * \AUTOSARReq     {SWS_Dem_00227}
+ * \AUTOSARReq     {SWS_Dem_00227, SWS_Dem_01300}
  * \ServiceID      {0x3b}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
@@ -1482,7 +1515,9 @@ Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* 
 
     if (Dem_FilterActive == 0U)
     {
-        return E_NOT_OK;  /* [SWS_Dem_00227]: No DTC filter set */
+        /* [SWS_Dem_00227]: No DTC filter set。[SWS_Dem_01300]/[SWS_Dem_01267]: DEM_E_WRONG_CONDITION を報告する */
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_NEXT_FILTERED_DTC_AND_FDC, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
     }
 
     while (Dem_FilterNextEvent < DEM_EVENT_COUNT)
@@ -1946,17 +1981,23 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
 /**
  * \brief   指定イベントの DTC ステータス・デバウンスカウンタ・経年回復カウンタ・
  *          ExtendedData・FreezeFrame を初期状態に戻す（NvM 書き込みは呼び出し元が行う）。
+ *          FiM への通知（[SWS_Dem_01282]/[SWS_Dem_01284]: クリアで、モニタステータスも戻る）は、呼び出し元の責務。
  *
  * \param[in]  EventId  イベント ID (DemConf_DemEventParameter_* 定数)。範囲チェックは呼び出し元の責務。
+ * \retval  1  ステータスが変わった。0  変わらなかった。
  */
-static void Dem_ClearOne(Dem_EventIdType EventId)
+static uint8 Dem_ClearOne(Dem_EventIdType EventId)
 {
+    const uint8 prevStatus = Dem_StatusTable[EventId];
+
     Dem_StatusTable[EventId] = DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
     Dem_DebounceCounter[EventId]    = 0;
     Dem_AgingCounter[EventId]       = 0U;
     Dem_OccurrenceCounter[EventId]  = 0U;
     Dem_FreezeFrameValid[EventId]   = 0U;
+
+    return (Dem_StatusTable[EventId] != prevStatus) ? 1U : 0U;
 }
 
 /* ----------------------------------------------------------------------
@@ -2203,7 +2244,8 @@ static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit)
  *          リセットされる前の値）を評価し、Dem_AgingCounter[EventId] を更新する。
  *          Dem_AgingThresholdTable[EventId]（イベントごとの閾値）に達したら
  *          CONFIRMED を自動解除する。
- *          Dem_BeginOperationCycle() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
+ *          Dem_EvaluateCycleEnd() からのみ呼び出すこと（呼び出し順序に依存するため非公開）。
+ *          カウンタを進めるので、1 つのサイクルに対して、1 回だけ呼ぶこと（Dem_EvaluateCycleEnd() が保証する）。
  *
  * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
  */
@@ -2255,7 +2297,7 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   PendingDTC (UDS status bit2) を操作サイクル境界で判定する。
+ * \brief   PendingDTC (UDS status bit2) を、操作サイクルの最終ステータスで判定する。
  *
  * \details SWS_Dem_00390 (Figure 7.19): PendingDTC は
  *          「NOT TestFailedThisOperationCycle AND NOT TestNotCompletedThisOperationCycle
@@ -2263,9 +2305,8 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  *          CONFIRMED (bit3) のような多サイクルのエージングは行わず、直前サイクルが
  *          1 回でもクリーン（そのサイクル中に FAILED 確定が無く、かつテスト済み）
  *          であれば即座にクリアする点が Dem_EvaluateAging() との違い。
- *          Dem_EvaluateAging() と同じく、TF/TFTOC/TNCTC が新サイクル用に
- *          リセットされる前の値を見る必要があるため、Dem_BeginOperationCycle() からのみ、
- *          かつそのリセットより前に呼び出すこと（呼び出し順序に依存するため非公開）。
+ *          TF/TFTOC/TNCTC が新サイクル用にリセットされる前の値を見る必要があるため、
+ *          Dem_EvaluateCycleEnd() からのみ、かつそのリセットより前に呼び出すこと（呼び出し順序に依存するため非公開）。
  *
  * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
  */
@@ -2289,6 +2330,87 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
 }
 
 /* ----------------------------------------------------------------------
+ * Dem_NotifyFimIfStatusChanged
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   イベントのステータスが、前の値から変わっていたら、FiM へ通知する。
+ *
+ * \details 評価済みの印（DEM_STATUS_CYCLE_EVALUATED）だけの変化は、内部用で、FiM の判定に関係しないので、通知しない。
+ *
+ * \param[in]  EventId     イベント ID。範囲チェックは呼び出し元の責務。
+ * \param[in]  prevStatus  変化の前のステータス（Dem_StatusTable[EventId] の生の値）。
+ */
+static void Dem_NotifyFimIfStatusChanged(Dem_EventIdType EventId, uint8 prevStatus)
+{
+    if (((Dem_StatusTable[EventId] ^ prevStatus) & (uint8)(~DEM_STATUS_CYCLE_EVALUATED)) != 0U)
+    {
+        FiM_DemTriggerOnMonitorStatus(EventId);
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_EvaluateCycleEnd
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   イベントの、前サイクルの最終ステータスを、1 回だけ評価する（経年回復・PendingDTC の自動クリア）。
+ *
+ * \details DEM_STATUS_CYCLE_EVALUATED が立っていれば、何もしない。立っていなければ、Dem_EvaluateAging() と
+ *          Dem_EvaluatePendingClear() を行い、印を立てる。印は NvM に保存されるので、END で評価したあと、電源 OFF を経た
+ *          次の起動（Dem_Init()）や、続く START が、同じサイクルを、もう一度評価することはない（経年回復カウンタが、二重に
+ *          進まない）。印は、Dem_BeginOperationCycle() が、新しいサイクルへ進むときに、落とす。
+ *
+ * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
+ */
+static void Dem_EvaluateCycleEnd(Dem_EventIdType EventId)
+{
+    if ((Dem_StatusTable[EventId] & DEM_STATUS_CYCLE_EVALUATED) == 0U)
+    {
+        Dem_EvaluateAging(EventId);
+        Dem_EvaluatePendingClear(EventId);
+        Dem_StatusTable[EventId] |= DEM_STATUS_CYCLE_EVALUATED;
+    }
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_EndOperationCycle
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   操作サイクルを終える（Dem_SetOperationCycleState(END) の処理）。
+ *
+ * \details イベントごとに、そのサイクルの最終ステータスで、経年回復と PendingDTC の自動クリアを評価する
+ *          （[SWS_Dem_00390]、[SWS_Dem_00493]。Dem_EvaluateCycleEnd()）。NvM への書き込みは、呼び出し元の責務。
+ *
+ * \param[in]  notifyFim  1 のとき、ステータス（CONFIRMED の解除など）が変わったイベントを、FiM へ通知する。
+ * \retval  1  ステータス（評価済みの印を含む）または経年回復カウンタが、1 つでも変わった。0  変わらなかった。
+ */
+static uint8 Dem_EndOperationCycle(uint8 notifyFim)
+{
+    uint8 changed = 0U;
+
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        const uint8 prevStatus = Dem_StatusTable[i];
+        const uint8 prevAging  = Dem_AgingCounter[i];
+
+        Dem_EvaluateCycleEnd(i);
+
+        if ((Dem_StatusTable[i] != prevStatus) || (Dem_AgingCounter[i] != prevAging))
+        {
+            changed = 1U;
+        }
+        if (notifyFim != 0U)
+        {
+            Dem_NotifyFimIfStatusChanged(i, prevStatus);
+        }
+    }
+
+    return changed;
+}
+
+/* ----------------------------------------------------------------------
  * Dem_BeginOperationCycle
  * ---------------------------------------------------------------------- */
 
@@ -2296,9 +2418,10 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
  * \brief   新しい操作サイクルを始める（Dem_Init() と Dem_SetOperationCycleState(START) の共通処理）。
  *
  * \details イベントごとに、経年回復・PendingDTC の判定を、「前サイクルの最終結果」（TF / TFTOC / TNCTOC を新サイクル用に
- *          リセットする前の値）で行い、そのあと、TF・TFTOC をクリアし、TNCTOC を立て、デバウンスカウンタを 0 へ戻す
- *          （[SWS_Dem_00344]/[SWS_Dem_00438]）。サイクルの途中での再開始（[SWS_Dem_00483]）も、その時点までを前サイクルとして
- *          評価する（仕様の、END と START を続けて行うのと同じ）。
+ *          リセットする前の値）で行い（END で評価済みなら、しない。Dem_EvaluateCycleEnd()）、そのあと、TF・TFTOC をクリアし、
+ *          TNCTOC を立て、評価済みの印を落とし、デバウンスカウンタを 0 へ戻す（[SWS_Dem_00344]/[SWS_Dem_00438]）。
+ *          サイクルの途中での再開始（[SWS_Dem_00483]）も、その時点までを前サイクルとして評価する
+ *          （仕様の、END と START を続けて行うのと同じ）。
  *          NvM への書き込みは、呼び出し元の責務。
  *
  * \param[in]  notifyFim  1 のとき、監視ステータス（TNCTOC）や CONFIRMED が変わったイベントを、FiM へ通知する
@@ -2314,12 +2437,12 @@ static uint8 Dem_BeginOperationCycle(uint8 notifyFim)
         const uint8 prevStatus = Dem_StatusTable[i];
         const uint8 prevAging  = Dem_AgingCounter[i];
 
-        Dem_EvaluateAging(i);
-        Dem_EvaluatePendingClear(i);
+        Dem_EvaluateCycleEnd(i);
 
         Dem_StatusTable[i] = (Dem_StatusTable[i]
                                & (uint8)(~DEM_STATUS_TEST_FAILED)
-                               & (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE))
+                               & (uint8)(~DEM_STATUS_TF_THIS_OP_CYCLE)
+                               & (uint8)(~DEM_STATUS_CYCLE_EVALUATED))
                               | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
         Dem_DebounceCounter[i] = 0;
 
@@ -2327,9 +2450,9 @@ static uint8 Dem_BeginOperationCycle(uint8 notifyFim)
         {
             changed = 1U;
         }
-        if ((notifyFim != 0U) && (Dem_StatusTable[i] != prevStatus))
+        if (notifyFim != 0U)
         {
-            FiM_DemTriggerOnMonitorStatus(i);
+            Dem_NotifyFimIfStatusChanged(i, prevStatus);
         }
     }
 

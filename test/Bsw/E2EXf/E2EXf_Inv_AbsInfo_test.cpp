@@ -189,7 +189,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_NG_FirstFrameWithBadCrcStaysErr
     /* ----------------------- */
     WrapDem_Reset();
     Dem_Init(NULL);
-    E2EXf_PBCfg_Init();   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
+    E2EXf_Init(NULL);   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
     uint8 bad[6] = { 0U };
@@ -222,7 +222,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_FirstValidFrameIsAcceptedThe
     /* ----------------------- */
     WrapDem_Reset();
     Dem_Init(NULL);
-    E2EXf_PBCfg_Init();   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
+    E2EXf_Init(NULL);   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
     uint8 frame1[6] = { 0U };
@@ -254,7 +254,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_RepeatedCrcErrorsReportDemFa
     /* ----------------------- */
     WrapDem_Reset();
     Dem_Init(NULL);
-    E2EXf_PBCfg_Init();
+    E2EXf_Init(NULL);
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
     uint32 bufLen = 0U;
@@ -331,7 +331,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_NoNewDataIsReportedAsNoNewDa
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    E2EXf_PBCfg_Init();   // 状態機械と初回受信の待ちを初期状態へ戻す
+    E2EXf_Init(NULL);   // 状態機械と初回受信の待ちを初期状態へ戻す
     uint32 bufLen = 99U;
     E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
 
@@ -356,7 +356,7 @@ TEST_F(E2EXf_Inv_AbsInfo_Test, E2EXf_Inv_AbsInfo_OK_NoNewDataKeepsWaitingForFirs
     /* ----------------------- */
     WrapDem_Reset();
     Dem_Init(NULL);
-    E2EXf_PBCfg_Init();   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
+    E2EXf_Init(NULL);   // 初回受信の特別扱い（WaitForFirstData）と状態機械を初期状態へ戻す
     E2E_P05ProtectStateType refState;
     E2E_P05ProtectInit(&refState);
     uint8 skipped[6] = { 0U };

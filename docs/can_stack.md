@@ -153,9 +153,9 @@ E2EHealthStatus の送信いずれも `src/Bsw/E2E/E2E_P05.c` の CRC16+8bit カ
 > **E2EXf 自身の初期化状態ガード（SWS_E2EXf_00130/00133/00151）:** E2EXf は下位の
 > `E2E_P01CheckStateType`/`E2E_P01ProtectStateType`（フレームごとの Check/Protect 状態）
 > とは別に、「E2EXf_Init() が呼ばれたか」というモジュール自身の初期化状態を
-> `E2EXf.c` の静的フラグで保持します。`E2EXf_PBCfg_Init()`（`EcuM_Init()` から
-> `Com_Init()` の直後に呼ばれる）が各 I-PDU の State を初期化した最後に
-> `E2EXf_Init()` を呼んでこのフラグを立てます。`E2EXf_Inv_EngineInfo()`/
+> `E2EXf.c` の静的フラグで保持します。`E2EXf_Init()`（`EcuM_Init()` から
+> `Com_Init()` の直後に呼ばれる）が、内部で `E2EXf_PBCfg_InitStates()` を呼んで各 I-PDU の State を初期化した
+> 最後に、このフラグを立てます。`E2EXf_Inv_EngineInfo()`/
 > `E2EXf_Inv_AbsInfo()`/`E2EXf_E2EHealthStatus()` はこのフラグが立つ前に呼ばれると安全側（E_NOT_OK／no-op）で
 > 早期 return するため、将来 `EcuM_Init()` の呼び出し順序が変わって初期化前に
 > フレーム受信経路が有効になっても、未初期化 State（ゼロクリアされた BSS のまま）

@@ -35,7 +35,7 @@
  * E2E_P05CheckStateType/E2E_P05ProtectStateType（下位の Profile 層）の
  * 初期化とは別に、Transformer 層自身が「E2EXf_Init() が呼ばれたか」を
  * 保持する必要がある（SWS_E2EXf_00133/00151）。EcuM_Init() の呼び出し
- * 順序が将来変わり、E2EXf_PBCfg_Init() より前にフレーム受信経路が
+ * 順序が将来変わり、E2EXf_Init() より前にフレーム受信経路が
  * 有効になってしまった場合でも、初期化前の State（WaitForFirstData=0
  * の未初期化 BSS のまま）を使って誤判定することを防ぐ。
  * 本プロジェクトの他 BSW モジュール（Com_ConfigPtr 等）と同じ
@@ -153,6 +153,10 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
 void E2EXf_Init(const E2EXf_ConfigType* ConfigPtr)
 {
     (void)ConfigPtr;  /* 常に NULL（post-build 設定を持たないため。E2EXf.h 参照） */
+
+    /* 各 I-PDU の Check/Protect State を初期化し、最後に、モジュール自身の初期化状態（[SWS_E2EXf_00130]）を立てる。
+     * E2EXf_Inv_EngineInfo() 等のインスタンス関数は、これより前に呼ばれても、安全側で早期 return する。 */
+    E2EXf_PBCfg_InitStates();
     E2EXf_Initialized = 1U;
 }
 
@@ -378,7 +382,7 @@ static Std_ReturnType E2EXf_ReportSMVerdict(Dem_EventIdType DemEventId, E2E_PChe
     const Std_ReturnType smRet = E2E_SMCheck(ProfileStatus, SMConfig, SMState);
     if (smRet != E2E_E_OK)
     {
-        /* 到達しないはずの経路（E2EXf_PBCfg_Init() が全インスタンスに対し
+        /* 到達しないはずの経路（E2EXf_Init() が全インスタンスに対し
          * E2E_SMCheckInit() を呼んでから使うため、E2E_E_WRONGSTATE
          * （E2E_SMCheckInit() 未実施）は起きないはず）。E2E_SMCheck() は
          * [SWS_E2E_00216] により DET/DEM を呼べないため、ここで代わりに

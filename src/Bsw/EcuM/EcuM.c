@@ -38,7 +38,7 @@
  *                                PduR→SecOC→Com の依存順。SecOC は Csm_MacGenerate/
  *                                Csm_MacVerify のみを呼び、Crypto/CryIf の存在を知らない）
  *           14. Com_Init       — COM モジュール初期化
- *           15. E2EXf_PBCfg_Init — E2E Check/Protect ステート初期化
+ *           15. E2EXf_Init — E2E Check/Protect ステート初期化
  *                                （E2E Transformer 方式。Com は E2E を関知しないため
  *                                  Com_Init の直後にここで別途初期化する）
  *           16. CanTp_Init     — CAN トランスポートプロトコル初期化
@@ -142,7 +142,7 @@
 #include "SecOC_PBCfg.h"
 #include "Com.h"
 #include "Com_PBCfg.h"
-#include "E2EXf_PBCfg.h"
+#include "E2EXf.h"
 #include "E2EMon.h"
 #include "CanTp.h"
 #include "Dcm.h"
@@ -279,7 +279,7 @@ void EcuM_Init(void)
     KeyM_Init(NULL); /* [SWS_KeyM_00158]: ConfigPtr は常に NULL_PTR */
     SecOC_Init(&SecOC_Config); /* PduR の後、Com の前（PduR→SecOC→Com の依存順） */
     Com_Init(&Com_Config);
-    E2EXf_PBCfg_Init();       /* E2E Check/Protect ステート初期化（Com は E2E を関知しないため） */
+    E2EXf_Init(NULL);         /* E2E Check/Protect ステート初期化（Com は E2E を関知しないため） */
     E2EMon_Init();            /* E2E 検証ネットワーク健全性モニタ（CDD 相当、Com_Init 済みが前提） */
     CanTp_Init(NULL);
     Dcm_Init(NULL);

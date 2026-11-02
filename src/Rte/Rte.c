@@ -1858,7 +1858,7 @@ void Rte_COMRxInd_SecureCommand(void)
 void Rte_COMTransform_E2EHealthStatus(uint8* Data, uint8 Length)
 {
     /* E2EXf_E2EHealthStatus() の戻り値は現状の起動順序（EcuM_Init() が
-     * E2EXf_PBCfg_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
+     * E2EXf_Init() を Com_MainFunctionTx() 呼び出しより前に完了させる）
      * では E_SAFETY_HARD_RUNTIMEERROR を観測していないが、TxTransformCbk
      * 自体の型が void のまま（Com_Types.h 参照）で受け渡す経路が無いため、
      * ここで破棄する（/code-review 指摘: 起動順序が将来変わった場合の

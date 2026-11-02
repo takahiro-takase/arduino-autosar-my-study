@@ -451,12 +451,13 @@ void FiM_MainFunction(void)
 /**
  * \brief   Dem から、イベントの監視ステータスが変わったことを知らされ、そのイベントを使う機能の許可状態を、すぐに更新する。
  *
- * \details [SWS_Fim_00021]、[SWS_Fim_00020]（機能の許可は、すぐに制御する）。Dem_SetEventStatus() が、ステータスが
- *          変わったときに呼ぶ。EventId を条件に使う行が無ければ、何もしない（Dem への問い合わせもしない）。
+ * \details [SWS_Fim_00021]、[SWS_Fim_00020]（機能の許可は、すぐに制御する）。Dem が、ステータスが変わったとき
+ *          （Dem_SetEventStatus()、Dem_ClearDTC()、Dem_SetOperationCycleState()、Dem_ResetEventStatus()）に呼ぶ。
+ *          EventId を条件に使う行が無ければ、何もしない（Dem への問い合わせもしない）。
  *          あれば、FiM_MainFunction() と同じ再評価を、周期を待たずに行う。
  *          実仕様は、抑止しているイベントの数（抑止カウンタ）を増減して許可状態を決めるが、本実装は、全行を
  *          評価し直す方式（FiM_MainFunction() と同じ）で、結果は同じ。FiM_MainFunction() の周期の再評価も残す
- *          （Dem_ClearDTC() など、本関数が呼ばれない経路での、ステータスの変化を拾うため）。
+ *          （本関数が呼ばれない経路や、FiM_Init() の前に起きたステータスの変化を拾うため）。
  *          簡略化: FiM_Init() の前に呼ばれたときは、何もしない（DET も報告しない）。Dem は、FiM の初期化より前にも
  *          イベントを報告するため。
  *

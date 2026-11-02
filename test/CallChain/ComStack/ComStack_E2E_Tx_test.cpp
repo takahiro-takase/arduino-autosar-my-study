@@ -199,7 +199,7 @@ const E2E_P05ConfigType kRefE2EHealthStatusCfg = {
  * ====================================================================== */
 
 /* E2E Profile05 の送信保護（Com_MainFunctionTx → E2E Transformer → E2E_P05Protect → CAN 送信）のコールチェーンのテスト用フィクスチャ。
- * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（STARTED・ONLINE）→ PduR_Init() → Com_Init(&kTestComConfig) → E2EXf_PBCfg_Init() の順に初期化する（Init 中の DET ログは抑制する）。
+ * SetUp(): 模擬 Can_Hw と wrap をリセットし、Can_Init() → CanIf_Init(&kTestCanIfConfig)（STARTED・ONLINE）→ PduR_Init() → Com_Init(&kTestComConfig) → E2EXf_Init() の順に初期化する（Init 中の DET ログは抑制する）。
  * TearDown(): E2EXf_DeInit()・Com_DeInit()・CanIf_DeInit() で未初期化へ戻す。 */
 class ComStack_E2E_Tx_Protect_Test : public ::testing::Test
 {
@@ -237,10 +237,10 @@ protected:
         CanIf_SetPduMode(0U, CANIF_ONLINE);
         PduR_Init(&kTestPduRConfig);
         Com_Init(&kTestComConfig);
-        // E2EXf_PBCfg_Init() は E2EXf_E2EHealthStatusTxCfgP05 が指す
+        // E2EXf_Init() は E2EXf_E2EHealthStatusTxCfgP05 が指す
         // ProtectState（Counter）を毎回リセットする。本番同様、
         // EcuM_Init() が Com_Init() の直後に呼ぶのと同じ順序。
-        E2EXf_PBCfg_Init();
+        E2EXf_Init(NULL);
 
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
     }
