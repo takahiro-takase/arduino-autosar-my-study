@@ -342,11 +342,12 @@ Std_ReturnType Dem_GetDebouncingOfEvent(Dem_EventIdType EventId, Dem_DebouncingS
  * \brief   操作サイクルの状態を設定する（[SWS_Dem_00194]）。
  *
  * \details START: 操作サイクルを（再）開始する。既に開始済みなら、再開始する（[SWS_Dem_00483]）。直前の操作サイクルの
- *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し、イベントごとに TestFailed・
+ *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し（END で評価済みなら、しない）、
+ *          イベントごとに TestFailed・
  *          TestFailedThisOperationCycle をクリア、TestNotCompletedThisOperationCycle を立て、デバウンスカウンタを
  *          0 へ戻す。開始してから、`Dem_SetEventStatus()` の報告を、再び受け付ける（[SWS_Dem_00481]）。
- *          END: 操作サイクルを終了する。そのサイクルの最終ステータスで、PendingDTC の自動クリアを評価する
- *          （[SWS_Dem_00390]）。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
+ *          END: 操作サイクルを終了する。そのサイクルの最終ステータスで、経年回復（Aging）と PendingDTC の
+ *          自動クリアを評価する（[SWS_Dem_00390]、[SWS_Dem_00493]）。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
  *          UDS ステータスの変化は起きない（[SWS_Dem_00482]。`Dem_ClearDTC()` のような、明示的な操作は、サイクルの
  *          状態に関係なく働く）。既に終了済みなら、何もしない（[SWS_Dem_00484]）。
  *          `Dem_Init()` が、電源サイクルを開始する（[SWS_Dem_00853]）。

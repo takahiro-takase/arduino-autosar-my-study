@@ -321,6 +321,9 @@
 #define DEM_STATUS_NOT_COMPLETED_SINCE_CLEAR 0x10U  /**< bit4: testNotCompletedSinceLastClear    */
 #define DEM_STATUS_FAILED_SINCE_CLEAR        0x20U  /**< bit5: testFailedSinceLastClear          */
 #define DEM_STATUS_NOT_COMPLETED_THIS_CYCLE  0x40U  /**< bit6: testNotCompletedThisOperationCycle */
+/** bit7: 内部用。サイクルの最終ステータスを、評価済み（経年回復・PendingDTC）。NvM に保存し、次の起動の二重評価を防ぐ。
+ *  availability mask（0x3D）で、外には見えない。 */
+#define DEM_STATUS_CYCLE_EVALUATED           0x80U
 
 /** SID 0x19 応答の statusAvailabilityMask: bits 0,2,3,4,5 をサポート */
 #define DEM_STATUS_AVAILABILITY_MASK         0x3DU

@@ -288,7 +288,7 @@ FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない
 |---|---|
 | `Dem_Init()` | 起動ごとに、電源サイクルを開始する（DemOperationCycleAutostart、[SWS_Dem_00853]）。NvM から復元した状態で、前回のサイクルを評価する |
 | `Dem_SetOperationCycleState(START)` | 起動の途中で、サイクルを（再）開始する（[SWS_Dem_00483]）。直前のサイクルを評価してから、新しいサイクルへ進む |
-| `Dem_SetOperationCycleState(END)` | サイクルを終了し、最終ステータスで PendingDTC の自動クリアを評価する（`Dem_EndOperationCycle()`）。終了している間、`Dem_SetEventStatus()` の報告は無視され、UDS ステータスもデバウンスも変わらない（[SWS_Dem_00482]）。既に終了済みなら、何もしない（[SWS_Dem_00484]） |
+| `Dem_SetOperationCycleState(END)` | サイクルを終了し、最終ステータスで経年回復と PendingDTC の自動クリアを評価する（`Dem_EndOperationCycle()`）。終了している間、`Dem_SetEventStatus()` の報告は無視され、UDS ステータスもデバウンスも変わらない（[SWS_Dem_00482]）。既に終了済みなら、何もしない（[SWS_Dem_00484]） |
 | `Dem_GetOperationCycleState()` | 現在の状態（START / END）を返す |
 
 共通の処理は `Dem_BeginOperationCycle()` です。START のあと、ステータスか経年回復カウンタが変わったときだけ NvM へ書き込み
@@ -317,10 +317,10 @@ Figure 7.19）。CDTC（confirmedDTC）が複数サイクルのエージング�
 判定は、操作サイクルの終了（`Dem_SetOperationCycleState(END)`）が、そのサイクルの最終状態を見て行います
 （`Dem_EvaluatePendingClear()`、[SWS_Dem_00390] の「END|RESTART」）。電源 OFF で終わる電源サイクルは、END が呼ばれないので、
 次の起動の `Dem_Init()` と、再開始（`Dem_SetOperationCycleState(START)`）が、前回の最終状態で評価します。
-END のあとの START では、評価し直しても結果は同じです（終了している間、報告ではステータスが変わらず、`Dem_ClearDTC()` は
-PendingDTC ごと戻すので、END でクリアされなかったものが、クリーンになることはありません）。
+END で評価したら、イベントのステータスに、内部用の印（bit7、`DEM_STATUS_CYCLE_EVALUATED`、availability mask で外には見えない）を
+立てて、NvM に保存します。次の START、または、電源 OFF を経た次の起動の `Dem_Init()` は、印の立ったイベントを評価しません
+（経年回復カウンタを、二重に進めないためです）。印は、新しいサイクルへ進むときに、落とします。
 評価は、TF/TFTOC/TNCTC を新サイクル用にリセットする直前の値で行います。
-なお、経年回復の評価は、これまでどおり START です（END へ移す対象は、PendingDTC のみ）。
 
 ```
 操作サイクルの終了時（起動・再開始では、TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
@@ -342,11 +342,12 @@ CDTC（confirmedDTC）は SID 0x14 によるクリアだけでなく、**再故�
 「一度故障した部品は永久にDTCが残り続ける」のではなく「故障が再発しなければ
 時間とともに記録が薄れていく」という、実車の診断システムが持つ考え方です。
 
-判定は、新しい操作サイクルの開始（`Dem_Init()`、`Dem_SetOperationCycleState(START)`）が、「直前の操作サイクルの
-最終状態」を見て行います。
+判定は、操作サイクルの終了（`Dem_SetOperationCycleState(END)`、[SWS_Dem_00493]）が、そのサイクルの最終状態を見て行います。
+電源 OFF で終わるサイクルは END が呼ばれないので、次の起動の `Dem_Init()` と、再開始（START）が、前回の最終状態で評価します。
+END のあとの START では、評価しません（カウンタが二重に進むため）。CONFIRMED が解除されたときは、END が FiM へ通知します。
 
 ```
-新しい操作サイクルの開始時（TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
+操作サイクルの終了時（起動・再開始では、TF/TFTOC/TNCTC を新サイクル用にリセットする直前）:
   CDTC=0                        → エージング対象外、カウンタ=0
   CDTC=1 かつ TF=1（再故障）      → 連続性が途切れたためカウンタ=0
   CDTC=1 かつ TNCTC=1（未テスト）  → このサイクルは数えない（カウンタ維持）

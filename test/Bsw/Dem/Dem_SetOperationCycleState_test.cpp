@@ -365,30 +365,126 @@ TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndPersist
     EXPECT_EQ(saved[kEvent] & DEM_STATUS_PENDING, 0U);
 }
 
-// END: 何も変わらない（クリアする PendingDTC が無い）ときは、NvM へ書き込まない（EEPROM を消耗させない）
-TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndWithoutChangeSkipsNvMWrite)
+// END のあとに電源を切って、起動し直しても（Dem_Init）、同じサイクルを、もう一度評価しない。経年回復カウンタが、二重に進まない
+// （閾値に達する前に、確定が解除されない）
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndThenRebootDoesNotDoubleCountAging)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    uint8 sentinel[DEM_EVENT_COUNT];
-    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
-    {
-        sentinel[i] = 0xA5U;
-    }
-    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, sentinel), E_OK);   // 書き込まれたかを見分ける目印
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);   // CONFIRMED
+    ASSERT_EQ(EndCycle(), E_OK);     // 失敗したサイクルの終わり（再故障なので、カウンタは 0 のまま）
+    Dem_Test_ResetInitState();
+    Dem_Init(NULL);                  // 電源を入れ直す（NvM は、そのまま）
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    ASSERT_EQ(EndCycle(), E_OK);   // 起動直後で、PendingDTC は無い
+    for (uint8 cycle = 1U; cycle < DEM_AGING_THRESHOLD_BUTTON_STUCK; cycle++)
+    {
+        ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);   // クリーンなサイクル
+        ASSERT_EQ(EndCycle(), E_OK);
+        Dem_Test_ResetInitState();
+        Dem_Init(NULL);
+        ASSERT_NE(Status(kEvent) & DEM_STATUS_CONFIRMED, 0U);                   // 閾値の前は、まだ確定のまま
+    }
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);       // 閾値に達する、最後のクリーンなサイクル
+    ASSERT_EQ(EndCycle(), E_OK);
+    Dem_Test_ResetInitState();
+    Dem_Init(NULL);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Status(kEvent) & DEM_STATUS_CONFIRMED, 0U);
+}
+
+// END: 評価済みの印（内部用の bit7）は、availability mask で、外に見えない。次のサイクルの開始で、落ちる
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EvaluatedMarkIsHiddenAndClearedByStart)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);
+    ASSERT_EQ(EndCycle(), E_OK);
     uint8 saved[DEM_EVENT_COUNT] = { 0U };
+    (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, saved);
+    ASSERT_NE(saved[kEvent] & DEM_STATUS_CYCLE_EVALUATED, 0U);   // END で、NvM に保存された
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const uint8 hidden = Status(kEvent);
+    ASSERT_EQ(StartCycle(), E_OK);
     (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, saved);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(saved[kEvent], 0xA5U);   // 目印のまま
+    EXPECT_EQ(hidden & DEM_STATUS_CYCLE_EVALUATED, 0U);
+    EXPECT_EQ(saved[kEvent] & DEM_STATUS_CYCLE_EVALUATED, 0U);
+}
+
+// END: そのサイクルが、クリーンなら、経年回復カウンタを 1 つ進める。閾値に達した END で、CONFIRMED を解除する
+// （START を待たない）。END と START を組にして繰り返しても、カウンタは二重に進まない（閾値に達する前に、解除されない）
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndAgesConfirmedEventWithoutDoubleCounting)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);   // CONFIRMED
+    ASSERT_NE(Status(kEvent) & DEM_STATUS_CONFIRMED, 0U);
+    ASSERT_EQ(EndCycle(), E_OK);     // 失敗したサイクルの終わり（再故障なので、カウンタは 0 のまま）
+    ASSERT_EQ(StartCycle(), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    for (uint8 cycle = 1U; cycle < DEM_AGING_THRESHOLD_BUTTON_STUCK; cycle++)
+    {
+        ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);   // クリーンなサイクル
+        ASSERT_EQ(EndCycle(), E_OK);
+        ASSERT_NE(Status(kEvent) & DEM_STATUS_CONFIRMED, 0U);                   // 閾値の前は、まだ確定のまま
+        ASSERT_EQ(StartCycle(), E_OK);
+        ASSERT_NE(Status(kEvent) & DEM_STATUS_CONFIRMED, 0U);                   // START で、二重に進まない
+    }
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);       // 閾値に達する、最後のクリーンなサイクル
+    ASSERT_EQ(EndCycle(), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Status(kEvent) & DEM_STATUS_CONFIRMED, 0U);   // START していないのに、回復している
+}
+
+// END: 経年回復を進めたとき、変更したカウンタを NvM へ書き込む
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndPersistsAgingCounterToNvM)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);
+    ASSERT_EQ(EndCycle(), E_OK);
+    ASSERT_EQ(StartCycle(), E_OK);
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);   // クリーンなサイクル
+    uint8 sentinel[DEM_EVENT_COUNT];
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        sentinel[i] = 0xA5U;
+    }
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_AGING, sentinel), E_OK);   // 書き込まれたかを見分ける目印
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(EndCycle(), E_OK);   // カウンタが 0 → 1
+    uint8 saved[DEM_EVENT_COUNT] = { 0U };
+    (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_AGING, saved);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(saved[kEvent], 1U);
 }
 
 // START: 直前のサイクルが、クリーンなら、経年回復カウンタを 1 つ進める。閾値に達したら、CONFIRMED を解除する

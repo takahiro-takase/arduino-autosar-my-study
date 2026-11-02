@@ -200,6 +200,36 @@ TEST_F(FiM_DemTriggerOnMonitorStatus_Test, Dem_ClearDTC_OK_SingleDtcReleasesFidW
     EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);
 }
 
+// OK: 操作サイクルの END で、経年回復が完了して確定が解除されると、FiM_MainFunction() を待たずに、抑止が解かれる。
+TEST_F(FiM_DemTriggerOnMonitorStatus_Test, Dem_SetOperationCycleState_OK_EndAgingReleasesFidWithoutWaitingForMainFunction)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FiM_Init(&FiM_Config);
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_FAILED);
+    ASSERT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);   // 抑止されている
+    (void)Dem_SetOperationCycleState(DemConf_DemOperationCycle_POWER, DEM_CYCLE_STATE_START);   // 失敗したサイクルの終わり
+    for (uint8 cycle = 1U; cycle < DEM_AGING_THRESHOLD_CAN_BUSOFF; cycle++)
+    {
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);   // クリーンなサイクル
+        (void)Dem_SetOperationCycleState(DemConf_DemOperationCycle_POWER, DEM_CYCLE_STATE_END);
+        (void)Dem_SetOperationCycleState(DemConf_DemOperationCycle_POWER, DEM_CYCLE_STATE_START);
+    }
+    (void)Dem_SetEventStatus(DemConf_DemEventParameter_CAN_BUSOFF, DEM_EVENT_STATUS_PASSED);       // 閾値に達する、最後のクリーンなサイクル
+    ASSERT_EQ(GetPermission(FIM_FID_RUNNING_LED), FALSE);   // まだ、確定のまま
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    (void)Dem_SetOperationCycleState(DemConf_DemOperationCycle_POWER, DEM_CYCLE_STATE_END);   // FiM_MainFunction() は呼ばない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(GetPermission(FIM_FID_RUNNING_LED), TRUE);
+}
+
 // OK: クリアしても、ステータスが変わらないとき（何も起きていない初期状態）は、FiM を再評価しない（Dem へ問い合わせない）。
 TEST_F(FiM_DemTriggerOnMonitorStatus_Test, Dem_ClearDTC_OK_UnchangedStatusDoesNotTriggerFiM)
 {
