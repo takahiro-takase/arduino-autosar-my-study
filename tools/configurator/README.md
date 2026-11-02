@@ -40,6 +40,9 @@ src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / 
 - 信号表に無いフレーム（UDS 診断など）だけ、設定 json に `canId` と `dlc` を直接書きます。
 - 設定 json に書くのは、信号表から決まらない値です（PDU ID の割り当て、経路の宛先モジュール、HTH/HRH、
   Com の送信モード・フィルタ・コールバック名など）。
+- **PduR の TP のルーティング**（`tpRxPaths` / `tpTxPaths`。CanTp ↔ Dcm の診断の経路）の ID は、`CanTp.json` の
+  `rxSduId`・`txSduId`・`dcmRxPduId`・`dcmTxPduId` と一致していなければなりません（食い違うと、生成時にエラー）。
+  生成される表は、`CANTP_RX_SDU_ID` などのマクロで書きます。関数は固定（`Dcm_StartOfReception` など）です。
 - **PduR は Com の I-PDU を名前で参照します**（`ipdu` / `confIpdu`）。PduR の宛先 ID の数値は、生成時に Com の設定から引きます。
   Com の `pduRId` も、PduR の経路から引きます（SecOC 経由の I-PDU は、SecOC の設定から引きます）。
 - **E2E / SecOC のレイアウトも信号表から引きます。** E2EXf の DataLength・Offset・DataID（既定は CAN ID）、

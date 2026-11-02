@@ -17,7 +17,6 @@
 #include "CanIf_PBCfg.h"
 #include "Com_PBCfg.h"
 #include "Gpt_PBCfg.h"
-#include "PduR_PBCfg.h"
 #include "Os_PBCfg.h"
 #include "E2EMon.h"
 #include "Rte.h"
@@ -31,7 +30,6 @@ const Can_ConfigType       Can_Config;
 const CanIf_ConfigType     CanIf_Config;
 const Com_ConfigType       Com_Config;
 const Gpt_ConfigType       Gpt_Config;
-const PduR_PBConfigType    PduR_Config;
 const Os_ConfigType        Os_Config;
 
 /* ======================================================================

@@ -91,6 +91,43 @@ typedef struct
     PduR_TxTriggerTransmitFctType TriggerTransmitFct;
 } PduR_TxRoutingPathType;
 
+/* TP（トランスポートプロトコル）のルーティング。上位層（Dcm）の Tp 用コールバックの関数ポインタ型。
+ * 引数は、Dcm_StartOfReception() などの仕様どおりのシグネチャと同じ（先頭の id は上位層の PDU ID）。 */
+typedef BufReq_ReturnType (*PduR_TpStartOfReceptionFctType)(PduIdType id, const PduInfoType* info,
+                                                            PduLengthType TpSduLength, PduLengthType* bufferSizePtr);
+typedef BufReq_ReturnType (*PduR_TpCopyRxDataFctType)(PduIdType id, const PduInfoType* info,
+                                                      PduLengthType* bufferSizePtr);
+typedef void (*PduR_TpRxIndicationFctType)(PduIdType id, Std_ReturnType result);
+typedef BufReq_ReturnType (*PduR_TpCopyTxDataFctType)(PduIdType id, const PduInfoType* info,
+                                                      const RetryInfoType* retry, PduLengthType* availableDataPtr);
+typedef void (*PduR_TpTxConfirmationFctType)(PduIdType id, Std_ReturnType result);
+
+/* 下位層（CanTp）の CanTp_Transmit()。PduR_<User:Up>Transmit() の転送先。 */
+typedef Std_ReturnType (*PduR_TpTransmitFctType)(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
+
+/* TP の RX ルーティングパス（下位層の CanTp → 上位層の Dcm）。
+ * SrcPduId は、CanTp が PduR_CanTp*() へ渡す受信 N-SDU の ID（下位層側の ID）。DestPduId は、上位層の PDU ID。 */
+typedef struct
+{
+    PduIdType                       SrcPduId;
+    PduIdType                       DestPduId;
+    PduR_TpStartOfReceptionFctType  StartOfReceptionFct;
+    PduR_TpCopyRxDataFctType        CopyRxDataFct;
+    PduR_TpRxIndicationFctType      RxIndicationFct;
+} PduR_TpRxRoutingPathType;
+
+/* TP の TX ルーティングパス（上位層の Dcm → 下位層の CanTp）。
+ * SrcPduId は、上位層が PduR_<User:Up>Transmit() へ渡す PDU ID（上位層側の ID）。DestPduId は、
+ * CanTp_Transmit() へ渡す送信 N-SDU の ID で、CanTp が PduR_CanTp*() へ渡す ID（下位層側の ID）でもある。 */
+typedef struct
+{
+    PduIdType                    SrcPduId;
+    PduIdType                    DestPduId;
+    PduR_TpTransmitFctType       TransmitFct;
+    PduR_TpCopyTxDataFctType     CopyTxDataFct;
+    PduR_TpTxConfirmationFctType TxConfirmationFct;
+} PduR_TpTxRoutingPathType;
+
 /* SWS_PduR_00771: PduR_GetConfigurationId() が返す、ポストビルド構成の識別子 */
 typedef uint16 PduR_PBConfigIdType;
 
@@ -112,7 +149,7 @@ typedef struct
 } PduR_RoutingPathGroupType;
 
 /* SWS_PduR_00241: post-build configuration type (PduR_PBConfigType)
- * 末尾の 3 項目は省略できる（省略すると 0 / NULL。グループなし、構成 ID 0）。 */
+ * 末尾の 7 項目は省略できる（省略すると 0 / NULL。グループなし、構成 ID 0、TP のパスなし）。 */
 typedef struct
 {
     const PduR_RxRoutingPathType* RxPaths;
@@ -122,6 +159,10 @@ typedef struct
     PduR_PBConfigIdType               PBConfigId;            /* PduR_GetConfigurationId() が返す値（SWS_PduR_00280） */
     const PduR_RoutingPathGroupType*  RoutingPathGroups;     /* ルーティングパスグループの配列。無ければ NULL */
     uint8                             RoutingPathGroupCount; /* PDUR_ROUTING_PATH_GROUP_MAX 以下 */
+    const PduR_TpRxRoutingPathType*   TpRxPaths;             /* TP の RX ルーティングパス（CanTp → Dcm）。無ければ NULL */
+    uint8                             TpRxPathCount;
+    const PduR_TpTxRoutingPathType*   TpTxPaths;             /* TP の TX ルーティングパス（Dcm → CanTp）。無ければ NULL */
+    uint8                             TpTxPathCount;
 } PduR_PBConfigType;
 
 #endif

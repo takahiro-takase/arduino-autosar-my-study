@@ -22,6 +22,7 @@ extern "C" {
 #include "ComM.h"
 #include "PduR.h"
 #include "CanTp.h"
+#include "Fake_PduR_PBCfg.h"
 #include "CanTp_Cfg.h"
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
@@ -105,7 +106,14 @@ const PduR_PBConfigType kTestPduRConfig = {
     /* RxPaths */     &kTestPduRRxPath,
     /* RxPathCount */ 1U,
     /* TxPaths */     &kTestPduRTxPath,
-    /* TxPathCount */ 1U
+    /* TxPathCount */ 1U,
+    /* PBConfigId */ 0U,
+    /* RoutingPathGroups */ NULL,
+    /* RoutingPathGroupCount */ 0U,
+    /* TpRxPaths */ Fake_PduR_TpRxPaths,
+    /* TpRxPathCount */ FAKE_PDUR_TP_RX_PATH_COUNT,
+    /* TpTxPaths */ Fake_PduR_TpTxPaths,
+    /* TpTxPathCount */ FAKE_PDUR_TP_TX_PATH_COUNT
 };
 
 /* ======================================================================

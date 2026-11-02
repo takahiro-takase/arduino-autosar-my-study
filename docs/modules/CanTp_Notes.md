@@ -9,10 +9,22 @@ DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います
 
 ## 上位層（Dcm）との受け渡し（TP の API）
 
-CanTp は、組み立て・分割用のバッファを持ちません。フレームごとに、Dcm と TP の API でやり取りします
-（2026-10 に、独自の `Dcm_ComIndication()` から、仕様の関数へ置き換えました）。
-仕様では PduR を経由しますが（`PduR_CanTpStartOfReception` など）、本プロジェクトは PduR に TP の経路を持たないので、
-CanTp が Dcm を直接呼びます。
+CanTp は、組み立て・分割用のバッファを持ちません。フレームごとに、PduR の TP の API でやり取りします
+（2026-10 に、独自の `Dcm_ComIndication()` から、仕様の関数へ置き換え、2026-11 に、仕様どおり PduR 経由にしました）。
+CanTp は `PduR_CanTpStartOfReception` などを呼び、PduR が、TP のルーティングパス（`PduR.json` の `tpRxPaths`・`tpTxPaths`）で
+Dcm の PDU ID へ変換して、Dcm の関数（下の表の `Dcm_...`）を呼びます。Dcm が応答を送るときは、`PduR_DcmTransmit()` が
+`CanTp_Transmit()` へ転送します。表の `Dcm_...` は、実際には、PduR が呼ぶ関数です。
+
+| CanTp が呼ぶ（PduR の API） | PduR が呼ぶ（Dcm の関数） |
+|------|------|
+| `PduR_CanTpStartOfReception` | `Dcm_StartOfReception` |
+| `PduR_CanTpCopyRxData` | `Dcm_CopyRxData` |
+| `PduR_CanTpRxIndication` | `Dcm_TpRxIndication` |
+| `PduR_CanTpCopyTxData` | `Dcm_CopyTxData` |
+| `PduR_CanTpTxConfirmation` | `Dcm_TpTxConfirmation` |
+
+CanTp が PduR へ渡す ID は、CanTp の受信・送信の N-SDU の ID（`CANTP_RX_SDU_ID`・`CANTP_TX_SDU_ID`）です。
+Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は、PduR が行います。
 
 | 方向 | 順序 | 内容 |
 |------|------|------|

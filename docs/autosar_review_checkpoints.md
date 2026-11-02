@@ -432,6 +432,11 @@ TRANSITION/DATALOST/PARAM_BAUDRATE/ICOM_CONFIG_INVALID の9件）と値の並び
 `Can_MainFunction_Read()` が受信バッファのオーバーフローで `Det_ReportRuntimeError()` から報告するようにした。`Can_CheckWakeup`（0x0B）と、
 `Can_Write` の `sdu = NULL`（トリガ送信、[SWS_Can_00503-00506]）も実装した。`Can_CheckWakeup` から `EcuM_SetWakeupEvent()` を呼ぶ仕様の経路に合わせ、
 `EcuM_SetWakeupEvent`（0x0C）と `CanIf_CheckWakeup`（0x11）を追加し、`EcuM_CheckWakeup` は `CanIf_CheckWakeup()` を呼ぶだけの窓口にした。）
+（2026-11-03 追記: CanTp ↔ Dcm の TP の経路を、PduR 4.3.1 の 8.3.4 章（`PduR_<User:LoTp>Xxx`）に合わせた。`PduR_CanTpStartOfReception`（0x46）・
+`PduR_CanTpCopyRxData`（0x44）・`PduR_CanTpRxIndication`（0x45）・`PduR_CanTpCopyTxData`（0x43）・`PduR_CanTpTxConfirmation`（0x48）と、
+Dcm 向けの `PduR_DcmTransmit`（0x49）を追加し、`PduR_PBConfigType` に TP のルーティングパス（`TpRxPaths`・`TpTxPaths`）を持たせた。
+CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は `PduR_DcmTransmit()` → `CanTp_Transmit()`。CanTp ↔ CanIf 側（独自の `PduR_CanTpTransmit`、
+CanIf → PduR → CanTp の受信）は、次の段で仕様の直結に直す。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

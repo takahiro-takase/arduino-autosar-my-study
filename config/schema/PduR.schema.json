@@ -21,6 +21,18 @@
       "minItems": 1,
       "maxItems": 255,
       "items": { "$ref": "#/$defs/txPath" }
+    },
+    "tpRxPaths": {
+      "type": "array",
+      "maxItems": 255,
+      "description": "TP の RX ルーティングパス（CanTp → Dcm）。省略または空なら、TP のルーティングを持たない",
+      "items": { "$ref": "#/$defs/tpPath" }
+    },
+    "tpTxPaths": {
+      "type": "array",
+      "maxItems": 255,
+      "description": "TP の TX ルーティングパス（Dcm → CanTp）。省略または空なら、TP のルーティングを持たない",
+      "items": { "$ref": "#/$defs/tpPath" }
     }
   },
   "$defs": {
@@ -62,6 +74,17 @@
         "ipdu": { "$ref": "#/$defs/shortName", "description": "COM 宛ての場合の、Com の RX I-PDU の name。destPduId は Com の設定の並び順から引く" },
         "secocPdu": { "$ref": "#/$defs/shortName", "description": "SecOC 宛ての場合の、SecOC の RX PDU の name。destPduId は SecOC の設定の並び順から引く" },
         "destPduIdNote": { "$ref": "#/$defs/text" }
+      }
+    },
+    "tpPath": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "summary", "srcPduId", "destPduId"],
+      "properties": {
+        "name": { "$ref": "#/$defs/shortName" },
+        "summary": { "$ref": "#/$defs/text" },
+        "srcPduId": { "$ref": "#/$defs/pduId", "description": "RX は、CanTp の受信 N-SDU の ID（CanTp.json の rxSduId と一致）。TX は、Dcm の TX I-PDU の ID（CanTp.json の dcmTxPduId と一致）" },
+        "destPduId": { "$ref": "#/$defs/pduId", "description": "RX は、Dcm の RX I-PDU の ID（CanTp.json の dcmRxPduId と一致）。TX は、CanTp の送信 N-SDU の ID（CanTp.json の txSduId と一致）" }
       }
     },
     "txPath": {

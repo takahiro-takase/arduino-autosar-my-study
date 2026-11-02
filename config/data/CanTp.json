@@ -58,7 +58,7 @@
   "txSduId": {
     "value": 0,
     "doc": [
-      "Dcm が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル)"
+      "PduR の TP のルーティングパス（PduR.json の tpTxPaths）が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル)"
     ]
   },
   "rxSduId": {

@@ -14,6 +14,8 @@
 
 extern "C" {
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
 #include "Wrap_CanTp.h"
@@ -64,6 +66,7 @@ protected:
         ForcedReturn_PduR_CanTpTransmit      = E_OK;
         Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
+        PduR_Init(&PduR_Config);
         Dem_Init(NULL);
         Dcm_Init(NULL);                // 上位層（Dcm）は実体。CanTp から渡るデータを、実際に受け取る・取り出す
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
@@ -565,6 +568,9 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_SfValidFrameStartsReceptio
     /* ----------------------- */
     EXPECT_EQ(CallCount_Dcm_StartOfReception, 1U);
     EXPECT_EQ(LastTpSduLength_Dcm_StartOfReception, 2U);   // SF のペイロード長（PCI の下位 4 ビット）
+    EXPECT_EQ(CallCount_PduR_CanTpStartOfReception, 1U);   // 上位層（Dcm）へは、PduR を経由して渡す
+    EXPECT_EQ(CallCount_PduR_CanTpCopyRxData, 1U);
+    EXPECT_EQ(CallCount_PduR_CanTpRxIndication, 1U);
 }
 
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FfValidFrameStartsReception)

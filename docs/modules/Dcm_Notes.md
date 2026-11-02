@@ -19,16 +19,18 @@ MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
                 PduR（パス 1: CanTp 専用ルート）
                   ↓
                 CanTp_RxIndication()
-                  SF → Dcm_StartOfReception → Dcm_CopyRxData → Dcm_TpRxIndication
-                  FF → Dcm_StartOfReception、FC 送信、CF 待ち
-                  CF → Dcm_CopyRxData（Dcm の受信バッファへ直接）、完成後に Dcm_TpRxIndication
+                  SF → PduR_CanTpStartOfReception → PduR_CanTpCopyRxData → PduR_CanTpRxIndication
+                  FF → PduR_CanTpStartOfReception、FC 送信、CF 待ち
+                  CF → PduR_CanTpCopyRxData（Dcm の受信バッファへ直接）、完成後に PduR_CanTpRxIndication
                   FC → TX 側の CF 送信を再開
+                  （PduR が、TP のルーティングパスで Dcm_StartOfReception / Dcm_CopyRxData / Dcm_TpRxIndication へ転送する）
                   ↓
                 Dcm_TpRxIndication(E_OK) → UDS サービス処理
                   ↓
-                CanTp_Transmit()（応答の長さだけを渡す）
-                  ≤7B → Dcm_CopyTxData → SF 送信 → Dcm_TpTxConfirmation
-                  ≥8B → Dcm_CopyTxData → FF 送信 → FC 待ち → CF ごとに Dcm_CopyTxData → 送信 → Dcm_TpTxConfirmation
+                PduR_DcmTransmit() → CanTp_Transmit()（応答の長さだけを渡す）
+                  ≤7B → PduR_CanTpCopyTxData → SF 送信 → PduR_CanTpTxConfirmation
+                  ≥8B → PduR_CanTpCopyTxData → FF 送信 → FC 待ち → CF ごとに PduR_CanTpCopyTxData → 送信 → PduR_CanTpTxConfirmation
+                  （PduR が、Dcm_CopyTxData / Dcm_TpTxConfirmation へ転送する）
                   ↓
                 PduR_CanTpTransmit(SrcPduId=1) → CanIf → Can
   │  CAN 0x7E8  [UDS 応答 / FC]
@@ -690,7 +692,7 @@ Dcm は、CanTp との間で、仕様の TP の関数（`Dcm_Cbk.h` で宣言）
 | `Dcm_CopyTxData` | 応答（`Dcm_TxBuf`）の次の部分を、CanTp のフレームバッファへコピーする。`retry->TpDataState` が `TP_DATARETRY` なら、`TxTpDataCnt` バイト戻してからコピーする。要求した長さが残りより大きければ、何もコピーせず `BUFREQ_E_BUSY` |
 | `Dcm_TpTxConfirmation` | 送信の終了。「送信が進行中」の状態を解除する（以降、新しい要求を受け付け、S3 タイマも進む） |
 
-- 応答の送信（`Dcm_Transmit()`）は、`CanTp_Transmit()` に応答の長さだけを渡します。「送信が進行中」の印は、`CanTp_Transmit()` の中で `Dcm_TpTxConfirmation()` が呼ばれる場合（SF）に備えて、呼ぶ前に立てます。受け付けられなければ、すぐ解除します。
+- 応答の送信（`Dcm_Transmit()`）は、`PduR_DcmTransmit()`（→ `CanTp_Transmit()`）に応答の長さだけを渡します。「送信が進行中」の印は、`CanTp_Transmit()` の中で `Dcm_TpTxConfirmation()` が呼ばれる場合（SF）に備えて、呼ぶ前に立てます。受け付けられなければ、すぐ解除します。
 - 要求の受信バッファ `DCM_RX_BUF_SIZE` は `Dcm_Cfg.h` に手書きしています（現在の最大の要求は 0x2E の鍵更新の 20 バイト）。
 - 仕様では PduR を経由します（`PduR_CanTpStartOfReception` など）が、本プロジェクトは PduR に TP の経路を持たないので、CanTp が Dcm を直接呼びます。
 - 応答の送信の確認（`Dcm_TpTxConfirmation`）が届くまで ComM の `InactiveDiagnostic` を待つのが仕様の趣旨ですが、既存の動作を変えないため、通知は、従来どおり応答の送信を始めた時点で行っています。

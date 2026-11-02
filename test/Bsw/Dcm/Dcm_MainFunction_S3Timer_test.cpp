@@ -20,6 +20,8 @@ extern "C" {
 #include "NvM.h"
 #include "NvM_TestUtil.h"
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dcm.h"
 #include "Wrap_ComM.h"
@@ -69,6 +71,7 @@ protected:
 
         NvMTest_ColdBoot();
         CanTp_Init(NULL);
+        PduR_Init(&PduR_Config);
         Dem_Init(NULL);
         Dcm_Init(NULL);
 

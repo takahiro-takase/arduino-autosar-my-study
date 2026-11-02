@@ -63,6 +63,12 @@
 #define PDUR_API_ID_SECOC_TRANSMIT      PDUR_API_ID_TRANSMIT
 #define PDUR_API_ID_GET_VERSION_INFO    0xF1U
 #define PDUR_API_ID_TRIGGER_TRANSMIT    0x41U
+/** TP の下位層（CanTp）向け API（PduR_<User:LoTp>Xxx。SWS 8.3.4 章） */
+#define PDUR_API_ID_TP_COPY_TX_DATA        0x43U
+#define PDUR_API_ID_TP_COPY_RX_DATA        0x44U
+#define PDUR_API_ID_TP_RX_INDICATION       0x45U
+#define PDUR_API_ID_TP_START_OF_RECEPTION  0x46U
+#define PDUR_API_ID_TP_TX_CONFIRMATION     0x48U
 #define PDUR_API_ID_GET_CONFIGURATION_ID 0xF2U
 #define PDUR_API_ID_ENABLE_ROUTING      0xF3U
 #define PDUR_API_ID_DISABLE_ROUTING     0xF4U
@@ -116,6 +122,12 @@
  *  SrcPduId は COM が PduR_ComTransmit() へ、CanTp が PduR_CanTpTransmit() へ
  *  渡す共通の名前空間のため、各パスで重複しない値を割り当てること。 */
 #define PDUR_TX_PATH_COUNT   6U
+
+/** TP の RX ルーティングパス数（CanTp → Dcm） */
+#define PDUR_TP_RX_PATH_COUNT   1U
+
+/** TP の TX ルーティングパス数（Dcm → CanTp） */
+#define PDUR_TP_TX_PATH_COUNT   1U
 /* @@GEN-END pdur-counts */
 
 /* @@GEN-BEGIN pdur-symbols  生成元: config/data/PduR.json  （自動生成: 手編集禁止） */

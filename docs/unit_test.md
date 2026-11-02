@@ -258,6 +258,10 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
   全モジュールを 1 つのバイナリへリンクするため名前が衝突しうるので採用しない。
 - **上位層を実体で使うテスト（CanTp）**: CanTp のテストは、上位層の Dcm を実体のまま
   `Dem_Init()`・`Dcm_Init()` で初期化し、CanTp が渡すデータを Dcm が実際に受け取る・取り出す形にしている。
+  CanTp と Dcm の間は、実体の PduR が TP のルーティングパスで結ぶ。native_chain は本番の `PduR_PBCfg.c` を
+  リンクしないので、`stub/Bsw/PduR/Fake_PduR_PBCfg.c` の `PduR_Config` が、本番と同じ TP のルーティング
+  （CanTp ↔ Dcm）を持つ。CanTp・Dcm を実体で結ぶテストは `PduR_Init(&PduR_Config)` を呼ぶ。
+  テスト固有の PduR 設定（IF のルーティングを持つもの）には、`Fake_PduR_PBCfg.h` の `Fake_PduR_TpRxPaths` / `Fake_PduR_TpTxPaths` を持たせる。
   CAN フレームの送信（`PduR_CanTpTransmit`）は `stub/Bsw/PduR/Wrap_PduR.c` の
   `FailFromCallCount_PduR_CanTpTransmit` / `ForcedReturn_PduR_CanTpTransmit` で成功・失敗を決める
   （実体の PduR は設定が無いと失敗するため、成功させるには `FailFromCallCount_…= 0` と `ForcedReturn_…= E_OK` を指定する）。

@@ -8,13 +8,15 @@
  *
  *          RX フロー:
  *            PduR_CanIfRxIndication → CanTp_RxIndication
- *            CanTp: SF/FF → Dcm_StartOfReception、各フレームのデータ → Dcm_CopyRxData、
- *                   完了 → Dcm_TpRxIndication（組み立ては、Dcm の受信バッファの上で行う）
+ *            CanTp: SF/FF → PduR_CanTpStartOfReception、各フレームのデータ → PduR_CanTpCopyRxData、
+ *                   完了 → PduR_CanTpRxIndication（組み立ては、Dcm の受信バッファの上で行う）
+ *                   （PduR が、Dcm_StartOfReception / Dcm_CopyRxData / Dcm_TpRxIndication へ転送する）
  *
  *          TX フロー:
- *            Dcm → CanTp_Transmit (応答の長さだけ)
- *            CanTp: SF/FF/各 CF のデータ → Dcm_CopyTxData、フレームを送信 → PduR_CanTpTransmit → CanIf → CAN 0x7E8、
- *                   完了 → Dcm_TpTxConfirmation
+ *            Dcm → PduR_DcmTransmit → CanTp_Transmit (応答の長さだけ)
+ *            CanTp: SF/FF/各 CF のデータ → PduR_CanTpCopyTxData（→ Dcm_CopyTxData）、
+ *                   フレームを送信 → PduR_CanTpTransmit → CanIf → CAN 0x7E8、
+ *                   完了 → PduR_CanTpTxConfirmation（→ Dcm_TpTxConfirmation）
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。
@@ -88,7 +90,7 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr);
  *
  * \param[in]  TxSduId     TX N-SDU ID (CANTP_TX_SDU_ID)。本実装は 1 チャネル固定。
  * \param[in]  PduInfoPtr  送信する UDS 応答の長さ（SduLength）。データ（SduDataPtr）は使わず、
- *                         フレームを組み立てる時に Dcm_CopyTxData() で取り出す。
+ *                         フレームを組み立てる時に PduR_CanTpCopyTxData() で取り出す。
  *                         SduLength は 4095 を超えてはならない（FF の長さ欄は 12 bit）。
  *
  * \retval  E_OK      送信要求を受け付けた (SF) または FF を送信した (MF)。
@@ -139,7 +141,7 @@ void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * \brief   PduR から配信された受信 CAN フレームを処理する。
  *
  * \details フレームタイプ (SF/FF/CF/FC) を判定し、
- *          SF/FF/CF のデータを、Dcm の TP の API（Dcm_StartOfReception / Dcm_CopyRxData / Dcm_TpRxIndication）で渡す
+ *          SF/FF/CF のデータを、PduR の TP の API（PduR_CanTpStartOfReception / PduR_CanTpCopyRxData / PduR_CanTpRxIndication）で渡す
  *          (SWS_CanTp_00214)。
  *          FC フレームは TX 側の FC 待ちを解除する。
  *

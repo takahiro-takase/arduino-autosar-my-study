@@ -117,7 +117,7 @@
  *  （PduR.json の txPaths の name から求めたシンボリック名。CAN 0x7E8 の経路）。 */
 #define CANTP_PDUR_TX_SDU_ID  PduRConf_PduRSrcPdu_DiagResp_Tx
 
-/** Dcm が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル) */
+/** PduR の TP のルーティングパス（PduR.json の tpTxPaths）が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル) */
 #define CANTP_TX_SDU_ID  0U
 
 /** CanTp_RxIndication() が受け取る RX N-SDU ID (診断要求チャネル) */

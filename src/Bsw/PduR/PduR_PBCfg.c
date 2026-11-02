@@ -71,6 +71,8 @@
 #include "Com_Cfg.h"
 #include "Com.h"
 #include "CanTp.h"
+#include "CanTp_Cfg.h"
+#include "Dcm_Cbk.h"
 #include "SecOC.h"
 #include "SecOC_Cfg.h"
 
@@ -234,6 +236,40 @@ static const PduR_TxRoutingPathType PduR_TxPaths[PDUR_TX_PATH_COUNT] = {
 };
 
 /* -----------------------------------------------------------------------
+ * TP の RX ルーティングパステーブル（CanTp → Dcm）
+ * CanTp が PduR_CanTp*() へ渡す受信 N-SDU の ID を、Dcm の RX I-PDU の ID へ変換して、
+ * Dcm のコールバックへ転送する（SWS_PduR_00507/00512/00375）。
+ * ----------------------------------------------------------------------- */
+static const PduR_TpRxRoutingPathType PduR_TpRxPaths[PDUR_TP_RX_PATH_COUNT] = {
+    {
+        /* TP RX パス 0: CanTp (RxSduId=0) → Dcm (RX I-PDU 0)。UDS 診断要求の N-SDU
+         * DaVinci: PduRRoutingPath/DiagReq_TpRx */
+        .SrcPduId            = CANTP_RX_SDU_ID,
+        .DestPduId           = CANTP_DCM_RX_PDU_ID,
+        .StartOfReceptionFct = Dcm_StartOfReception,
+        .CopyRxDataFct       = Dcm_CopyRxData,
+        .RxIndicationFct     = Dcm_TpRxIndication
+    }
+};
+
+/* -----------------------------------------------------------------------
+ * TP の TX ルーティングパステーブル（Dcm → CanTp）
+ * Dcm の PduR_DcmTransmit() を、CanTp_Transmit() へ転送する。CanTp が PduR_CanTp*() へ渡す送信 N-SDU の ID を
+ * Dcm の TX I-PDU の ID へ変換して、Dcm のコールバックへ転送する（SWS_PduR_00406/00518/00381）。
+ * ----------------------------------------------------------------------- */
+static const PduR_TpTxRoutingPathType PduR_TpTxPaths[PDUR_TP_TX_PATH_COUNT] = {
+    {
+        /* TP TX パス 0: Dcm (TX I-PDU 0) → CanTp (TxSduId=0)。UDS 診断応答の N-SDU
+         * DaVinci: PduRRoutingPath/DiagResp_TpTx */
+        .SrcPduId          = CANTP_DCM_TX_PDU_ID,
+        .DestPduId         = CANTP_TX_SDU_ID,
+        .TransmitFct       = CanTp_Transmit,
+        .CopyTxDataFct     = Dcm_CopyTxData,
+        .TxConfirmationFct = Dcm_TpTxConfirmation
+    }
+};
+
+/* -----------------------------------------------------------------------
  * PduR ポストビルド設定インスタンス
  * PduR_Init() の引数として渡す。
  * ----------------------------------------------------------------------- */
@@ -241,6 +277,10 @@ const PduR_PBConfigType PduR_Config = {
     .RxPaths     = PduR_RxPaths,
     .RxPathCount = PDUR_RX_PATH_COUNT,
     .TxPaths     = PduR_TxPaths,
-    .TxPathCount = PDUR_TX_PATH_COUNT
+    .TxPathCount = PDUR_TX_PATH_COUNT,
+    .TpRxPaths     = PduR_TpRxPaths,
+    .TpRxPathCount = PDUR_TP_RX_PATH_COUNT,
+    .TpTxPaths     = PduR_TpTxPaths,
+    .TpTxPathCount = PDUR_TP_TX_PATH_COUNT
 };
 /* @@GEN-END pdur-routing */

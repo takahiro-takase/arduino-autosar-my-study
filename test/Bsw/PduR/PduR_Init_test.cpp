@@ -56,6 +56,17 @@ const PduR_RxRoutingPathType kTestRxPath = {
     /* DestCount */ 1U
 };
 
+// TP のルーティングパスの検査用の偽物（Init は関数ポインタの NULL だけを見る。呼ばれることはない）。
+BufReq_ReturnType DummyStart(PduIdType, const PduInfoType*, PduLengthType, PduLengthType*) { return BUFREQ_OK; }
+BufReq_ReturnType DummyCopyRx(PduIdType, const PduInfoType*, PduLengthType*) { return BUFREQ_OK; }
+void DummyRxInd(PduIdType, Std_ReturnType) {}
+Std_ReturnType DummyTransmit(PduIdType, const PduInfoType*) { return E_OK; }
+BufReq_ReturnType DummyCopyTx(PduIdType, const PduInfoType*, const RetryInfoType*, PduLengthType*) { return BUFREQ_OK; }
+void DummyTxConf(PduIdType, Std_ReturnType) {}
+
+const PduR_TpRxRoutingPathType kGoodTpRxPath = { 1U, 2U, DummyStart, DummyCopyRx, DummyRxInd };
+const PduR_TpTxRoutingPathType kGoodTpTxPath = { 3U, 4U, DummyTransmit, DummyCopyTx, DummyTxConf };
+
 const PduR_PBConfigType kTestConfig = {
     &kTestRxPath, 1U,
     &kTestTxPath, 1U
@@ -271,6 +282,120 @@ TEST_F(PduR_Init_Test, PduR_Init_NG_GroupTxMemberIdsNullWithNonZeroCount)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_TpRxPathsNullWithNonZeroCount)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.TpRxPaths     = NULL;
+    badConfig.TpRxPathCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);   // 配列が無いのに、TP の RX パスが 1 つあると言っている
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_TpTxPathsNullWithNonZeroCount)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.TpTxPaths     = NULL;
+    badConfig.TpTxPathCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);   // 配列が無いのに、TP の TX パスが 1 つあると言っている
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_TpRxPathCallbackNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    PduR_TpRxRoutingPathType badPath = kGoodTpRxPath;
+    badPath.CopyRxDataFct = NULL;   // 呼び出し先が無い
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.TpRxPaths     = &badPath;
+    badConfig.TpRxPathCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);   // 検査せずに呼ぶ関数ポインタが NULL
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_NG_TpTxPathCallbackNull)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    PduR_TpTxRoutingPathType badPath = kGoodTpTxPath;
+    badPath.TransmitFct = NULL;   // 呼び出し先が無い
+    PduR_PBConfigType badConfig = kTestConfig;
+    badConfig.TpTxPaths     = &badPath;
+    badConfig.TpTxPathCount = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&badConfig);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, PDUR_E_INIT_FAILED);   // 検査せずに呼ぶ関数ポインタが NULL
+}
+
+TEST_F(PduR_Init_Test, PduR_Init_OK_TpPathsAreAccepted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduR_Test_ResetInitState();
+    PduR_PBConfigType config = kTestConfig;
+    config.TpRxPaths     = &kGoodTpRxPath;
+    config.TpRxPathCount = 1U;
+    config.TpTxPaths     = &kGoodTpTxPath;
+    config.TpTxPathCount = 1U;
+    PduInfoType info = { NULL, 6U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    PduR_Init(&config);
+    const Std_ReturnType ret = PduR_DcmTransmit(3U, &info);   // 初期化済みなら、TP のパスで CanTp 側（偽物）へ転送される
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 }  // namespace

@@ -13,6 +13,8 @@ extern "C" {
 #include "Dcm_Cfg.h"
 #include "Dem.h"
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dcm.h"
 #include "Fake_Millis.h"
@@ -43,6 +45,7 @@ protected:
         SuppressConfirmation_CanTp_Transmit = 1U;   // Dcm_TpTxConfirmation() を呼ばない（送信が進行中のまま）
 
         CanTp_Init(NULL);
+        PduR_Init(&PduR_Config);
         Dem_Init(NULL);
         Dcm_Init(NULL);
 

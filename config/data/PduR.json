@@ -151,5 +151,21 @@
       "confIpdu": "TestMsg_Tx",
       "confModule": "COM"
     }
+  ],
+  "tpRxPaths": [
+    {
+      "name": "DiagReq_TpRx",
+      "summary": "CanTp (RxSduId=0) → Dcm (RX I-PDU 0)。UDS 診断要求の N-SDU",
+      "srcPduId": 0,
+      "destPduId": 0
+    }
+  ],
+  "tpTxPaths": [
+    {
+      "name": "DiagResp_TpTx",
+      "summary": "Dcm (TX I-PDU 0) → CanTp (TxSduId=0)。UDS 診断応答の N-SDU",
+      "srcPduId": 0,
+      "destPduId": 0
+    }
   ]
 }

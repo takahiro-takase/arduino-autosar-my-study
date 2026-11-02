@@ -14,6 +14,8 @@
 
 extern "C" {
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
 #include "Wrap_CanTp.h"
@@ -68,6 +70,7 @@ protected:
         ForcedReturn_PduR_CanTpTransmit      = E_OK;
         Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
+        PduR_Init(&PduR_Config);
         Dem_Init(NULL);
         Dcm_Init(NULL);                // 上位層（Dcm）は実体。CanTp から渡るデータを、実際に受け取る・取り出す
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
@@ -344,6 +347,8 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_SfIsSentAndConfirmedImmediately)
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(CallCount_PduR_CanTpTransmit, 1U);
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);   // SF は、送ったら終わり
+    EXPECT_EQ(CallCount_PduR_CanTpCopyTxData, 1U);   // 上位層（Dcm）とは、PduR を経由してやり取りする
+    EXPECT_EQ(CallCount_PduR_CanTpTxConfirmation, 1U);
     EXPECT_EQ(LastResult_Dcm_TpTxConfirmation, E_OK);
     EXPECT_FALSE(CanTp_Test_IsTxBusy());
 }

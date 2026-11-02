@@ -25,17 +25,31 @@ uint32 CallCount_PduR_SecOCTransmit       = 0U;
 uint32 CallCount_PduR_ComRxIndication     = 0U;
 uint32 CallCount_PduR_CanIfTxConfirmation = 0U;
 uint32 CallCount_PduR_SecOCTxConfirmation = 0U;
+uint32 CallCount_PduR_DcmTransmit            = 0U;
+uint32 CallCount_PduR_CanTpStartOfReception  = 0U;
+uint32 CallCount_PduR_CanTpCopyRxData        = 0U;
+uint32 CallCount_PduR_CanTpRxIndication      = 0U;
+uint32 CallCount_PduR_CanTpCopyTxData        = 0U;
+uint32 CallCount_PduR_CanTpTxConfirmation    = 0U;
 
 uint32 FailFromCallCount_PduR_ComTransmit   = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_PduR_CanTpTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_PduR_SecOCTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_PduR_DcmTransmit           = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_PduR_CanTpStartOfReception = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_PduR_CanTpCopyRxData       = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_PduR_CanTpCopyTxData       = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 
 Std_ReturnType ForcedReturn_PduR_ComTransmit   = E_NOT_OK;
 Std_ReturnType ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;
 Std_ReturnType ForcedReturn_PduR_SecOCTransmit = E_NOT_OK;
+Std_ReturnType   ForcedReturn_PduR_DcmTransmit           = E_NOT_OK;
+BufReq_ReturnType ForcedReturn_PduR_CanTpStartOfReception = BUFREQ_E_NOT_OK;
+BufReq_ReturnType ForcedReturn_PduR_CanTpCopyRxData       = BUFREQ_E_NOT_OK;
+BufReq_ReturnType ForcedReturn_PduR_CanTpCopyTxData       = BUFREQ_E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapPduR_Reset — 11関数すべての状態を一括で初期化する（Wrap_PduR.h 参照）。
+ * WrapPduR_Reset — ラップした全関数の状態を一括で初期化する（Wrap_PduR.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapPduR_Reset(void)
@@ -48,6 +62,21 @@ void WrapPduR_Reset(void)
     CallCount_PduR_ComRxIndication     = 0U;
     CallCount_PduR_CanIfTxConfirmation = 0U;
     CallCount_PduR_SecOCTxConfirmation = 0U;
+    CallCount_PduR_DcmTransmit           = 0U;
+    CallCount_PduR_CanTpStartOfReception = 0U;
+    CallCount_PduR_CanTpCopyRxData       = 0U;
+    CallCount_PduR_CanTpRxIndication     = 0U;
+    CallCount_PduR_CanTpCopyTxData       = 0U;
+    CallCount_PduR_CanTpTxConfirmation   = 0U;
+
+    FailFromCallCount_PduR_DcmTransmit           = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_PduR_CanTpStartOfReception = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_PduR_CanTpCopyRxData       = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_PduR_CanTpCopyTxData       = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
+    ForcedReturn_PduR_DcmTransmit           = E_NOT_OK;
+    ForcedReturn_PduR_CanTpStartOfReception = BUFREQ_E_NOT_OK;
+    ForcedReturn_PduR_CanTpCopyRxData       = BUFREQ_E_NOT_OK;
+    ForcedReturn_PduR_CanTpCopyTxData       = BUFREQ_E_NOT_OK;
 
     FailFromCallCount_PduR_ComTransmit   = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_PduR_CanTpTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -157,8 +186,21 @@ Std_ReturnType __wrap_PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* 
 }
 
 /* ----------------------------------------------------------------------
- * PduR_<User:Up>Transmit
+ * PduR_DcmTransmit
  * ---------------------------------------------------------------------- */
+extern
+Std_ReturnType __real_PduR_DcmTransmit(PduIdType id, const PduInfoType* info);
+Std_ReturnType __wrap_PduR_DcmTransmit(PduIdType id, const PduInfoType* info)
+{
+    CallCount_PduR_DcmTransmit++;
+    Log_Write(LOG_T, TAG, "PduR_DcmTransmit", "called %u times", CallCount_PduR_DcmTransmit);
+
+    if (CallCount_PduR_DcmTransmit >= FailFromCallCount_PduR_DcmTransmit)
+    {
+        return ForcedReturn_PduR_DcmTransmit;
+    }
+    return __real_PduR_DcmTransmit(id, info);
+}
 
 /* ----------------------------------------------------------------------
  * PduR_<User:Up>CancelTransmit
@@ -227,6 +269,91 @@ void __wrap_PduR_SecOCTxConfirmation(PduIdType SrcPduId, Std_ReturnType result)
  * PduR_<User:Lo>TriggerTransmit
  * ---------------------------------------------------------------------- */
 
+
+/* ======================================================================
+ * Configurable interfaces definitions for lower layer transport protocol module
+ * ====================================================================== */
+
+/* ----------------------------------------------------------------------
+ * PduR_CanTpStartOfReception
+ * ---------------------------------------------------------------------- */
+extern
+BufReq_ReturnType __real_PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
+                                                    PduLengthType* bufferSizePtr);
+BufReq_ReturnType __wrap_PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
+                                                    PduLengthType* bufferSizePtr)
+{
+    CallCount_PduR_CanTpStartOfReception++;
+    Log_Write(LOG_T, TAG, "PduR_CanTpStartOfReception", "called %u times", CallCount_PduR_CanTpStartOfReception);
+
+    if (CallCount_PduR_CanTpStartOfReception >= FailFromCallCount_PduR_CanTpStartOfReception)
+    {
+        return ForcedReturn_PduR_CanTpStartOfReception;
+    }
+    return __real_PduR_CanTpStartOfReception(id, info, TpSduLength, bufferSizePtr);
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_CanTpCopyRxData
+ * ---------------------------------------------------------------------- */
+extern
+BufReq_ReturnType __real_PduR_CanTpCopyRxData(PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr);
+BufReq_ReturnType __wrap_PduR_CanTpCopyRxData(PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr)
+{
+    CallCount_PduR_CanTpCopyRxData++;
+    Log_Write(LOG_T, TAG, "PduR_CanTpCopyRxData", "called %u times", CallCount_PduR_CanTpCopyRxData);
+
+    if (CallCount_PduR_CanTpCopyRxData >= FailFromCallCount_PduR_CanTpCopyRxData)
+    {
+        return ForcedReturn_PduR_CanTpCopyRxData;
+    }
+    return __real_PduR_CanTpCopyRxData(id, info, bufferSizePtr);
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_CanTpRxIndication
+ * ---------------------------------------------------------------------- */
+extern
+void __real_PduR_CanTpRxIndication(PduIdType id, Std_ReturnType result);
+void __wrap_PduR_CanTpRxIndication(PduIdType id, Std_ReturnType result)
+{
+    CallCount_PduR_CanTpRxIndication++;
+    Log_Write(LOG_T, TAG, "PduR_CanTpRxIndication", "called %u times", CallCount_PduR_CanTpRxIndication);
+
+    __real_PduR_CanTpRxIndication(id, result);
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_CanTpCopyTxData
+ * ---------------------------------------------------------------------- */
+extern
+BufReq_ReturnType __real_PduR_CanTpCopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry,
+                                              PduLengthType* availableDataPtr);
+BufReq_ReturnType __wrap_PduR_CanTpCopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry,
+                                              PduLengthType* availableDataPtr)
+{
+    CallCount_PduR_CanTpCopyTxData++;
+    Log_Write(LOG_T, TAG, "PduR_CanTpCopyTxData", "called %u times", CallCount_PduR_CanTpCopyTxData);
+
+    if (CallCount_PduR_CanTpCopyTxData >= FailFromCallCount_PduR_CanTpCopyTxData)
+    {
+        return ForcedReturn_PduR_CanTpCopyTxData;
+    }
+    return __real_PduR_CanTpCopyTxData(id, info, retry, availableDataPtr);
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_CanTpTxConfirmation
+ * ---------------------------------------------------------------------- */
+extern
+void __real_PduR_CanTpTxConfirmation(PduIdType id, Std_ReturnType result);
+void __wrap_PduR_CanTpTxConfirmation(PduIdType id, Std_ReturnType result)
+{
+    CallCount_PduR_CanTpTxConfirmation++;
+    Log_Write(LOG_T, TAG, "PduR_CanTpTxConfirmation", "called %u times", CallCount_PduR_CanTpTxConfirmation);
+
+    __real_PduR_CanTpTxConfirmation(id, result);
+}
 
 /* ======================================================================
  * Scheduled functions

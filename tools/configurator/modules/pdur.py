@@ -18,13 +18,17 @@ DAVINCI_ROUTING = "/ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/"
 def validate(cfg):
     """スキーマでは書けない、設定の整合性（重複）を検査する。"""
     errors = []
-    for key in ("rxPaths", "txPaths"):
-        names = [p["name"] for p in cfg[key]]
-        srcs = [p["srcPduId"] for p in cfg[key]]
+    for key in ("rxPaths", "txPaths", "tpRxPaths", "tpTxPaths"):
+        names = [p["name"] for p in cfg.get(key, [])]
+        srcs = [p["srcPduId"] for p in cfg.get(key, [])]
         if len(set(names)) != len(names):
             errors.append("%s: name が重複している" % key)
         if len(set(srcs)) != len(srcs):
             errors.append("%s: srcPduId が重複している" % key)
+    for key in ("tpRxPaths", "tpTxPaths"):
+        dests = [p["destPduId"] for p in cfg.get(key, [])]
+        if len(set(dests)) != len(dests):
+            errors.append("%s: destPduId が重複している" % key)
     for p in cfg["rxPaths"]:
         for d in p["dests"]:
             if ("ipdu" in d) != (d["module"] == "COM"):
@@ -215,23 +219,92 @@ def tx_paths(cfg, ctx):
     return out
 
 
+def tp_rx_paths(cfg, ctx):
+    """TP の RX ルーティングパス（CanTp → Dcm）。ID は CanTp.json の値と突き合わせ、CanTp_Cfg.h のマクロで書く。"""
+    paths = cfg.get("tpRxPaths", [])
+    if not paths:
+        return []
+    out = [
+        "/* -----------------------------------------------------------------------",
+        " * TP の RX ルーティングパステーブル（CanTp → Dcm）",
+        " * CanTp が PduR_CanTp*() へ渡す受信 N-SDU の ID を、Dcm の RX I-PDU の ID へ変換して、",
+        " * Dcm のコールバックへ転送する（SWS_PduR_00507/00512/00375）。",
+        " * ----------------------------------------------------------------------- */",
+        "static const PduR_TpRxRoutingPathType PduR_TpRxPaths[PDUR_TP_RX_PATH_COUNT] = {",
+    ]
+    for i, p in enumerate(paths):
+        w = "PduR " + p["name"]
+        out.append("    {")
+        out += block_comment(["TP RX パス %d: %s" % (i, p["summary"]), "DaVinci: PduRRoutingPath/" + p["name"]], 8)
+        out += struct_fields([
+            ("SrcPduId", cantp_sdu(ctx, "rxSduId", "CANTP_RX_SDU_ID", p["srcPduId"], w), None),
+            ("DestPduId", cantp_sdu(ctx, "dcmRxPduId", "CANTP_DCM_RX_PDU_ID", p["destPduId"], w), None),
+            ("StartOfReceptionFct", "Dcm_StartOfReception", None),
+            ("CopyRxDataFct", "Dcm_CopyRxData", None),
+            ("RxIndicationFct", "Dcm_TpRxIndication", None),
+        ], 8)
+        out.append("    }" + ("," if i < len(paths) - 1 else ""))
+    out += ["};", ""]
+    return out
+
+
+def tp_tx_paths(cfg, ctx):
+    """TP の TX ルーティングパス（Dcm → CanTp）。"""
+    paths = cfg.get("tpTxPaths", [])
+    if not paths:
+        return []
+    out = [
+        "/* -----------------------------------------------------------------------",
+        " * TP の TX ルーティングパステーブル（Dcm → CanTp）",
+        " * Dcm の PduR_DcmTransmit() を、CanTp_Transmit() へ転送する。CanTp が PduR_CanTp*() へ渡す送信 N-SDU の ID を",
+        " * Dcm の TX I-PDU の ID へ変換して、Dcm のコールバックへ転送する（SWS_PduR_00406/00518/00381）。",
+        " * ----------------------------------------------------------------------- */",
+        "static const PduR_TpTxRoutingPathType PduR_TpTxPaths[PDUR_TP_TX_PATH_COUNT] = {",
+    ]
+    for i, p in enumerate(paths):
+        w = "PduR " + p["name"]
+        out.append("    {")
+        out += block_comment(["TP TX パス %d: %s" % (i, p["summary"]), "DaVinci: PduRRoutingPath/" + p["name"]], 8)
+        out += struct_fields([
+            ("SrcPduId", cantp_sdu(ctx, "dcmTxPduId", "CANTP_DCM_TX_PDU_ID", p["srcPduId"], w), None),
+            ("DestPduId", cantp_sdu(ctx, "txSduId", "CANTP_TX_SDU_ID", p["destPduId"], w), None),
+            ("TransmitFct", "CanTp_Transmit", None),
+            ("CopyTxDataFct", "Dcm_CopyTxData", None),
+            ("TxConfirmationFct", "Dcm_TpTxConfirmation", None),
+        ], 8)
+        out.append("    }" + ("," if i < len(paths) - 1 else ""))
+    out += ["};", ""]
+    return out
+
+
 def config_instance(cfg, ctx):
+    tp = []
+    if cfg.get("tpRxPaths"):
+        tp += ["    .TpRxPaths     = PduR_TpRxPaths,", "    .TpRxPathCount = PDUR_TP_RX_PATH_COUNT,"]
+    if cfg.get("tpTxPaths"):
+        tp += ["    .TpTxPaths     = PduR_TpTxPaths,", "    .TpTxPathCount = PDUR_TP_TX_PATH_COUNT,"]
+    if tp:  # 先頭のメンバーの最後にカンマを付けるため、TxPathCount の行を組み直す
+        head = ["    .RxPaths     = PduR_RxPaths,", "    .RxPathCount = PDUR_RX_PATH_COUNT,",
+                "    .TxPaths     = PduR_TxPaths,", "    .TxPathCount = PDUR_TX_PATH_COUNT,"]
+        tp[-1] = tp[-1].rstrip(",")
+        body = head + tp
+    else:
+        body = ["    .RxPaths     = PduR_RxPaths,", "    .RxPathCount = PDUR_RX_PATH_COUNT,",
+                "    .TxPaths     = PduR_TxPaths,", "    .TxPathCount = PDUR_TX_PATH_COUNT"]
     return [
         "/* -----------------------------------------------------------------------",
         " * PduR ポストビルド設定インスタンス",
         " * PduR_Init() の引数として渡す。",
         " * ----------------------------------------------------------------------- */",
         "const PduR_PBConfigType PduR_Config = {",
-        "    .RxPaths     = PduR_RxPaths,",
-        "    .RxPathCount = PDUR_RX_PATH_COUNT,",
-        "    .TxPaths     = PduR_TxPaths,",
-        "    .TxPathCount = PDUR_TX_PATH_COUNT",
+    ] + body + [
         "};",
     ]
 
 
 def render_pbcfg(cfg, ctx):
-    return "\n".join(rx_dest_tables(cfg, ctx) + rx_paths(cfg, ctx) + tx_paths(cfg, ctx) + config_instance(cfg, ctx))
+    return "\n".join(rx_dest_tables(cfg, ctx) + rx_paths(cfg, ctx) + tx_paths(cfg, ctx)
+                      + tp_rx_paths(cfg, ctx) + tp_tx_paths(cfg, ctx) + config_instance(cfg, ctx))
 
 
 def render_cfg_h(cfg, ctx):
@@ -244,6 +317,14 @@ def render_cfg_h(cfg, ctx):
     out.append("")
     out += doc_comment(cfg["txPathCountDoc"])
     out.append("#define PDUR_TX_PATH_COUNT   %dU" % len(cfg["txPaths"]))
+    if cfg.get("tpRxPaths"):
+        out.append("")
+        out += doc_comment(["TP の RX ルーティングパス数（CanTp → Dcm）"])
+        out.append("#define PDUR_TP_RX_PATH_COUNT   %dU" % len(cfg["tpRxPaths"]))
+    if cfg.get("tpTxPaths"):
+        out.append("")
+        out += doc_comment(["TP の TX ルーティングパス数（Dcm → CanTp）"])
+        out.append("#define PDUR_TP_TX_PATH_COUNT   %dU" % len(cfg["tpTxPaths"]))
     return "\n".join(out)
 
 

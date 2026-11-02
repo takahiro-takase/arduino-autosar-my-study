@@ -28,6 +28,10 @@
  *          CanIfTxConfirmation/SecOCTxConfirmation）は故障注入する戻り値が
  *          無いため、呼び出し回数のみを記録する。
  *
+ *          2026-11 に、TP の API 6 関数（DcmTransmit、CanTpStartOfReception/CopyRxData/CopyTxData は
+ *          戻り値あり、CanTpRxIndication/CanTpTxConfirmation は戻り値なし）を追加した。同じ規則で、
+ *          戻り値を持つ関数だけが、回数閾値の故障注入を持つ。
+ *
  *          変数名は `<種類>_<Module>_<関数名>`（種類=CallCount/
  *          FailFromCallCount/ForcedReturn を先頭側に置く）で統一する
  *          （2026-09-20、ユーザー提案により関数名を先頭に置く旧来の
@@ -86,6 +90,12 @@ extern uint32 CallCount_PduR_SecOCTransmit;
 extern uint32 CallCount_PduR_ComRxIndication;
 extern uint32 CallCount_PduR_CanIfTxConfirmation;
 extern uint32 CallCount_PduR_SecOCTxConfirmation;
+extern uint32 CallCount_PduR_DcmTransmit;
+extern uint32 CallCount_PduR_CanTpStartOfReception;
+extern uint32 CallCount_PduR_CanTpCopyRxData;
+extern uint32 CallCount_PduR_CanTpRxIndication;
+extern uint32 CallCount_PduR_CanTpCopyTxData;
+extern uint32 CallCount_PduR_CanTpTxConfirmation;
 
 /* ----------------------------------------------------------------------
  * 回数閾値故障注入（戻り値を持つ3関数のみ）
@@ -97,6 +107,10 @@ extern uint32 CallCount_PduR_SecOCTxConfirmation;
 extern uint32 FailFromCallCount_PduR_ComTransmit;
 extern uint32 FailFromCallCount_PduR_CanTpTransmit;
 extern uint32 FailFromCallCount_PduR_SecOCTransmit;
+extern uint32 FailFromCallCount_PduR_DcmTransmit;
+extern uint32 FailFromCallCount_PduR_CanTpStartOfReception;
+extern uint32 FailFromCallCount_PduR_CanTpCopyRxData;
+extern uint32 FailFromCallCount_PduR_CanTpCopyTxData;
 
 /* ----------------------------------------------------------------------
  * 閾値到達後の強制戻り値（戻り値を持つ3関数のみ）
@@ -104,6 +118,10 @@ extern uint32 FailFromCallCount_PduR_SecOCTransmit;
 extern Std_ReturnType ForcedReturn_PduR_ComTransmit;
 extern Std_ReturnType ForcedReturn_PduR_CanTpTransmit;
 extern Std_ReturnType ForcedReturn_PduR_SecOCTransmit;
+extern Std_ReturnType ForcedReturn_PduR_DcmTransmit;
+extern BufReq_ReturnType ForcedReturn_PduR_CanTpStartOfReception;
+extern BufReq_ReturnType ForcedReturn_PduR_CanTpCopyRxData;
+extern BufReq_ReturnType ForcedReturn_PduR_CanTpCopyTxData;
 
 /* ======================================================================
  * Functions

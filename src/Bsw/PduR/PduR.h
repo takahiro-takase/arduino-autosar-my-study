@@ -20,6 +20,7 @@
 #include "PduR_CanIf.h"
 #include "PduR_COM.h"
 #include "PduR_CanTp.h"
+#include "PduR_Dcm.h"
 #include "PduR_SecOC.h"
 
 /* ======================================================================
