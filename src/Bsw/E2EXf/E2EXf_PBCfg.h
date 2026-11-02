@@ -51,17 +51,15 @@ extern const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05;
  * ====================================================================== */
 
 /**
- * \brief   E2EXf の全 Check/Protect ステートを初期化し、E2EXf モジュール
- *          自身の初期化完了もマークする。
+ * \brief   E2EXf の全 Check/Protect ステートを初期化する（E2EXf_Init() の内部処理）。
  *
- * \details EcuM_Init() から Com_Init() の後に 1 度だけ呼び出すこと。
- *          以前は Com_Init() が E2ECheckState/E2EProtectState を直接
- *          初期化していたが、Com が E2E を関知しなくなったため、この
- *          初期化は E2EXf 側の責務として移設した。
- *          各 I-PDU の State 初期化後、最後に E2EXf_Init()（SWS_E2EXf_00130
- *          の初期化状態フラグを立てる）を呼ぶ。
+ * \details E2EXf_Init()（[SWS_E2EXf_00035]）だけが呼ぶ、モジュール内部の関数。外部のモジュール（EcuM など）は、
+ *          E2EXf_Init() を呼ぶこと。各 I-PDU の State は、このファイルの静的変数のため、E2EXf.c から
+ *          直接は触れず、本関数を介して初期化する。
+ *          以前は Com_Init() が E2ECheckState/E2EProtectState を直接初期化していたが、Com が E2E を
+ *          関知しなくなったため、この初期化は E2EXf 側の責務として移設した。
  */
-void E2EXf_PBCfg_Init(void);
+void E2EXf_PBCfg_InitStates(void);
 
 #ifdef __cplusplus
 }

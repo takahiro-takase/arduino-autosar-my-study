@@ -172,7 +172,7 @@ const E2EXf_TxConfigTypeP05 E2EXf_E2EHealthStatusTxCfgP05 = {
  * Functions
  * ====================================================================== */
 
-void E2EXf_PBCfg_Init(void)
+void E2EXf_PBCfg_InitStates(void)
 {
 /* @@GEN-BEGIN e2exf-init  生成元: config/data/E2EXf.json  （自動生成: 手編集禁止） */
     (void)E2E_P05CheckInit(&E2EXf_EngineInfoStateP05);
@@ -186,9 +186,4 @@ void E2EXf_PBCfg_Init(void)
     (void)E2E_SMCheckInit(&E2EXf_AbsInfoSMState, &E2EXf_SMConfigDefault);
     (void)E2E_P05ProtectInit(&E2EXf_E2EHealthStatusStateP05);
     /* @@GEN-END e2exf-init */
-
-    /* 各 State の初期化が完了した最後に、E2EXf モジュール自身の初期化状態
-     * (SWS_E2EXf_00130) を TRUE にする。E2EXf_Inv_EngineInfo()等の各
-     * インスタンス関数はこれより前に呼ばれても安全側で早期 return する。 */
-    E2EXf_Init(NULL);
 }

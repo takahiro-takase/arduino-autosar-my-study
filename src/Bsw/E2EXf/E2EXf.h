@@ -191,7 +191,7 @@ extern "C" {
  * ====================================================================== */
 
 /**
- * \brief   E2EXf モジュール自身を初期化済み状態にする。
+ * \brief   E2EXf を初期化する。各 I-PDU の Check/Protect State を初期状態にし、モジュール自身も初期化済みにする。
  *
  * \details SWS_E2EXf_00130: E2E Transformer は「E2EXf_Init() が呼ばれたか」
  *          という初期化状態を、下位の E2E_P05 Check/ProtectState とは別に
@@ -199,9 +199,10 @@ extern "C" {
  *          未初期化のまま各インスタンス関数（`E2EXf_Inv_EngineInfo()`等）が
  *          呼ばれた場合は処理を行わず安全側で早期 return する。
  *
- *          `E2EXf_PBCfg_Init()`（`src/Bsw/E2EXf/E2EXf_PBCfg.c`）が各 I-PDU の
- *          E2E_P05Check/ProtectState を初期化した最後に、本関数を呼んで
- *          初期化完了をマークする。
+ *          本関数は、内部で `E2EXf_PBCfg_InitStates()`（`src/Bsw/E2EXf/E2EXf_PBCfg.c`）を呼んで、各 I-PDU の
+ *          E2E_P05Check/ProtectState を初期化してから、初期化完了をマークする。
+ *
+ *          再び呼ぶと、各 I-PDU の State を初期状態へ戻す（初期化なので、動作中の State は失われる）。
  *
  * \pre        EcuM_Init() から Com_Init() の後、フレーム受信・送信が
  *             始まる前に呼び出すこと。

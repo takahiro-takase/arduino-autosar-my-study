@@ -210,7 +210,7 @@ TEST_F(E2EXf_Inv_EngineInfo_Test, E2EXf_Inv_EngineInfo_OK_NoNewDataIsReportedAsN
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    E2EXf_PBCfg_Init();   // 状態機械と初回受信の待ちを初期状態へ戻す
+    E2EXf_Init(NULL);   // 状態機械と初回受信の待ちを初期状態へ戻す
     uint32 bufLen = 99U;
     E2E_P05StatusType checkStatus = E2E_P05STATUS_OK;
 
