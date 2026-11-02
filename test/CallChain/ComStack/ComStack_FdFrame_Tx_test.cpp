@@ -72,6 +72,7 @@ protected:
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
         canConfig.fdEnabled       = 1U;
 
+        Can_Test_SetConfigPtr(NULL);  // 未初期化へ戻す（Can_Init() は初期化済みだと CAN_E_TRANSITION で拒否する）
         Can_Init(&canConfig);
         CanIf_Init(&kFdTxConfig);
         CanIf_SetControllerMode(0U, CAN_CS_STARTED);

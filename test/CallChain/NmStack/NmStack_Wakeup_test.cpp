@@ -16,7 +16,7 @@
  *                                          Fake_Bsw_EcuM.h 参照）
  *                  → CanSM_ControllerModeIndication()
  *                    → CanIf_SetControllerMode(CAN_CS_STOPPED)
- *                      → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED
+ *                      → Can_SetControllerMode(CAN_CS_STOPPED)   ← SLEEP→STOPPED
  *                                                                  (Listen-Only)
  *                      CanSM_State: NO_COM → WAKEUP_VALIDATING
  *                      （ComM/EcuM へはまだ通知しない）
@@ -32,13 +32,13 @@
  *                  → ComM_EcuM_WakeUpIndication()（実体）
  *                    → CanSM_RequestComMode(FULL_COM)
  *                      → CanIf_SetControllerMode(CAN_CS_STARTED)
- *                        → Can_SetControllerMode(CAN_T_START) → CanSM_State: FULL_COM
+ *                        → Can_SetControllerMode(CAN_CS_STARTED) → CanSM_State: FULL_COM
  *                          → ComM_BusSM_ModeIndication(FULL_COM)
  *
  *            2b. 検証失敗（タイムアウト）: CanSM_MainFunction() が
  *                CANSM_WAKEUP_VALIDATION_MS 超過を検出
  *                → CanIf_SetControllerMode(CAN_CS_SLEEP)
- *                  → Can_SetControllerMode(CAN_T_SLEEP) → CanSM_State: NO_COM
+ *                  → Can_SetControllerMode(CAN_CS_SLEEP) → CanSM_State: NO_COM
  *                  （ComM/EcuM への通知なし）
  *
  *          ComM（CanSM が呼び返す通知の宛先）は 2026-08 の協調スリープ移管
@@ -141,6 +141,7 @@ protected:
         canConfig.baudrate        = 500000U;
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
+        Can_Test_SetConfigPtr(NULL);  // 未初期化へ戻す（Can_Init() は初期化済みだと CAN_E_TRANSITION で拒否する）
         Can_Init(&canConfig);
         ASSERT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);  // Can_Init() 直後は STOPPED（Listen-Only）
         CanIf_Init(&kTestCanIfConfig);
@@ -231,7 +232,7 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     // SLEEP → STOPPED (Listen-Only) のみ。FULL_COM へはまだ確定しない
     // （ComM/EcuM へはまだ通知しない）
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（WAKEUP）が受理された
+    EXPECT_EQ(Return_Can_SetControllerMode, E_OK);  // 最後の遷移（WAKEUP）が受理された
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_LISTEN_ONLY);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 0U);
@@ -252,7 +253,7 @@ TEST_F(NmStack_Wakeup_WakeupValidation_Test, OK)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);
-    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（START）が受理された
+    EXPECT_EQ(Return_Can_SetControllerMode, E_OK);  // 最後の遷移（START）が受理された
     EXPECT_EQ(FakeCanHw_LastMode, CAN_HW_MODE_NORMAL);
     EXPECT_EQ(CurrentComMode(), static_cast<ComM_ModeType>(COMM_FULL_COMMUNICATION));
     EXPECT_EQ(FakeEcuM_RequestRUNCount, 1U);

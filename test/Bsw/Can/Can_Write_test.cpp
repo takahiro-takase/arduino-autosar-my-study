@@ -94,13 +94,37 @@ TEST_F(Can_Write_Test, Can_Write_NG_NullConfig)
     pdu.sdu = sdu;
     pdu.swPduHandle = 0U;
 
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);
+}
+
+TEST_F(Can_Write_Test, Can_Write_NG_InvalidHth)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    uint8 data[8] = {0U};
+    Can_PduType pdu = {1U, 0x100U, 8U, data};
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(CAN_HTH_COUNT, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_HANDLE);   // [SWS_Can_00217]
+    EXPECT_EQ(FakeDetHw_LastApiId, 0x06U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
 }
 
 TEST_F(Can_Write_Test, Can_Write_NG_NullPduInfo)
@@ -113,12 +137,12 @@ TEST_F(Can_Write_Test, Can_Write_NG_NullPduInfo)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Can_ReturnType ret = Can_Write(0U, NULL);
+    Std_ReturnType ret = Can_Write(0U, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
@@ -138,12 +162,12 @@ TEST_F(Can_Write_Test, Can_Write_NG_NullPduInfoSdu)
     pdu.sdu = NULL;
     pdu.swPduHandle = 0U;
 
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
@@ -164,13 +188,13 @@ TEST_F(Can_Write_Test, Can_Write_NG_LengthExceeds)
     pdu.sdu = sdu;
     pdu.swPduHandle = 0U;
 
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DATA_LENGTH);
 }
 
 TEST_F(Can_Write_Test, Can_Write_OK_FdEnabledAcceptsUpTo64Bytes)
@@ -192,13 +216,13 @@ TEST_F(Can_Write_Test, Can_Write_OK_FdEnabledAcceptsUpTo64Bytes)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_NE(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
-    EXPECT_EQ(ret, CAN_OK);
+    EXPECT_NE(FakeDetHw_LastErrorId, CAN_E_PARAM_DATA_LENGTH);
+    EXPECT_EQ(ret, E_OK);
 }
 
 TEST_F(Can_Write_Test, Can_Write_NG_FdEnabledRejectsOver64Bytes)
@@ -219,13 +243,13 @@ TEST_F(Can_Write_Test, Can_Write_NG_FdEnabledRejectsOver64Bytes)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
-    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DLC);
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_DATA_LENGTH);
 }
 
 TEST_F(Can_Write_Test, Can_Write_OK_FdEnabledRoundsUpInvalidLengthAndPads)
@@ -249,12 +273,12 @@ TEST_F(Can_Write_Test, Can_Write_OK_FdEnabledRoundsUpInvalidLengthAndPads)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
+    EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 16U);                 // 16 byte へ切り上げて送る
     EXPECT_EQ(FakeCanHw_LastSendData[12], 0x1CU);          // 元のデータの末尾
     EXPECT_EQ(FakeCanHw_LastSendData[13], CAN_FD_PADDING_VALUE);  // 足りない部分は埋める
@@ -279,12 +303,12 @@ TEST_F(Can_Write_Test, Can_Write_OK_FdDisabledDoesNotPad)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
+    EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(FakeCanHw_LastSendDlc, 5U);   // クラシック CAN は、長さをそのまま送る
 }
 
@@ -294,7 +318,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_notStarted)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    // Can_SetControllerMode(0U, CAN_T_START);  // コントローラを START しない
+    // Can_SetControllerMode(0U, CAN_CS_STARTED);  // コントローラを START しない
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -306,12 +330,12 @@ TEST_F(Can_Write_Test, Can_Write_NG_notStarted)
     pdu.sdu = sdu;
     pdu.swPduHandle = 0U;
 
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
 }
 
 TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails)
@@ -320,7 +344,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -335,12 +359,12 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails)
     // MCP2515 の送信を強制的に失敗させるため、Can_Hw_Send をモック化する
     // （ここでは簡略化のため、Can_Hw_Send が常に CAN_HW_FAIL を返すようにする）
     FakeCanHw_SendReturn = CAN_HW_FAIL;
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 1U);
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 0U);  // 閾値未満のため BusOff 通知はまだ来ない
 }
@@ -351,7 +375,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     Can_PduType pdu;
     pdu.id = 0x123U;
@@ -365,7 +389,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     // CAN_BUSOFF_TX_ERR_THRESHOLD (5) 回連続で送信失敗させる
-    Can_ReturnType ret = CAN_OK;
+    Std_ReturnType ret = E_OK;
     for (int i = 0; i < 5; i++)
     {
         ret = Can_Write(0U, &pdu);
@@ -374,7 +398,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_NOT_OK);
+    EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 閾値到達時に 0 へリセットされる（Can.c 実装参照）
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 1U);
     EXPECT_EQ(LastControllerId_CanIf_ControllerBusOff, 0U);
@@ -386,7 +410,7 @@ TEST_F(Can_Write_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     Can_PduType pdu;
     pdu.id = 0x123U;
@@ -403,12 +427,12 @@ TEST_F(Can_Write_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     FakeCanHw_SendReturn = CAN_HW_OK;
-    Can_ReturnType ret = Can_Write(0U, &pdu);
+    Std_ReturnType ret = Can_Write(0U, &pdu);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(ret, CAN_OK);
+    EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 成功で 0 にリセットされる
 }
 

@@ -207,8 +207,8 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  *          試行するため、この状態から呼ばれることは原理的にない。
  *
  *          この時点ではまだ FULL_COM へ確定しない（ウェイクアップ検証、
- *          AUTOSAR EcuM Wakeup Validation Protocol 相当）。CAN_T_WAKEUP のみ
- *          実行して Listen-Only へ遷移し、検証タイマを開始する。実際に
+ *          AUTOSAR EcuM Wakeup Validation Protocol 相当）。SLEEP → STOPPED の
+ *          遷移だけを実行して Listen-Only へ遷移し、検証タイマを開始する。実際に
  *          FULL_COM へ確定するかどうかは、有効な受信の確認後に ComM が呼ぶ
  *          CanSM_RequestComMode(FULL_COM) /
  *          CanSM_MainFunction()（タイムアウト）が決める。

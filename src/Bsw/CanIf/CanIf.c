@@ -85,11 +85,8 @@ static uint8 CanIf_WakeupRxEventStored[CANIF_CONTROLLER_MAX];
  * 実 AUTOSAR は CanIf_ControllerModeIndication()（Can からの非同期通知）で
  * 実際の遷移完了を知るが、本プロジェクトの Can_SetControllerMode() は
  * 同期的に完了するため、要求成功時点で直接更新する形に簡略化している。
- * CanIf_SetControllerMode(CAN_CS_STOPPED) を要求されたとき、その場に応じて
- * Can_StateTransitionType(CAN_T_STOP か CAN_T_WAKEUP か) のどちらを
- * Can_SetControllerMode() に渡すべきかは遷移元状態に依存する（Can.c の
- * Can_SetControllerMode() 実装コメント参照）ため、この配列が無いと
- * 判断できない。 */
+ * CanIf_GetControllerMode() が返す記録（Can_GetControllerMode() への転送には
+ * 切り替えていない。Can.c の同関数のコメント参照）。 */
 static Can_ControllerStateType CanIf_ControllerMode[CANIF_CONTROLLER_MAX];
 
 /* CanIf_GetTxConfirmationState()（[SWS_CANIF_00734]、2026-09 追加）用の
@@ -235,19 +232,9 @@ void CanIf_DeInit(void)
  * \brief   CAN コントローラの動作モード（Started/Sleep/Stopped）の遷移を要求する。
  *
  * \details 下位の Can_SetControllerMode() を呼び出す（[SWS_CANIF_00308]）。
- *          実 AUTOSAR は目標モードから実際の Can_StateTransitionType への
- *          変換に Can 側の非同期通知（CanIf_ControllerModeIndication。本実装でも、
- *          Can_MainFunction_Mode() が通知するが、現在状態の更新には使わない）で得た現在状態を使うが、本プロジェクトの
- *          Can_SetControllerMode() は同期的に完了するため、CanIf 自身が
- *          追跡する `CanIf_ControllerMode[]`（前回の成功要求の結果）だけで
- *          十分に判定できる。
- *
- *          CAN_CS_STARTED/CAN_CS_SLEEP は遷移元によらず常に単一の
- *          Transition（CAN_T_START/CAN_T_SLEEP）に対応する（Can.c の
- *          Can_SetControllerMode() が両方とも複数の遷移元を許容する設計の
- *          ため）。CAN_CS_STOPPED のみ遷移元に応じて CAN_T_STOP
- *          （CAN_CS_STARTED から）と CAN_T_WAKEUP（CAN_CS_SLEEP から）を
- *          使い分ける必要がある。
+ *          目標モードをそのまま Can_SetControllerMode() へ渡す（4.2.2 で
+ *          Can_StateTransitionType が廃止された。遷移元に応じた停止/ウェイクアップの
+ *          区別は、Can が持つ現在の状態で行う）。
  *
  * \param[in]  ControllerId    対象コントローラの ID。
  * \param[in]  ControllerMode  要求する目標モード。CAN_CS_UNINIT は無効。
@@ -277,24 +264,13 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
         return E_NOT_OK;
     }
 
-    Can_StateTransitionType transition;
-    switch (ControllerMode)
+    if ((ControllerMode != CAN_CS_STARTED) && (ControllerMode != CAN_CS_SLEEP) && (ControllerMode != CAN_CS_STOPPED))
     {
-        case CAN_CS_STARTED:
-            transition = CAN_T_START;
-            break;
-        case CAN_CS_SLEEP:
-            transition = CAN_T_SLEEP;
-            break;
-        case CAN_CS_STOPPED:
-            transition = (CanIf_ControllerMode[ControllerId] == CAN_CS_SLEEP) ? CAN_T_WAKEUP : CAN_T_STOP;
-            break;
-        default:
-            (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_CONTROLLER_MODE, CANIF_E_PARAM_CTRLMODE);
-            return E_NOT_OK;
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_SET_CONTROLLER_MODE, CANIF_E_PARAM_CTRLMODE);
+        return E_NOT_OK;
     }
 
-    if (Can_SetControllerMode(ControllerId, transition) != CAN_OK)
+    if (Can_SetControllerMode(ControllerId, ControllerMode) != E_OK)
     {
         return E_NOT_OK;
     }
@@ -488,14 +464,14 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
 
     DET_LOGD(TAG, "TX id=%u can=0x%lX", (unsigned)TxPduId, (unsigned long)txCfg->CanId);
 
-    Can_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
+    Std_ReturnType ret = Can_Write(txCfg->Hth, &canPdu);
 
     if (ret == CAN_BUSY)
     {
         DET_LOGW(TAG, "TX BUSY");
     }
 
-    return (ret == CAN_OK) ? E_OK : E_NOT_OK;
+    return (ret == E_OK) ? E_OK : E_NOT_OK;
 }
 
 /* ----------------------------------------------------------------------

@@ -46,7 +46,7 @@ DET へ `CANIF_E_UNINIT`（値 30）を報告します（[SWS_CANIF_00901]）。
 
 - **TX（`CanIf_Transmit()`）**: TxPduId の範囲・ポインタ・長さ（設定 DLC を超える長さは拒否）を確認し、
   **PDU モードが `CANIF_ONLINE` のときだけ** `Can_Write()` まで進めます（それ以外は `E_NOT_OK`）。
-  `Can_Write()` が `CAN_OK` なら `E_OK`（`CAN_BUSY` は警告ログ付きで `E_NOT_OK`）。
+  `Can_Write()` が `E_OK` なら `E_OK`（`CAN_BUSY` は警告ログ付きで `E_NOT_OK`）。
 - **RX（`CanIf_RxIndication()`）**: まず**どの CAN ID であっても**、最初の受信を「起床後の最初の受信」として記憶します
   （ウェイクアップ検証用。EcuM が `CanIf_CheckValidation()` で確認し、記憶があれば
   `EcuM_ValidateWakeupEvent()` で検証済みを伝えます。スリープへ入ると記憶は消えます）。その後、

@@ -37,7 +37,7 @@ Com_MainFunctionTx() → Com_DoTransmit() → PduR_ComTransmit() → CanIf_Trans
 ```
 Can_Write(Hth, PduInfo):
   Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
-  即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
+  即座に `E_OK` を返す（CanIf_TxConfirmation() はまだ呼ばない）
 
 Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 14）:
   保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
@@ -140,22 +140,24 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 <a id="can-controller-states"></a>
 ## コントローラの状態遷移と Bus-Off の検出
 
-**状態遷移（`Can_SetControllerMode()`）**: AUTOSAR の状態遷移を MCP2515 の動作モードへ
-対応づけています。標準の 4 遷移に加え、協調スリープのための遷移を 1 つ持ちます。
+**状態遷移（`Can_SetControllerMode()`）**: 引数は遷移後の状態（`Can_ControllerStateType`。
+4.2.2 で `Can_StateTransitionType` が廃止された）です。Can が持つ現在の状態と合わせて遷移を決め、
+MCP2515 の動作モードへ対応づけています。標準の遷移に加え、協調スリープのための遷移を 1 つ持ちます。
 
 | 要求 | 遷移 | MCP2515 |
 |------|------|---------|
-| `CAN_T_START` | `CAN_CS_STOPPED` → `CAN_CS_STARTED`（`STARTED` からの再要求は何もせず許可する） | 通常モード |
-| `CAN_T_STOP` | `CAN_CS_STARTED` → `CAN_CS_STOPPED` | 受信専用（Listen-Only） |
-| `CAN_T_SLEEP` | `CAN_CS_STOPPED` → `CAN_CS_SLEEP`。**`CAN_CS_STARTED` からの直接遷移も許可する**（本プロジェクト固有の拡張） | スリープ |
-| `CAN_T_WAKEUP` | `CAN_CS_SLEEP` → `CAN_CS_STOPPED` | 受信専用 |
+| `CAN_CS_STARTED` | `CAN_CS_STOPPED` → `CAN_CS_STARTED`（`STARTED` からの再要求は何もせず許可する。`SLEEP` からは拒否） | 通常モード |
+| `CAN_CS_STOPPED` | `CAN_CS_STARTED` → `CAN_CS_STOPPED`（停止）、`CAN_CS_SLEEP` → `CAN_CS_STOPPED`（ウェイクアップ） | 受信専用（Listen-Only） |
+| `CAN_CS_SLEEP` | `CAN_CS_STOPPED` → `CAN_CS_SLEEP`。**`CAN_CS_STARTED` からの直接遷移も許可する**（本プロジェクト固有の拡張） | スリープ |
 
 `STARTED` から直接スリープできるのは、CanNm の協調スリープのためです。ComM は CanNm が
 実際に Bus-Sleep Mode へ到達するまで CanSM に NO_COM を伝えずコントローラを稼働させ続け、
-到達した瞬間に `CanSM_RequestComMode(NO_COM)` が `CAN_T_STOP` を経由せず直接スリープさせます
-（[`CanSM_Notes.md`](./CanSM_Notes.md) 参照）。`CAN_CS_SLEEP` からは、まず `CAN_T_WAKEUP` で
-`CAN_CS_STOPPED` へ戻らないと `CAN_T_START` / `CAN_T_STOP` へ到達できません。
-`Can_Write()` は `CAN_CS_STARTED` 以外では送信を拒否します（`CAN_NOT_OK`）。
+到達した瞬間に `CanSM_RequestComMode(NO_COM)` が `STOPPED` を経由せず直接スリープさせます
+（[`CanSM_Notes.md`](./CanSM_Notes.md) 参照）。`CAN_CS_SLEEP` からは、まず `CAN_CS_STOPPED` で
+ウェイクアップしないと `CAN_CS_STARTED` へ到達できません。
+`Can_Write()` は `CAN_CS_STARTED` 以外では送信を拒否します（`E_NOT_OK`）。
+`Can_Write()` と `Can_SetControllerMode()` の戻り値は、4.3.1 で `Std_ReturnType` に統一されました
+（`Can_Write()` だけが、それに加えて `CAN_BUSY`（0x02）を返せる。本実装は返さない）。
 
 **Bus-Off の検出は 2 経路あります**（どちらも `CanIf_ControllerBusOff()` で上位へ通知する）:
 

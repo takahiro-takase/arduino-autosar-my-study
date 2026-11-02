@@ -115,7 +115,7 @@
  * のみ使う内部関数のため Can.h には公開しない）。定義は本ファイル末尾。 */
 static void Can_Isr(void);
 
-static void Can_EnterListenOnly(void);
+static void Can_ResetQueues(void);
 
 static const Can_ConfigType*    Can_ConfigPtr  = NULL;
 /** Can_Isr()（真の割り込みコンテキスト）と Can_MainFunction_xxx()（メインループ）
@@ -223,6 +223,9 @@ static uint8     Can_TxConfLen  = 0U;  /**< キュー内の有効エントリ数
  * \details MCP2515 ハードウェアを初期化し、受信フィルタ・マスクを
  *          すべて設定したうえでコントローラを CAN_CS_STOPPED 状態に
  *          移行する。初期化に失敗した場合は無限ループで停止する。
+ *          すでに初期化済み（CAN_READY）で呼ばれたときは、CAN_E_TRANSITION を
+ *          報告して何もせず戻る（[SWS_Can_00174/00408]。再び初期化するには、
+ *          先に Can_DeInit() を呼ぶ）。
  *
  * \param[in]  Config  CAN ドライバ設定構造体へのポインタ。
  *                     NULL 禁止。
@@ -231,7 +234,7 @@ static uint8     Can_TxConfLen  = 0U;  /**< キュー内の有効エントリ数
  * \note       他のすべての Can_* API より先に、システム起動時に
  *             1 回だけ呼び出すこと。
  *
- * \AUTOSARReq     {SWS_Can_00246}
+ * \AUTOSARReq     {SWS_Can_00246, SWS_Can_00174, SWS_Can_00408}
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -239,6 +242,13 @@ static uint8     Can_TxConfLen  = 0U;  /**< キュー内の有効エントリ数
 void Can_Init(const Can_ConfigType* Config)
 {
     DET_LOGI(TAG, "Init...");
+
+    if (Can_ConfigPtr != NULL)
+    {
+        DET_LOGE(TAG, "Init E: already initialized (Can_DeInit required first)");
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_INIT, CAN_E_TRANSITION);
+        return;
+    }
 
     if (Config == NULL)
     {
@@ -248,13 +258,7 @@ void Can_Init(const Can_ConfigType* Config)
     }
 
     Can_ConfigPtr = Config;
-    Can_TxConfHead = 0U;
-    Can_TxConfTail = 0U;
-    Can_TxConfLen  = 0U;
-    Can_ModeIndHead = 0U;
-    Can_ModeIndTail = 0U;
-    Can_ModeIndLen  = 0U;
-    Can_InterruptDisableNestCount = 0U;
+    Can_ResetQueues();
 
     if (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK)
     {
@@ -284,6 +288,58 @@ void Can_Init(const Can_ConfigType* Config)
      * で即座に return するため安全だが、登録自体をここまで遅らせることで
      * 「ISR が有効な時点では Can モジュールは必ず初期化済み」を保証する。 */
     (void)Can_Hw_AttachRxIsr(Config->intPin, Can_Isr);
+}
+
+/* ----------------------------------------------------------------------
+ * Can_DeInit
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CAN ドライバを初期化前（CAN_UNINIT）の状態へ戻す。
+ *
+ * \details 呼び出し元は、コントローラが STARTED でないことを保証すること。
+ *          STARTED のとき、またはすでに未初期化のときは、CAN_E_TRANSITION を
+ *          報告して何もせず戻る（[SWS_Can_91011/91012]）。
+ *          受信割り込みを切り離し、保留中の受信・ウェイクアップ・TX 確認・
+ *          モード変更通知と、連続 TX 失敗のカウンタ（Can_TxErrCount）を捨てて、状態を CAN_CS_UNINIT へ戻す。
+ *          MCP2515 の動作モードは変えない（STARTED でないので、Listen-Only かスリープのまま）。
+ *          再び使うには、Can_Init() を呼ぶ。CanIf が持つ状態（CanIf_ControllerMode[] 等）は戻さない
+ *          （CanIf_DeInit()/CanIf_Init() の役目。再び使うときは CanIf_Init() も呼ぶこと）。
+ *
+ * \AUTOSARReq     {SWS_Can_91002, SWS_Can_91009, SWS_Can_91010, SWS_Can_91011, SWS_Can_91012}
+ * \ServiceID      {0x10}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void Can_DeInit(void)
+{
+    if (Can_ConfigPtr == NULL)
+    {
+        DET_LOGE(TAG, "DeInit E: not initialized");
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DEINIT, CAN_E_TRANSITION);
+        return;
+    }
+
+    if (CanState == CAN_CS_STARTED)
+    {
+        DET_LOGE(TAG, "DeInit E: controller is STARTED");
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_DEINIT, CAN_E_TRANSITION);
+        return;
+    }
+
+    /* ISR を先に切り離してから状態を捨てる（ISR が捨てた状態へフラグを立てないように）。 */
+    (void)Can_Hw_DisableRxIsr();
+
+    SchM_Enter_Can_IRQFLAG_EXCLUSIVE_AREA();
+    Can_RxIrqPending     = 0U;
+    Can_WakeupIrqPending = 0U;
+    SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA();
+
+    Can_ResetQueues();
+    Can_TxErrCount = 0U;
+
+    CanState      = CAN_CS_UNINIT;
+    Can_ConfigPtr = NULL;
 }
 
 /* ----------------------------------------------------------------------
@@ -347,107 +403,81 @@ void Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /**
  * \brief   CAN コントローラの状態遷移を要求する。
  *
- * \details AUTOSAR の状態遷移を対応する MCP2515 動作モードへ
- *          マッピングする。標準の 4 遷移に加え、本プロジェクト固有の
- *          協調スリープ（CanSM.c 参照）のための 5 番目の遷移を持つ。
- *          - CAN_T_START  : CAN_CS_STOPPED → CAN_CS_STARTED (通常モード)。
- *                           CAN_CS_STARTED から再度呼ばれた場合は冪等な
- *                           no-op として許可する（CanSM がボランタリ
- *                           スリープへの移行中に FULL_COM 要求を取り消す
- *                           ケースで実際に発生する。CanSM_RequestComMode()
- *                           参照）。
- *          - CAN_T_STOP   : CAN_CS_STARTED → CAN_CS_STOPPED (受信専用モード)
- *          - CAN_T_SLEEP  : CAN_CS_STOPPED → CAN_CS_SLEEP   (スリープモード)。
- *                           CAN_CS_STARTED からの直接遷移も許可する
- *                           （CanNm 協調スリープ: ComM は CanNm が実際に Bus-Sleep
- *                           Mode へ到達するまで CanSM へ NO_COM を伝えず
- *                           コントローラを稼働させ続け、到達した瞬間に
- *                           CanSM_RequestComMode(NO_COM) 経由で CAN_T_STOP を
- *                           経由せず直接 SLEEP させる。ComM.c/CanSM.c 参照。
- *                           実 AUTOSAR の標準遷移図にはない本プロジェクト
- *                           固有の拡張）。
- *          - CAN_T_WAKEUP : CAN_CS_SLEEP   → CAN_CS_STOPPED (受信専用モード)
+ * \details 要求された状態（Transition）と、Can が持つ現在の状態から、遷移を決め、
+ *          対応する MCP2515 動作モードへマッピングする（4.2.2 で Can_StateTransitionType が
+ *          廃止され、引数は目標の Can_ControllerStateType になった）。
+ *          - CAN_CS_STARTED : STOPPED → STARTED (通常モード)。
+ *                             STARTED から再度呼ばれた場合は冪等な no-op として許可する
+ *                             （CanSM がボランタリスリープへの移行中に FULL_COM 要求を取り消す
+ *                             ケースで実際に発生する。CanSM_RequestComMode() 参照）。
+ *                             SLEEP からは拒否する（先に STOPPED でウェイクアップすること）。
+ *          - CAN_CS_STOPPED : STARTED → STOPPED (受信専用モード)。SLEEP からはウェイクアップ
+ *                             （SLEEP → STOPPED、同じ受信専用モード）になる。
+ *          - CAN_CS_SLEEP   : STOPPED → SLEEP   (スリープモード)。
+ *                             STARTED からの直接遷移も許可する
+ *                             （CanNm 協調スリープ: ComM は CanNm が実際に Bus-Sleep
+ *                             Mode へ到達するまで CanSM へ NO_COM を伝えずコントローラを稼働させ続け、
+ *                             到達した瞬間に CanSM_RequestComMode(NO_COM) 経由で STOPPED を
+ *                             経由せず直接 SLEEP させる。ComM.c/CanSM.c 参照。
+ *                             実 AUTOSAR の標準遷移図にはない本プロジェクト固有の拡張）。
+ *          - それ以外（CAN_CS_UNINIT 等）は CAN_E_TRANSITION で拒否する。
  *
- *          上記のとおり CAN_T_START/CAN_T_STOP/CAN_T_SLEEP は複数の
- *          遷移元状態を許容する設計だが、CAN_CS_SLEEP からの
- *          CAN_T_START/CAN_T_STOP だけは、まず CAN_T_WAKEUP で
- *          CAN_CS_STOPPED へ戻らないと到達できない状態であり、
- *          どの呼び出し元もこの組み合わせを使わない。同様に CAN_T_WAKEUP
- *          は CAN_CS_SLEEP 以外から呼ぶ意味がない。呼び出し元の実装ミスを
- *          検出できるよう、この 2 点のみ状態を検証する（SWS_Can_00200/
- *          00409-00412。2026-08 のスペック監査で「一切検証していない」
- *          ことが判明したが、標準 4 遷移図をそのまま強制すると上記の
- *          協調スリープ／ボランタリスリープ取り消しという実際に使われている
- *          機能を壊すため、検証対象は安全に追加できる範囲に絞った）。
+ *          標準 4 遷移図をそのまま強制すると、上記の協調スリープ／ボランタリスリープ取り消しという
+ *          実際に使われている機能を壊すため、SLEEP からの STARTED の 1 点のみ状態を検証する
+ *          （SWS_Can_00200/00409-00412）。
  *
  * \param[in]  Controller  CAN コントローラのインデックス。
  *                         本実装はコントローラ 0 のみ対応。
- *                         0 以外を指定すると CAN_NOT_OK を返す。
- * \param[in]  Transition  要求する状態遷移 (Can_StateTransitionType)。
+ *                         0 以外を指定すると E_NOT_OK を返す。
+ * \param[in]  Transition  要求する遷移後の状態 (Can_ControllerStateType)。
  *
- * \retval  CAN_OK      遷移が正常に適用された。
- * \retval  CAN_NOT_OK  Controller が無効、未対応の Transition 値、または
- *                       CAN_CS_SLEEP 中の CAN_T_START/CAN_T_STOP、
- *                       CAN_CS_SLEEP 以外での CAN_T_WAKEUP。
+ * \retval  E_OK      遷移が正常に適用された。
+ * \retval  E_NOT_OK  未初期化、Controller が無効、未対応の Transition 値、または
+ *                    CAN_CS_SLEEP 中の CAN_CS_STARTED。
  *
  * \AUTOSARReq     {SWS_Can_00017, SWS_Can_00200, SWS_Can_00230}
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
+Std_ReturnType Can_SetControllerMode(uint8 Controller, Can_ControllerStateType Transition)
 {
     if (Can_ConfigPtr == NULL)
     {
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_UNINIT);
-        return CAN_NOT_OK;
+        return E_NOT_OK;
     }
 
     if (Controller != 0U)
     {
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_PARAM_CONTROLLER);
-        return CAN_NOT_OK;
+        return E_NOT_OK;
     }
 
     switch (Transition)
     {
-    case CAN_T_START:
+    case CAN_CS_STARTED:
         if (CanState == CAN_CS_SLEEP)
         {
-            DET_LOGE(TAG, "SetControllerMode E: T_START invalid from SLEEP (WAKEUP required first)");
+            DET_LOGE(TAG, "SetControllerMode E: STARTED invalid from SLEEP (STOPPED required first)");
             (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
-            return CAN_NOT_OK;
+            return E_NOT_OK;
         }
         (void)Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
         //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
-    case CAN_T_STOP:    /* CAN_CS_STARTED → CAN_CS_STOPPED */
-        if (CanState == CAN_CS_SLEEP)
-        {
-            DET_LOGE(TAG, "SetControllerMode E: T_STOP invalid from SLEEP (WAKEUP required first)");
-            (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
-            return CAN_NOT_OK;
-        }
-        Can_EnterListenOnly();
+    case CAN_CS_STOPPED:    /* STARTED/STOPPED → STOPPED（停止）、SLEEP → STOPPED（ウェイクアップ）。どちらも同じ受信専用モード */
+        (void)Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
+        CanState = CAN_CS_STOPPED;
         break;
-    case CAN_T_WAKEUP:  /* CAN_CS_SLEEP → CAN_CS_STOPPED（同じ受信専用モードへの遷移） */
-        if (CanState != CAN_CS_SLEEP)
-        {
-            DET_LOGE(TAG, "SetControllerMode E: T_WAKEUP invalid from state=%u (not SLEEP)",
-                     (unsigned)CanState);
-            (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
-            return CAN_NOT_OK;
-        }
-        Can_EnterListenOnly();
-        break;
-    case CAN_T_SLEEP:
+    case CAN_CS_SLEEP:
         (void)Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
         CanState = CAN_CS_SLEEP;
         break;
     default:
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
-        return CAN_NOT_OK;
+        return E_NOT_OK;
     }
 
     /* 遷移の結果のモードを、完了通知として積む（Can_MainFunction_Mode() が CanIf へ通知する）。 */
@@ -463,7 +493,7 @@ Can_ReturnType Can_SetControllerMode(uint8 Controller, Can_StateTransitionType T
                  (unsigned)CanState);
     }
 
-    return CAN_OK;
+    return E_OK;
 }
 
 /* ----------------------------------------------------------------------
@@ -615,47 +645,53 @@ static uint8 Can_FdRoundUpLength(uint8 length)
  *          フレーム内で上位層へ通知すると、将来 TxConfirmation 側に処理が
  *          足された際に Can_Write() を再帰呼び出しする経路になりうるため）。
  *          コントローラが CAN_CS_STARTED 状態でない場合は
- *          即座に CAN_NOT_OK を返す。PduInfo->length が 8 バイトを超える場合も
- *          同様に拒否する（[SWS_Can_00218]、CAN_E_PARAM_DLC）。
+ *          即座に E_NOT_OK を返す。PduInfo->length が 8 バイトを超える場合も
+ *          同様に拒否する（[SWS_Can_00218]、CAN_E_PARAM_DATA_LENGTH）。
  *
- * \param[in]  Hth      ハードウェア送信ハンドル。MCP2515 が TX バッファを
- *                      自動選択するため、この実装では使用しない。
+ * \param[in]  Hth      ハードウェア送信ハンドル。CAN_HTH_COUNT 未満であること
+ *                      （範囲外は CAN_E_PARAM_HANDLE で拒否する、[SWS_Can_00217]）。
+ *                      MCP2515 が TX バッファを自動選択するため、それ以外の用途には使わない。
  * \param[in]  PduInfo  送信する PDU へのポインタ。NULL 禁止。
  *                      使用メンバー: id, length, sdu, swPduHandle。
  *                      length は 8 バイト以下であること。
  *
- * \retval  CAN_OK      フレームが受理され、送信に成功した。
- * \retval  CAN_NOT_OK  コントローラ未起動、length が 8 バイト超過、
- *                      または MCP2515 送信失敗。
- * \retval  CAN_BUSY    この実装では返さない（MCP2515 が自動リトライ）。
+ * \retval  E_OK      フレームが受理され、送信に成功した。
+ * \retval  E_NOT_OK  コントローラ未起動、length が 8 バイト超過、
+ *                    または MCP2515 送信失敗。
+ * \retval  CAN_BUSY  この実装では返さない（MCP2515 が自動リトライ）。
  *
- * \AUTOSARReq     {SWS_Can_00016}
+ * \AUTOSARReq     {SWS_Can_00016, SWS_Can_00217}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant (different Hth)}
  * \Synchronicity  {Synchronous}
  */
-Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
+Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 {
-    (void)Hth;
-
     if (Can_ConfigPtr == NULL)
     {
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_UNINIT);
-        return CAN_NOT_OK;
+        return E_NOT_OK;
+    }
+
+    if (Hth >= CAN_HTH_COUNT)
+    {
+        DET_LOGE(TAG, "Write E: Hth=%u not configured", (unsigned)Hth);
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_HANDLE);
+        return E_NOT_OK;
     }
 
     if ((PduInfo == NULL) || (PduInfo->sdu == NULL))
     {
         DET_LOGE(TAG, "Write: NULL PduInfo/sdu");
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_POINTER);
-        return CAN_NOT_OK;
+        return E_NOT_OK;
     }
 
     const uint8 maxLength = (Can_ConfigPtr->fdEnabled != 0U) ? CAN_FD_FRAME_MAX_DLC : CAN_FRAME_MAX_DLC;
 
     if (PduInfo->length > maxLength)
     {
-        /* [SWS_Can_00218]: length が上限（クラシック CAN は 8 バイト、CAN FD 有効時は 64 バイト）を超える場合は CAN_E_PARAM_DLC を
+        /* [SWS_Can_00218]: length が上限（クラシック CAN は 8 バイト、CAN FD 有効時は 64 バイト）を超える場合は CAN_E_PARAM_DATA_LENGTH を
          * 報告して拒否する。上位層（CanIf_Transmit）は設定 DLC（常に 8 以下）
          * で既に SduLength を検証しているため、現状この分岐は到達しないはず
          * だが、PduInfo->sdu は呼び出し元が length 分の実体を持つ保証がなく、
@@ -663,13 +699,13 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
          * リードになりうる（2026-08 のスペック監査で指摘、安全網として追加）。 */
         DET_LOGE(TAG, "Write E: length=%u exceeds %u bytes",
                  (unsigned)PduInfo->length, (unsigned)maxLength);
-        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_DLC);
-        return CAN_NOT_OK;
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_DATA_LENGTH);
+        return E_NOT_OK;
     }
 
     if (CanState != CAN_CS_STARTED)
     {
-        return CAN_NOT_OK;
+        return E_NOT_OK;
     }
 
     /* CAN FD で有効でない長さ（9〜11 など）は、上へ切り上げ、足りない部分を CAN_FD_PADDING_VALUE で埋めて送る。 */
@@ -703,7 +739,7 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
                      (unsigned)CAN_BUSOFF_TX_ERR_THRESHOLD);
             CanIf_ControllerBusOff(0U);
         }
-        return CAN_NOT_OK;
+        return E_NOT_OK;
     }
 
     Can_TxErrCount = 0U;
@@ -726,7 +762,7 @@ Can_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
         Can_TxConfLen++;
     }
 
-    return CAN_OK;
+    return E_OK;
 }
 
 /* ======================================================================
@@ -1094,21 +1130,62 @@ Std_ReturnType Can_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateTyp
 }
 
 /* ----------------------------------------------------------------------
- * Can_EnterListenOnly
+ * Can_GetControllerMode
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   コントローラを受信専用モード（Listen-Only）へ遷移させる。
+ * \brief   CAN コントローラの現在のモードを取得する。
  *
- * \details CAN_T_STOP（CAN_CS_STARTED → CAN_CS_STOPPED）と CAN_T_WAKEUP
- *          （CAN_CS_SLEEP → CAN_CS_STOPPED）は遷移元状態の妥当性チェックが
- *          異なる（Can_SetControllerMode() 参照）が、実際に適用する HW モード
- *          と CanState は同一のため、その部分だけを共通化する。
+ * \details Can モジュールが持つ状態（STOPPED/STARTED/SLEEP）をそのまま返す
+ *          （[SWS_Can_91015]）。CanIf_GetControllerMode() は、現状これを呼ばず、CanIf が持つ
+ *          CanIf_ControllerMode[]（CanIf_GetControllerMode() 用の記録）を返す。転送への切り替えは未対応。
+ *
+ * \param[in]   Controller         対象コントローラ ID (0 固定)。
+ * \param[out]  ControllerModePtr  現在のモードの格納先。NULL 禁止。
+ *
+ * \retval  E_OK      モードを返した。
+ * \retval  E_NOT_OK  未初期化、Controller が範囲外、または ControllerModePtr が NULL。
+ *
+ * \AUTOSARReq     {SWS_Can_91014, SWS_Can_91015, SWS_Can_91016, SWS_Can_91017, SWS_Can_91018}
+ * \ServiceID      {0x12}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
  */
-static void Can_EnterListenOnly(void)
+Std_ReturnType Can_GetControllerMode(uint8 Controller, Can_ControllerStateType* ControllerModePtr)
 {
-    (void)Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
-    CanState = CAN_CS_STOPPED;
+    if (Can_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_MODE, CAN_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Controller != 0U)
+    {
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_MODE, CAN_E_PARAM_CONTROLLER);
+        return E_NOT_OK;
+    }
+
+    if (ControllerModePtr == NULL)
+    {
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_MODE, CAN_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *ControllerModePtr = CanState;
+    return E_OK;
+}
+
+/** TX 確認・モード変更通知の保留キューと、割り込み禁止のネストカウンタを初期状態へ戻す
+ *  （Can_Init() と Can_DeInit() の共通部分）。 */
+static void Can_ResetQueues(void)
+{
+    Can_TxConfHead  = 0U;
+    Can_TxConfTail  = 0U;
+    Can_TxConfLen   = 0U;
+    Can_ModeIndHead = 0U;
+    Can_ModeIndTail = 0U;
+    Can_ModeIndLen  = 0U;
+    Can_InterruptDisableNestCount = 0U;
 }
 
 /* ======================================================================

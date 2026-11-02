@@ -355,6 +355,7 @@ protected:
         canConfig.baudrate        = 500000U;
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
+        Can_Test_SetConfigPtr(NULL);  // 未初期化へ戻す（Can_Init() は初期化済みだと CAN_E_TRANSITION で拒否する）
         Can_Init(&canConfig);
         CanIf_Init(&kTestCanIfConfig);
         /* CanIf_Init() より前に Can_SetControllerMode() を直接呼ぶと、CanIf が
@@ -445,7 +446,7 @@ TEST_F(ComStack_Signal_Tx_SendToConfirm_Test, OK)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(Com_Test_GetTxPending(0U), 0U);  // 送信要求が消費された
-    EXPECT_EQ(Return_Can_Write, CAN_OK);       // Can_Write() が CAN_OK を返した
+    EXPECT_EQ(Return_Can_Write, E_OK);       // Can_Write() が E_OK を返した
     EXPECT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x100U);   // CanIf_TxPduConfigType.CanId
     EXPECT_EQ(FakeCanHw_LastSendDlc, 2U);

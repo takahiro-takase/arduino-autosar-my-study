@@ -16,6 +16,7 @@
  * ====================================================================== */
 
 #include "Platform_Types.h"
+#include "Std_Types.h"
 #include "ComStack_Types.h"
 
 /* ======================================================================
@@ -32,19 +33,18 @@ typedef uint32 Can_IdType;
 // MCP2515 は TX バッファを 3 つ持つが、ここでは簡略化して uint8 で管理
 typedef uint8 Can_HwHandleType;
 
-typedef enum
-{
-    CAN_OK = 0,
-    CAN_NOT_OK,
-    CAN_BUSY
-} Can_ReturnType;
+/* Can_Write() の戻り値（Std_ReturnType）に加わる値。TX ハードウェアバッファに空きがない、
+ * または再入できない先行呼び出しがあるとき（[SWS_Can_00213/00214]）。4.3.1 で Can_ReturnType
+ * （CAN_OK/CAN_NOT_OK/CAN_BUSY）は廃止され、E_OK/E_NOT_OK に統一された。 */
+#define CAN_BUSY  ((Std_ReturnType)0x02U)
 
+/* [SWS_Can_91014 等] 値は仕様どおり（STARTED=0x01、STOPPED=0x02）。 */
 typedef enum
 {
-    CAN_CS_UNINIT = 0,
-    CAN_CS_STOPPED,
-    CAN_CS_STARTED,
-    CAN_CS_SLEEP
+    CAN_CS_UNINIT  = 0x00,
+    CAN_CS_STARTED = 0x01,
+    CAN_CS_STOPPED = 0x02,
+    CAN_CS_SLEEP   = 0x03
 } Can_ControllerStateType;
 
 /**
@@ -63,15 +63,6 @@ typedef enum
     CAN_ERRORSTATE_PASSIVE,     /**< Error Passive（送信制限あり） */
     CAN_ERRORSTATE_BUSOFF       /**< Bus-Off（送信不能）          */
 } Can_ErrorStateType;
-
-/* SWS_Can_00417 */
-typedef enum
-{
-    CAN_T_START  = 0x01, /* CAN_CS_STOPPED -> CAN_CS_STARTED */
-    CAN_T_STOP   = 0x02, /* CAN_CS_STARTED -> CAN_CS_STOPPED */
-    CAN_T_SLEEP  = 0x03, /* CAN_CS_STOPPED -> CAN_CS_SLEEP   */
-    CAN_T_WAKEUP = 0x04  /* CAN_CS_SLEEP   -> CAN_CS_STOPPED */
-} Can_StateTransitionType;
 
 typedef struct
 {

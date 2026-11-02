@@ -21,7 +21,7 @@ Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILEN
 CanNm（CanNm 状態機械）が Prepare Bus-Sleep Mode へ入ると ComM 経由で SILENT_COM
 （TX 停止）へ移り、Bus-Sleep Mode へ到達した通知（`Nm_BusSleepMode()` →
 `ComM_Nm_BusSleepMode()` を経て ComM が呼ぶ `CanSM_RequestComMode(NO_COM)`）を
-受けてから `CanIf_SetControllerMode(CAN_CS_SLEEP)`（→ `Can_SetControllerMode(CAN_T_SLEEP)`）で
+受けてから `CanIf_SetControllerMode(CAN_CS_SLEEP)`（→ `Can_SetControllerMode(CAN_CS_SLEEP)`）で
 実 HW を実際にスリープさせる
 （協調スリープ、詳細は [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。`CanSM_StartWakeupSource()`
 による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation
@@ -70,7 +70,7 @@ stateDiagram-v2
 > 冒頭のガードは `BUS_OFF` しかチェックしておらず、`WAKEUP_VALIDATING` 中に呼ばれても
 > 素通りする。`RequestComMode(FULL_COM)` は直接 `FULL_COM` へ（有効フレームの受信確認後に
 > `ComM_EcuM_WakeUpIndication()` が呼ぶ場合は、これが正規の経路。受信確認を経ない呼び出しでも
-> 同じ遷移になる）、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_T_SLEEP)`
+> 同じ遷移になる）、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_CS_SLEEP)`
 > を呼ばないまま状態だけ `NO_COM` にしてしまい、コントローラが Listen-Only
 > （`CAN_CS_STOPPED`）のまま起きた状態で残る（`NO_COM` の「物理的にスリープ済み」
 > という不変条件と矛盾する）。ただし `ComM_RequestComMode()` の呼び出し元

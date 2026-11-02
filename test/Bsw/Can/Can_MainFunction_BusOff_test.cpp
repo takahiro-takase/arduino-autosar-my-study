@@ -97,7 +97,7 @@ TEST_F(Can_MainFunction_BusOff_Test, Can_MainFunction_BusOff_NG_NotOnStarted)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    Can_SetControllerMode(0U, CAN_CS_SLEEP);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -116,7 +116,7 @@ TEST_F(Can_MainFunction_BusOff_Test, Can_MainFunction_BusOff_NG_NoBusOffDetected
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
     // FakeCanHw_IsBusOffReturn は既定 CAN_HW_FAIL のまま（Bus-Off 未検出）
 
     /* ----------------------- */
@@ -137,7 +137,7 @@ TEST_F(Can_MainFunction_BusOff_Test, Can_MainFunction_BusOff_OK)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
     // Can_Hw_IsBusOff が Bus-Off 検出（CAN_HW_OK）を返すようにする
     FakeCanHw_IsBusOffReturn = CAN_HW_OK;
 

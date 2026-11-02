@@ -6,6 +6,22 @@ PDF ファイルは著作権により再配布禁止のため git 管理外（`.
 
 入手先: https://www.autosar.org/standards/classic-platform
 
+## 格納フォルダと版の読み方
+
+PDF は、**参照した版ごとのフォルダ**（`docs/autosar/<版>/`）に置きます。各フォルダは `.gitignore` の対象です（新しい版のフォルダを作ったら、`.gitignore` にも `docs/autosar/<版>/*.*` を足す）。
+
+| フォルダ | 内容 |
+|---|---|
+| `4.3.1/` | 本プロジェクトの基準（R4.3.1）。ComStack の PDF は、すべて表紙が「Part of Standard Release 4.3.1」で、変更履歴の先頭が 4.3.1（2017-12-08）であることを確認済み（2026-11-02） |
+| `4.4.0/` | R4.3.1 に存在しない文書（KeyM など） |
+| `R19-11/` | 4.3.1 の文書が古い内容だったときの代わり（下記） |
+| `R25-11/` | `AUTOSAR_CP_SWS_IOHardwareAbstraction.pdf`（IoHwAb の新しい版。4.3.1 の IoHwAb は `4.3.1/AUTOSAR_SWS_IOHardwareAbstraction.pdf`） |
+
+**版の読み方（重要）**
+- 表紙の版番号ではなく、**変更履歴（表紙の次のページ）を先頭から全部読んで**判断します。
+- 新しい版の PDF を使うときは、**4.3.1 までの内容だけ**を見ます。変更履歴で、4.3.1 より後（4.4.0 / R18-10 / R19-03 / R19-11 など）の機能追加を特定し、その分は除外します。
+- **CAN ドライバ**: `4.3.1/AUTOSAR_SWS_CANDriver.pdf` は、公式の R4.3.1 フォルダから取れる版だが、表紙が「V4.3.0 / R4.1 Rev 3」で、変更履歴が 2014-03（4.1.3）で止まっており、4.2.2 以降に追加された API（`Can_GetControllerErrorState`、`Can_DeInit`、`Can_GetControllerMode` など）が載っていない。`R19-11/AUTOSAR_SWS_CANDriver.pdf` の変更履歴は、4.3.1（2017-12）を含み、その後は 4.4.0（文書状態の変更のみ）と R19-11（軽微な修正のみ）なので、**4.3.1 の内容として読める**。
+
 ---
 
 ## アーキテクチャ
@@ -30,7 +46,7 @@ PDF ファイルは著作権により再配布禁止のため git 管理外（`.
 
 | 文書名 | ファイル名 | 説明 |
 |--------|-----------|------|
-| SWS CAN Driver | `AUTOSAR_SWS_CANDriver.pdf` | Can モジュール API（Can_Init / Can_Write / Bus-Off 検出）。**R19-11 版**。変更履歴は 4.3.1（2017-12）を含み、その後は 4.4.0（文書状態の変更のみ）と R19-11（軽微な修正のみ）なので、4.3.1 の内容として読める。4.3.0 で Can_GetControllerErrorState / Can_DeInit / Can_GetControllerMode を追加、4.3.1 で戻り値型を Std_ReturnType へ統一・Can_StateTransitionType を廃止。以前の版（表紙は V4.3.0 だが、内容は 4.1.3 世代）は `AUTOSAR_SWS_CANDriver_old.pdf` に退避（2026-11-02） |
+| SWS CAN Driver | `AUTOSAR_SWS_CANDriver.pdf` | Can モジュール API（Can_Init / Can_Write / Bus-Off 検出）。**4.3.1 の内容は `R19-11/` の版で読む**（下の「格納フォルダと版の読み方」参照） |
 | SWS CAN Interface | `AUTOSAR_SWS_CANInterface.pdf` | CanIf の PDU マッピング・コールバック |
 | SWS PDU Router | `AUTOSAR_SWS_PDURouter.pdf` | PduR のルーティングテーブル |
 | SWS COM | `AUTOSAR_SWS_COM.pdf` | シグナルパック/アンパック・受信デッドライン監視 |

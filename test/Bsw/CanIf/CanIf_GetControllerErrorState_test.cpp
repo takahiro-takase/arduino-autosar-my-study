@@ -70,6 +70,7 @@ protected:
         canConfig.baudrate        = 500000U;
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
+        Can_Test_SetConfigPtr(NULL);  // 未初期化へ戻す（Can_Init() は初期化済みだと CAN_E_TRANSITION で拒否する）
         Can_Init(&canConfig);
         CanIf_Init(&kControllerModeCanIfConfig);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く

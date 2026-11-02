@@ -427,6 +427,7 @@ TRANSITION/DATALOST/PARAM_BAUDRATE/ICOM_CONFIG_INVALID の9件）と値の並び
 =0x01`,`CAN_E_PARAM_DLC=0x03`,`CAN_E_PARAM_CONTROLLER=0x04`,`CAN_E_UNINIT=0x05`,
 `CAN_E_TRANSITION=0x06` となり、本実装の定義済み値と完全に一致することを確認した
 （「気づいたが実際には正しかった」ケース。修正はしていない）。
+（2026-11-02 追記: 上の `CAN_E_PARAM_DLC` は、R19-11 版の仕様で `CAN_E_PARAM_DATA_LENGTH` と確認し、実装も改名した。`CAN_E_PARAM_HANDLE=0x02` も追加済み。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

@@ -47,12 +47,12 @@ uint32 FailFromCallCount_Can_SetControllerMode       = WRAP_CAN_FAIL_FROM_CALL_C
 uint32 FailFromCallCount_Can_GetControllerErrorState = WRAP_CAN_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Can_Write                   = WRAP_CAN_FAIL_FROM_CALL_COUNT_DISABLED;
 
-Can_ReturnType ForcedReturn_Can_SetControllerMode       = CAN_NOT_OK;
+Std_ReturnType ForcedReturn_Can_SetControllerMode       = E_NOT_OK;
 Std_ReturnType ForcedReturn_Can_GetControllerErrorState = E_NOT_OK;
-Can_ReturnType ForcedReturn_Can_Write                   = CAN_NOT_OK;
+Std_ReturnType ForcedReturn_Can_Write                   = E_NOT_OK;
 
-Can_ReturnType Return_Can_Write                         = CAN_NOT_OK;
-Can_ReturnType Return_Can_SetControllerMode             = CAN_NOT_OK;
+Std_ReturnType Return_Can_Write                         = E_NOT_OK;
+Std_ReturnType Return_Can_SetControllerMode             = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
  * WrapCan_Reset — 11関数すべての状態を一括で初期化する（Wrap_Can.h 参照）。
@@ -76,12 +76,12 @@ void WrapCan_Reset(void)
     FailFromCallCount_Can_GetControllerErrorState = WRAP_CAN_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Can_Write                   = WRAP_CAN_FAIL_FROM_CALL_COUNT_DISABLED;
 
-    ForcedReturn_Can_SetControllerMode       = CAN_NOT_OK;
+    ForcedReturn_Can_SetControllerMode       = E_NOT_OK;
     ForcedReturn_Can_GetControllerErrorState = E_NOT_OK;
-    ForcedReturn_Can_Write                   = CAN_NOT_OK;
+    ForcedReturn_Can_Write                   = E_NOT_OK;
 
-    Return_Can_Write                         = CAN_NOT_OK;
-    Return_Can_SetControllerMode             = CAN_NOT_OK;
+    Return_Can_Write                         = E_NOT_OK;
+    Return_Can_SetControllerMode             = E_NOT_OK;
 }
 
 /* ======================================================================
@@ -139,8 +139,8 @@ void __wrap_Can_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * ---------------------------------------------------------------------- */
 
 extern
-Can_ReturnType __real_Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition);
-Can_ReturnType __wrap_Can_SetControllerMode(uint8 Controller, Can_StateTransitionType Transition)
+Std_ReturnType __real_Can_SetControllerMode(uint8 Controller, Can_ControllerStateType Transition);
+Std_ReturnType __wrap_Can_SetControllerMode(uint8 Controller, Can_ControllerStateType Transition)
 {
     CallCount_Can_SetControllerMode++;
     Log_Write(LOG_T, TAG, "Can_SetControllerMode", "called %u times", CallCount_Can_SetControllerMode);
@@ -195,8 +195,8 @@ void __wrap_Can_EnableControllerInterrupts(uint8 Controller)
  * ---------------------------------------------------------------------- */
 
 extern
-Can_ReturnType __real_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
-Can_ReturnType __wrap_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
+Std_ReturnType __real_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo);
+Std_ReturnType __wrap_Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 {
     CallCount_Can_Write++;
     Log_Write(LOG_T, TAG, "Can_Write", "called %u times", CallCount_Can_Write);

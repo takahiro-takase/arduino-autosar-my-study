@@ -97,7 +97,7 @@ TEST_F(Can_MainFunction_Wakeup_Test, Can_MainFunction_Wakeup_NG_NotOnSleep)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -116,7 +116,7 @@ TEST_F(Can_MainFunction_Wakeup_Test, Can_MainFunction_Wakeup_NG_NoWakeupDetected
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    Can_SetControllerMode(0U, CAN_CS_SLEEP);
     // FakeCanHw_IsWakeupPendingReturn は既定 CAN_HW_FAIL のまま（ウェイクアップ要因なし）
 
     /* ----------------------- */
@@ -137,7 +137,7 @@ TEST_F(Can_MainFunction_Wakeup_Test, Can_MainFunction_Wakeup_OK)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    Can_SetControllerMode(0U, CAN_CS_SLEEP);
     FakeCanHw_IsWakeupPendingReturn = CAN_HW_OK;  // INT ピンでウェイクアップ要因を検出させる
 
     /* ----------------------- */
@@ -159,7 +159,7 @@ TEST_F(Can_MainFunction_Wakeup_Test, Can_MainFunction_Wakeup_OK_IsrFlagWithoutHw
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    Can_SetControllerMode(0U, CAN_CS_SLEEP);
     // FakeCanHw_IsWakeupPendingReturn は既定 CAN_HW_FAIL のまま（HW の確認では検出されない）
     ASSERT_NE(FakeCanHw_AttachedIsr, nullptr);
     FakeCanHw_AttachedIsr();   // SLEEP 中の INT ピンの割り込み（ウェイクアップのフラグだけが立つ）

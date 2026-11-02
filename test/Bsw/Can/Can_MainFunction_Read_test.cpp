@@ -97,7 +97,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_NG_On_Sleep)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    Can_SetControllerMode(0U, CAN_CS_SLEEP);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -116,7 +116,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_NG_Can_Hw_CheckReceive_
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -137,7 +137,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     FakeCanHw_RxPendingCount = 1U;  // 受信フレーム 1 件を模擬
     FakeCanHw_RxId  = 0x100U;

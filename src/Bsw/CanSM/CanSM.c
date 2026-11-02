@@ -6,9 +6,9 @@
  *          内部状態機械:
  *
  *            CANSM_STATE_NO_COM ──────────────────────────────┐
- *              ↓ RequestComMode(FULL_COM) → CAN_T_START        │ ウェイクアップ
+ *              ↓ RequestComMode(FULL_COM) → CAN_CS_STARTED        │ ウェイクアップ
  *            CANSM_STATE_FULL_COM  ←────────────────────────┐  │ (バス活動検知)
- *              ↓ RequestComMode(NO_COM) → CAN_T_SLEEP         │ │
+ *              ↓ RequestComMode(NO_COM) → CAN_CS_SLEEP         │ │
  *              └───────────────────────────────────────────────┘
  *              ↓ CanSM_ControllerBusOff()                    │ 回復成功
  *            CANSM_STATE_BUS_OFF                             │
@@ -77,7 +77,7 @@
  *            ComM_BusSM_ModeIndication() を直接 SILENT_COMMUNICATION で呼ぶだけで、
  *            CanSM_State 自体は CANSM_STATE_BUS_OFF のままだった）。
  *            SILENT_COM の実現方式は 2026-08 に再度変更した:
- *            当初は Can_SetControllerMode(CAN_T_STOP) でコントローラ全体を
+ *            当初は Can_SetControllerMode(CAN_CS_STOPPED) でコントローラ全体を
  *            Listen-Only へ落としていたが、実 AUTOSAR の SILENT_COMMUNICATION
  *            は PDU チャネル単位の TX 抑制（CanIf_SetPduMode(CANIF_TX_OFFLINE)、
  *            [SWS_CANIF_00137]）で実現するものであり、コントローラ自体は
@@ -424,7 +424,7 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
                 return E_NOT_OK;
             }
             /* 2026-08 変更: 以前はコントローラ全体を Can_SetControllerMode
-             * (CAN_T_STOP) で Listen-Only へ落としていたが、実 AUTOSAR の
+             * (CAN_CS_STOPPED) で Listen-Only へ落としていたが、実 AUTOSAR の
              * SILENT_COMMUNICATION は PDU チャネル単位の TX 抑制
              * （CanIf_SetPduMode(CANIF_TX_OFFLINE)、[SWS_CANIF_00137]）で
              * 実現するものであり、コントローラ自体は CAN_CS_STARTED の
@@ -787,7 +787,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId)
     if (CanIf_SetControllerMode(0U, CAN_CS_STOPPED) != E_OK)
     {
         /* 到達しないはずの経路（CanIf_ControllerBusOff は Can 側が
-         * CanState==CAN_CS_STARTED のときしか呼ばないため、CAN_T_STOP が
+         * CanState==CAN_CS_STARTED のときしか呼ばないため、CAN_CS_STOPPED が
          * 拒否される SLEEP 中の到達は原理的にない。Can_MainFunction_BusOff()/
          * Can_Write() 参照）。ただし CanIf からは実際に Bus-Off が発生した
          * という事実は既に届いているため、ここで CanSM_State への反映を
@@ -1081,7 +1081,7 @@ void CanSM_MainFunction(void)
     if (CanIf_SetControllerMode(0U, CAN_CS_STARTED) != E_OK)
     {
         /* 到達しないはずの経路（BUS_OFF 中は CanState==CAN_CS_STOPPED の
-         * はず、CanSM_ControllerBusOff() が Bus-Off 検出時に CAN_T_STOP
+         * はず、CanSM_ControllerBusOff() が Bus-Off 検出時に CAN_CS_STOPPED
          * 済み）。失敗した場合に回復成功とみなして CanSM_State を進めると、
          * CanSM/ComM/EcuM が「復帰した」と誤認したまま MCP2515 は止まった
          * ままになる。CanSM_BusOffRetries は既にインクリメント済みのため、

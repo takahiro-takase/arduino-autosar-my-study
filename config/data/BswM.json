@@ -194,7 +194,7 @@
       "待ち続け、EEPROM への永続化が完了しない（詳細は NvM.c / MemIf.c を参照）。",
       "",
       "CanNm_MainFunction も SHUTDOWN 中動かし続ける必要がある。CanSM の実物理",
-      "スリープ（Can_SetControllerMode(CAN_T_SLEEP)）は CanNm が Bus-Sleep Mode へ",
+      "スリープ（Can_SetControllerMode(CAN_CS_SLEEP)）は CanNm が Bus-Sleep Mode へ",
       "到達した通知（ComM_Nm_BusSleepMode() 経由で CanSM_RequestComMode(NO_COM)",
       "が呼ばれる）を受けて初めて行われる設計（協調スリープ、CanNm.c/ComM.c/",
       "CanSM.c 参照）に変更したため、CanNm の状態機械タイマ",

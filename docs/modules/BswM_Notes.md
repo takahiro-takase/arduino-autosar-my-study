@@ -191,7 +191,7 @@ POST_RUN 中に停止するタスク:
                     なければ）→ Bus-Sleep Mode へ到達
                         → Nm_BusSleepMode() → ComM_Nm_BusSleepMode()
                           → CanSM_RequestComMode(NO_COM)
-                              → Can_SetControllerMode(CAN_T_SLEEP)  ← ここで初めて
+                              → Can_SetControllerMode(CAN_CS_SLEEP)  ← ここで初めて
                                 MCP2515 を実際にスリープさせる（詳細は
                                 [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）
 
