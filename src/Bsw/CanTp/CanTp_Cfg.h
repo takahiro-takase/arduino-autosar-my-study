@@ -60,6 +60,9 @@
 
 /** ランタイムエラーコード（7.4.2 [SWS_CanTp_00352] 表）。Det_ReportRuntimeError() で報告する。 */
 #define CANTP_E_PADDING         0x70U  /* 長さが 8 バイト未満の PDU を受信した（パディング ON の前提に反する） */
+#define CANTP_E_COM             0xB0U  /* [SWS_CanTp_00229]: タイムアウト以外の理由で、受信・送信を中断した */
+#define CANTP_E_RX_COM          0xC0U  /* [SWS_CanTp_00229]: 受信がタイムアウト（N_Cr など）で中断した */
+#define CANTP_E_TX_COM          0xD0U  /* [SWS_CanTp_00229]: 送信がタイムアウト（N_Bs、N_As、N_Cs など）で中断した */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
@@ -108,6 +111,14 @@
  *  で真の N_As（送信確認待ち）を表現できないため、代わりに
  *  Can_Write() の同期的な送信失敗が一定時間継続した場合の保護として用いる。 */
 #define CANTP_N_AS_TIMEOUT_MS  1000UL
+
+/* -----------------------------------------------------------------------
+ * N-PDU のパディング（[SWS_CanTp_00059]、ECUC_CanTp_00298）
+ * ----------------------------------------------------------------------- */
+
+/** パディングバイト（CanTpPaddingByte）: SF・最後の CF・FC の、使わないバイトに入れる値（0xAA）。
+ *  ISO 15765-2 は値を定めない。0x00 や 0xFF とは違う値にして、バスの上でデータとの区別をつける。 */
+#define CANTP_PADDING_BYTE  0xAAU
 
 /* -----------------------------------------------------------------------
  * PDU / N-SDU ID

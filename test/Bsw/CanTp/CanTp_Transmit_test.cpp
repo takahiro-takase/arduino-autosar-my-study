@@ -354,6 +354,52 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_SfIsSentAndConfirmedImmediately)
     EXPECT_FALSE(CanTp_Test_IsTxBusy());
 }
 
+TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_SfAcceptedWhileUpperLayerHasNoDataYet)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    MakeDcmSendingSessionResponse();
+    FakeMillis_Value = 100UL;
+    FailFromCallCount_PduR_CanTpCopyTxData = 1U;   // Dcm の送信データがまだ無い（BUSY）
+    ForcedReturn_PduR_CanTpCopyTxData      = BUFREQ_E_BUSY;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Transmit(6U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);   // [SWS_CanTp_00184]: 受け付け、後で再試行する
+    EXPECT_EQ(CallCount_CanIf_Transmit, 0U);   // まだ送信しない
+    EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 0U);
+    EXPECT_TRUE(CanTp_Test_IsTxBusy());
+}
+
+TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_RejectsNewRequestWhileWaitingForUpperLayerData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    MakeDcmSendingSessionResponse();
+    FakeMillis_Value = 100UL;
+    FailFromCallCount_PduR_CanTpCopyTxData = 1U;
+    ForcedReturn_PduR_CanTpCopyTxData      = BUFREQ_E_BUSY;
+    ASSERT_EQ(Transmit(6U), E_OK);   // 最初の要求は、データ待ちとして受け付けられる
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Transmit(6U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);   // [SWS_CanTp_00123]: データ待ちの間も、チャネルは使用中
+}
+
 TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_FfIsSentAndWaitsForFlowControl)
 {
     /* ----------------------- */

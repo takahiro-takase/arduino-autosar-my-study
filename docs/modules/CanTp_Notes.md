@@ -43,7 +43,7 @@ Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は
 
 | 方向 | 順序 | 内容 |
 |------|------|------|
-| 受信 | `Dcm_StartOfReception(id, NULL, 長さ, &空き)` | SF/FF の受信時。Dcm が受け入れるかを返す（`BUFREQ_OK` / `BUFREQ_E_NOT_OK` / `BUFREQ_E_OVFL`）。`BUFREQ_E_OVFL` なら CanTp は FC(OVFLW) を返す |
+| 受信 | `Dcm_StartOfReception(id, {SF/FF のデータ, 長さ}, 長さ, &空き)` | SF/FF の受信時。Dcm が受け入れるかを返す（`BUFREQ_OK` / `BUFREQ_E_NOT_OK` / `BUFREQ_E_OVFL`）。`BUFREQ_E_OVFL` なら CanTp は FC(OVFLW) を返す。データ（`info`）は、通知だけで、コピーは続く `CopyRxData` が行う |
 | | `Dcm_CopyRxData(id, {データ, 長さ}, &空き)` | SF のデータ、FF の先頭 6 バイト、各 CF のデータを、Dcm の受信バッファ（`DCM_RX_BUF_SIZE`＝32）へ直接コピーする |
 | | `Dcm_TpRxIndication(id, E_OK / E_NOT_OK)` | 受信の完了（E_OK）、または中断（N_Cr タイムアウト、シーケンス番号の誤り、別の SF/FF による中断。E_NOT_OK） |
 | 送信 | `CanTp_Transmit(id, {長さ})` | Dcm は応答の長さだけを渡す（`SduDataPtr` は使わない） |
@@ -51,6 +51,14 @@ Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は
 | | `Dcm_TpTxConfirmation(id, E_OK / E_NOT_OK)` | 送信の完了（最後のフレームを送った時。E_OK）、または中断（N_Bs・N_As タイムアウト、FC(OVFLW)、CopyTxData の失敗。E_NOT_OK） |
 
 - CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。
+- SF/FF の最初の `Dcm_CopyTxData()` が `BUFREQ_E_BUSY`（送信データがまだ無い）のときは、`CanTp_Transmit()` は要求を受け付け（`E_OK`）、
+  `CanTp_MainFunction()` で再試行します。N_Cs 相当（`CANTP_N_AS_TIMEOUT_MS`）を超えても用意されなければ、`E_NOT_OK` で中断します。
+  待っている間も、チャネルは使用中で、新しい送信要求は拒否します。
+- `StartOfReception` が受け入れても、空きが、受信済みのデータ（SF の長さ、FF の 6 バイト）より小さいときは、受信を中断します。
+- FC の送信が失敗したら、受信を終了し、上位へ `E_NOT_OK` を通知します。
+- パディングは `CANTP_PADDING_BYTE`（`CanTp.json` の `paddingByte`。既定 0xAA）で埋めます（SF、最後の CF、FC）。
+- 中断したときは、DET の実行時エラーを報告します（[SWS_CanTp_00229]）: タイムアウト（N_Cr は `CANTP_E_RX_COM`、N_Bs・N_As・N_Cs は `CANTP_E_TX_COM`）、
+  それ以外（シーケンス番号の誤り、上位層の失敗、FC の OVFLW、FC の送信失敗など）は `CANTP_E_COM`。
 - `CanTp_Transmit()` が `E_NOT_OK` を返した（受け付けなかった）ときは、`Dcm_TpTxConfirmation()` は呼びません。
 - FC の送信には、CF の組み立て済みフレームを壊さないよう、別のバッファ（`fcFrame`）を使います。
 - 送信できる N-SDU の最大長は、FF の長さ欄（12 bit）で決まる 4095 バイトです。実際の上限は、Dcm の応答バッファ（`DCM_TX_BUF_SIZE`）です。

@@ -17,6 +17,8 @@ LAYOUT = (
     ("define", "nCrTimeoutMs", "CANTP_N_CR_TIMEOUT_MS", "%dUL"),
     ("define", "nBsTimeoutMs", "CANTP_N_BS_TIMEOUT_MS", "%dUL"),
     ("define", "nAsTimeoutMs", "CANTP_N_AS_TIMEOUT_MS", "%dUL"),
+    ("section", "paddingSection"),
+    ("define", "paddingByte", "CANTP_PADDING_BYTE", "0x%02XU"),
     ("section", "idSection"),
     ("define", "canIfTxPdu", "CANTP_CANIF_TX_PDU_ID", "%s"),
     ("define", "txNPduId", "CANTP_TX_NPDU_ID", "%dU"),

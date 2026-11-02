@@ -45,6 +45,16 @@
       "Can_Write() の同期的な送信失敗が一定時間継続した場合の保護として用いる。"
     ]
   },
+  "paddingSection": [
+    "N-PDU のパディング（[SWS_CanTp_00059]、ECUC_CanTp_00298）"
+  ],
+  "paddingByte": {
+    "value": 170,
+    "doc": [
+      "パディングバイト（CanTpPaddingByte）: SF・最後の CF・FC の、使わないバイトに入れる値（0xAA）。",
+      "ISO 15765-2 は値を定めない。0x00 や 0xFF とは違う値にして、バスの上でデータとの区別をつける。"
+    ]
+  },
   "idSection": [
     "PDU / N-SDU ID"
   ],

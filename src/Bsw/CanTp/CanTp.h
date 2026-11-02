@@ -94,7 +94,8 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr);
  *                         フレームを組み立てる時に PduR_CanTpCopyTxData() で取り出す。
  *                         SduLength は 4095 を超えてはならない（FF の長さ欄は 12 bit）。
  *
- * \retval  E_OK      送信要求を受け付けた (SF) または FF を送信した (MF)。
+ * \retval  E_OK      送信要求を受け付けた (SF) または FF を送信した (MF)。Dcm の送信データがまだ無いときも、
+ *                    受け付けて、CanTp_MainFunction() で再試行する（[SWS_CanTp_00184]）。
  * \retval  E_NOT_OK  NULL ポインタ、長さ超過、TX チャネルがビジー、
  *                    または SF/FF の物理送信が同期的に失敗した
  *                    (CanIf/Can_Write が拒否した)。
