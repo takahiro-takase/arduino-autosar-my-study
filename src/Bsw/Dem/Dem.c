@@ -492,7 +492,70 @@ Std_ReturnType Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorStatusTy
  * Dem_GetDebouncingOfEvent
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   イベントのデバウンスの状態を取得する（[SWS_Dem_00730]、Dem.h 参照）。
+ *
+ * \details 内部のデバウンスカウンタから、`Dem_DebouncingStateType` のビットを導く（FDC と同じ区分）。
+ *          DEM_DTR_UPDATE（bit4）は、テスト完了のとき立てる（有効条件・保存条件を持たず、常に成立しているため）。
+ *
+ * \param[in]   EventId          イベント ID（`DemConf_DemEventParameter_*`）。
+ * \param[out]  DebouncingState  デバウンスの状態（DEM_TEMPORARILY_DEFECTIVE 等のビットの組）。
+ *
+ * \retval  E_OK      取得した。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、または EventId が構成にない。
+ *
+ * \AUTOSARReq     {SWS_Dem_00730, SWS_Dem_00844, SWS_Dem_01000}
+ * \ServiceID      {0x9F}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetDebouncingOfEvent(Dem_EventIdType EventId, Dem_DebouncingStateType* DebouncingState)
+{
+    if (!Dem_Initialized)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DEBOUNCING_OF_EVENT, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+    if (DebouncingState == NULL)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DEBOUNCING_OF_EVENT, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DEBOUNCING_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    const sint8 counter = Dem_DebounceCounter[EventId];
+    const sint8 limit   = Dem_DebounceLimitTable[EventId];
+    Dem_DebouncingStateType state = 0U;
+
+    if (counter >= limit)
+    {
+        state |= DEM_FINALLY_DEFECTIVE;
+    }
+    else if (counter > 0)
+    {
+        state |= DEM_TEMPORARILY_DEFECTIVE;
+    }
+    else if ((counter < 0) && (counter > -limit))
+    {
+        state |= DEM_TEMPORARILY_HEALED;
+    }
+    else
+    {
+        /* 中立（FDC = 0）、または成功が確定（FDC = -128）: Defective / Healed のビットは立てない */
+    }
+
+    if ((counter >= limit) || (counter <= -limit))
+    {
+        state |= (Dem_DebouncingStateType)(DEM_TEST_COMPLETE | DEM_DTR_UPDATE);   /* テスト完了（両端） */
+    }
+
+    *DebouncingState = state;
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetDTCOfEvent
@@ -633,13 +696,104 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  * Dem_ResetEventDebounceStatus
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   イベントのデバウンスを、止める / 戻す（[SWS_Dem_00683]、Dem.h 参照）。
+ *
+ * \details RESET: デバウンスカウンタを 0 へ戻す（FDC も 0 になる、[SWS_Dem_00684]）。FREEZE: 止める対象のタイマが、
+ *          カウンタ式のデバウンスには無いので、何もしない（[SWS_Dem_00685] は、タイマ式のデバウンスの規定）。
+ *          どちらも、イベントの UDS ステータスには影響しない。
+ *          Dem_PreInit のあと、すぐに使える API のため、Dem_SetEventStatus() と同じく、未初期化チェックの対象外。
+ *
+ * \param[in]  EventId              イベント ID（`DemConf_DemEventParameter_*`）。
+ * \param[in]  DebounceResetStatus  DEM_DEBOUNCE_STATUS_FREEZE / DEM_DEBOUNCE_STATUS_RESET。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  EventId が構成にない（DEM_E_WRONG_CONFIGURATION）、または操作が FREEZE / RESET 以外（DEM_E_PARAM_DATA）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00683, SWS_Dem_00684, SWS_Dem_00685}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ResetEventDebounceStatus(Dem_EventIdType EventId, Dem_DebounceResetStatusType DebounceResetStatus)
+{
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_RESET_EVENT_DEBOUNCE_STATUS, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+    if ((DebounceResetStatus != DEM_DEBOUNCE_STATUS_FREEZE) && (DebounceResetStatus != DEM_DEBOUNCE_STATUS_RESET))
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_RESET_EVENT_DEBOUNCE_STATUS, DEM_E_PARAM_DATA);
+        return E_NOT_OK;
+    }
+
+    if (DebounceResetStatus == DEM_DEBOUNCE_STATUS_RESET)
+    {
+        Dem_DebounceCounter[EventId] = 0;
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_ResetEventStatus
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   イベントの失敗ステータスを、PASSED を報告せずに戻す（[SWS_Dem_00187]、Dem.h 参照）。
+ *
+ * \details TestFailed（UDS ステータスの bit0）を 0 にし、デバウンスカウンタを 0 へ戻す。監視ステータスと、
+ *          UDS ステータスの bit6 は変えない。DTC の設定が無効の間は、何もせず E_OK を返す（[SWS_Dem_00079]）。
+ *          そうでなければ、この操作サイクルでテスト済み（bit6 = 0）のイベントは、E_NOT_OK で拒否する（[SWS_Dem_00638]）。
+ *          TestFailed が変わったときだけ、NvM へ書き込み、FiM へ通知する。
+ *
+ * \param[in]  EventId  イベント ID（`DemConf_DemEventParameter_*`）。
+ *
+ * \retval  E_OK      受理した（DTC の設定が無効で、何もしなかった場合を含む）。
+ * \retval  E_NOT_OK  EventId が構成にない、またはこの操作サイクルでテスト済み。
+ *
+ * \note    Dem_SetEventStatus() と同じく、未初期化チェック（DEM_E_UNINIT）の対象外（[SWS_Dem_00124]）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00187, SWS_Dem_00331, SWS_Dem_00638}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ResetEventStatus(Dem_EventIdType EventId)
+{
+    /* [SWS_Dem_00124]: Dem_ResetEventStatus は、未初期化チェック（DEM_E_UNINIT）の対象外。 */
+
+    if (EventId >= DEM_EVENT_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_RESET_EVENT_STATUS, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    if (!Dem_DTCSettingEnabled)
+    {
+        /* [SWS_Dem_00079]: DTC の設定が無効の間は、UDS ステータスを更新しない（テスト済みかどうかに関係なく、E_OK） */
+        DET_LOGD(TAG, "ev=%u reset ignored: DTC setting disabled", (unsigned)EventId);
+        return E_OK;
+    }
+
+    const uint8 prev = Dem_StatusTable[EventId];
+    if ((prev & DEM_STATUS_NOT_COMPLETED_THIS_CYCLE) == 0U)
+    {
+        /* [SWS_Dem_00638]: この操作サイクルで、既にテスト済み */
+        DET_LOGD(TAG, "ev=%u reset rejected: already tested in this operation cycle", (unsigned)EventId);
+        return E_NOT_OK;
+    }
+
+    Dem_DebounceCounter[EventId] = 0;
+    Dem_StatusTable[EventId]     = (uint8)(prev & (uint8)(~DEM_STATUS_TEST_FAILED));
+
+    if (Dem_StatusTable[EventId] != prev)
+    {
+        (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
+        FiM_DemTriggerOnMonitorStatus(EventId);
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_PrestoreFreezeFrame

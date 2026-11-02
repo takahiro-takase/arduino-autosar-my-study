@@ -40,7 +40,7 @@
 # （stub/Bsw/EcuM/Fake_Bsw_EcuM.h 参照）。BswM_ComM_CurrentMode() は
 # 2026-09-22 に実体リンク+wrap化した（stub/Bsw/BswM/Wrap_BswM.h 参照、
 # 下記「BswM は...」の段落参照）。
-# Dem は実体でリンクし、公開API全22関数を `--wrap` で観測・故障注入する
+# Dem は実体でリンクし、公開API全25関数を `--wrap` で観測・故障注入する
 # （stub/Bsw/Dem/Wrap_Dem.h 参照、2026-09 に完全フェイクから切り替え、直後は
 # Dem_SetEventStatus() のみ、後日残り18関数も追加）。
 # CanSM 状態遷移に関与しない Tx/Rx/E2E チェーンのテストは ComM_Init()/CanNm_Init()
@@ -555,7 +555,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dcm_TpRxIndication
     Dcm_CopyTxData
     Dcm_TpTxConfirmation
-    # Dem.h の公開API全22関数（Wrap_Dem.h/.c 参照）。
+    # Dem.h の公開API全25関数（Wrap_Dem.h/.c 参照）。
     Dem_Init
     Dem_SetEventStatus
     Dem_GetDTCStatusAvailabilityMask
@@ -576,6 +576,9 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dem_EnableDTCSetting
     Dem_SetOperationCycleState
     Dem_GetOperationCycleState
+    Dem_ResetEventStatus
+    Dem_ResetEventDebounceStatus
+    Dem_GetDebouncingOfEvent
     Dem_DisableDTCSetting
     Dem_GetVersionInfo
     # Det.h の Det_Xxx 公開API全6関数（Log_Write/Log_HexStr は無限再帰回避のため

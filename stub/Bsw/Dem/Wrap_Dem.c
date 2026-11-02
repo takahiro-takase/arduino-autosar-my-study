@@ -43,6 +43,9 @@ uint32 CallCount_Dem_DisableDTCSetting                = 0U;
 uint32 CallCount_Dem_EnableDTCSetting                 = 0U;
 uint32 CallCount_Dem_SetOperationCycleState           = 0U;
 uint32 CallCount_Dem_GetOperationCycleState           = 0U;
+uint32 CallCount_Dem_ResetEventStatus                 = 0U;
+uint32 CallCount_Dem_ResetEventDebounceStatus         = 0U;
+uint32 CallCount_Dem_GetDebouncingOfEvent             = 0U;
 uint32 CallCount_Dem_ClearDTC                         = 0U;
 uint32 CallCount_Dem_SetDTCFilter                     = 0U;
 uint32 CallCount_Dem_GetNumberOfFilteredDTC           = 0U;
@@ -66,6 +69,9 @@ uint32 FailFromCallCount_Dem_DisableDTCSetting             = WRAP_DEM_FAIL_FROM_
 uint32 FailFromCallCount_Dem_EnableDTCSetting              = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_SetOperationCycleState        = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetOperationCycleState        = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_ResetEventStatus              = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_ResetEventDebounceStatus      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetDebouncingOfEvent          = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_ClearDTC                      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetEventIdOfDTC               = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -84,6 +90,9 @@ Std_ReturnType ForcedReturn_Dem_DisableDTCSetting            = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_EnableDTCSetting             = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_SetOperationCycleState       = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetOperationCycleState       = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_ResetEventStatus             = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_ResetEventDebounceStatus     = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetDebouncingOfEvent         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_ClearDTC                     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent        = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC              = E_NOT_OK;
@@ -94,7 +103,7 @@ Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC          = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTCAndFDC    = E_NOT_OK;
 
 /* ----------------------------------------------------------------------
- * WrapDem_Reset — 22関数すべての状態を一括で初期化する（Wrap_Dem.h 参照）。
+ * WrapDem_Reset — 25関数すべての状態を一括で初期化する（Wrap_Dem.h 参照）。
  * ---------------------------------------------------------------------- */
 
 void WrapDem_Reset(void)
@@ -120,6 +129,9 @@ void WrapDem_Reset(void)
     CallCount_Dem_EnableDTCSetting             = 0U;
     CallCount_Dem_SetOperationCycleState       = 0U;
     CallCount_Dem_GetOperationCycleState       = 0U;
+    CallCount_Dem_ResetEventStatus             = 0U;
+    CallCount_Dem_ResetEventDebounceStatus     = 0U;
+    CallCount_Dem_GetDebouncingOfEvent         = 0U;
     CallCount_Dem_DisableDTCSetting            = 0U;
     
     LastEventId_Dem_SetEventStatus     = 0xFFU;
@@ -146,6 +158,9 @@ void WrapDem_Reset(void)
     FailFromCallCount_Dem_DisableDTCSetting            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_SetOperationCycleState       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetOperationCycleState       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_ResetEventStatus             = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_ResetEventDebounceStatus     = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetDebouncingOfEvent         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_Dem_GetEventUdsStatus            = E_NOT_OK;
     ForcedReturn_Dem_GetMonitorStatus             = E_NOT_OK;
@@ -164,6 +179,9 @@ void WrapDem_Reset(void)
     ForcedReturn_Dem_DisableDTCSetting            = E_NOT_OK;
     ForcedReturn_Dem_SetOperationCycleState       = E_NOT_OK;
     ForcedReturn_Dem_GetOperationCycleState       = E_NOT_OK;
+    ForcedReturn_Dem_ResetEventStatus             = E_NOT_OK;
+    ForcedReturn_Dem_ResetEventDebounceStatus     = E_NOT_OK;
+    ForcedReturn_Dem_GetDebouncingOfEvent         = E_NOT_OK;
 }
 
 /* ======================================================================
@@ -303,7 +321,20 @@ Std_ReturnType __wrap_Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorS
  * Dem_GetDebouncingOfEvent
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetDebouncingOfEvent(Dem_EventIdType EventId, Dem_DebouncingStateType* DebouncingState);
+Std_ReturnType __wrap_Dem_GetDebouncingOfEvent(Dem_EventIdType EventId, Dem_DebouncingStateType* DebouncingState)
+{
+    CallCount_Dem_GetDebouncingOfEvent++;
+    Log_Write(LOG_T, TAG, "Dem_GetDebouncingOfEvent", "called %u times", CallCount_Dem_GetDebouncingOfEvent);
+
+    if (CallCount_Dem_GetDebouncingOfEvent >= FailFromCallCount_Dem_GetDebouncingOfEvent)
+    {
+        return ForcedReturn_Dem_GetDebouncingOfEvent;
+    }
+
+    return __real_Dem_GetDebouncingOfEvent(EventId, DebouncingState);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetDTCOfEvent
@@ -383,13 +414,39 @@ Std_ReturnType __wrap_Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint
  * Dem_ResetEventDebounceStatus
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_ResetEventDebounceStatus(Dem_EventIdType EventId, Dem_DebounceResetStatusType DebounceResetStatus);
+Std_ReturnType __wrap_Dem_ResetEventDebounceStatus(Dem_EventIdType EventId, Dem_DebounceResetStatusType DebounceResetStatus)
+{
+    CallCount_Dem_ResetEventDebounceStatus++;
+    Log_Write(LOG_T, TAG, "Dem_ResetEventDebounceStatus", "called %u times", CallCount_Dem_ResetEventDebounceStatus);
+
+    if (CallCount_Dem_ResetEventDebounceStatus >= FailFromCallCount_Dem_ResetEventDebounceStatus)
+    {
+        return ForcedReturn_Dem_ResetEventDebounceStatus;
+    }
+
+    return __real_Dem_ResetEventDebounceStatus(EventId, DebounceResetStatus);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_ResetEventStatus
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_ResetEventStatus(Dem_EventIdType EventId);
+Std_ReturnType __wrap_Dem_ResetEventStatus(Dem_EventIdType EventId)
+{
+    CallCount_Dem_ResetEventStatus++;
+    Log_Write(LOG_T, TAG, "Dem_ResetEventStatus", "called %u times", CallCount_Dem_ResetEventStatus);
+
+    if (CallCount_Dem_ResetEventStatus >= FailFromCallCount_Dem_ResetEventStatus)
+    {
+        return ForcedReturn_Dem_ResetEventStatus;
+    }
+
+    return __real_Dem_ResetEventStatus(EventId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_PrestoreFreezeFrame
@@ -459,13 +516,39 @@ Std_ReturnType __wrap_Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatu
  * Dem_SetOperationCycleState
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState);
+Std_ReturnType __wrap_Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState)
+{
+    CallCount_Dem_SetOperationCycleState++;
+    Log_Write(LOG_T, TAG, "Dem_SetOperationCycleState", "called %u times", CallCount_Dem_SetOperationCycleState);
+
+    if (CallCount_Dem_SetOperationCycleState >= FailFromCallCount_Dem_SetOperationCycleState)
+    {
+        return ForcedReturn_Dem_SetOperationCycleState;
+    }
+
+    return __real_Dem_SetOperationCycleState(OperationCycleId, CycleState);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetOperationCycleState
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState);
+Std_ReturnType __wrap_Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState)
+{
+    CallCount_Dem_GetOperationCycleState++;
+    Log_Write(LOG_T, TAG, "Dem_GetOperationCycleState", "called %u times", CallCount_Dem_GetOperationCycleState);
+
+    if (CallCount_Dem_GetOperationCycleState >= FailFromCallCount_Dem_GetOperationCycleState)
+    {
+        return ForcedReturn_Dem_GetOperationCycleState;
+    }
+
+    return __real_Dem_GetOperationCycleState(OperationCycleId, CycleState);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SetStorageCondition
@@ -667,44 +750,6 @@ Std_ReturnType __wrap_Dem_EnableDTCSetting(uint8 ClientId)
     }
 
     return __real_Dem_EnableDTCSetting(ClientId);
-}
-
-/* ----------------------------------------------------------------------
- * Dem_SetOperationCycleState
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState);
-Std_ReturnType __wrap_Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType CycleState)
-{
-    CallCount_Dem_SetOperationCycleState++;
-    Log_Write(LOG_T, TAG, "Dem_SetOperationCycleState", "called %u times", CallCount_Dem_SetOperationCycleState);
-
-    if (CallCount_Dem_SetOperationCycleState >= FailFromCallCount_Dem_SetOperationCycleState)
-    {
-        return ForcedReturn_Dem_SetOperationCycleState;
-    }
-
-    return __real_Dem_SetOperationCycleState(OperationCycleId, CycleState);
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetOperationCycleState
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState);
-Std_ReturnType __wrap_Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationCycleStateType* CycleState)
-{
-    CallCount_Dem_GetOperationCycleState++;
-    Log_Write(LOG_T, TAG, "Dem_GetOperationCycleState", "called %u times", CallCount_Dem_GetOperationCycleState);
-
-    if (CallCount_Dem_GetOperationCycleState >= FailFromCallCount_Dem_GetOperationCycleState)
-    {
-        return ForcedReturn_Dem_GetOperationCycleState;
-    }
-
-    return __real_Dem_GetOperationCycleState(OperationCycleId, CycleState);
 }
 
 /* ======================================================================
