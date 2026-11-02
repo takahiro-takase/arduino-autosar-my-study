@@ -99,6 +99,7 @@
 #define DEM_E_PARAM_POINTER        0x11U  /* NULL ポインタチェック */
 #define DEM_E_PARAM_DATA           0x12U  /* 不正なパラメータ値（例: EventStatus） */
 #define DEM_E_UNINIT               0x20U  /* [SWS_Dem_00124]: 未初期化時の API 呼び出し */
+#define DEM_E_WRONG_CONDITION      0x40U  /* [SWS_Dem_01300]: DTC フィルタ未設定での API 呼び出し */
 
 /** ApiId（各関数の Doxygen \ServiceID タグをそのまま使う。本モジュールは実際の
  *  SWS_Dem の個々の関数シグネチャとは大きく異なる学習用簡略実装のため、

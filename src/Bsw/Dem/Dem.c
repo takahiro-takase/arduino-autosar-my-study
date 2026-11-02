@@ -159,7 +159,8 @@ static uint8 Dem_DTCSettingEnabled = 1U;
 /** Dem_SetDTCFilter() で設定された DTC フィルタ条件（[SWS_Dem_00057]）。
  *  単一ECU・単一診断クライアント構成のため 1 組だけ保持する。
  *  Dem_FilterActive==0 は「フィルタ未設定」で、Dem_GetNumberOfFilteredDTC() 等は
- *  E_NOT_OK を返す。Dem_Init() で未設定へ戻す。 */
+ *  DEM_E_WRONG_CONDITION を報告して E_NOT_OK を返す（[SWS_Dem_01300]）。Dem_Init() で未設定へ戻す。
+ *  Dem_SetDTCFilter() が E_OK 以外を返したときも、未設定へ戻す（[SWS_Dem_01266]）。 */
 static uint8 Dem_FilterActive     = 0U;
 static uint8 Dem_FilterStatusMask = 0U;  /**< 0x00 はステータスによる絞り込みなし */
 static uint8 Dem_FilterForFdc     = 0U;  /**< 1 = FDC が 1〜0x7E の DTC のみ */
@@ -1319,8 +1320,9 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
  *
  * \retval  E_OK      フィルタを設定した。
  * \retval  E_NOT_OK  未初期化、または DTCFormat / DTCOrigin / FilterWithSeverity が非対応の値。
+ *                    非対応の値のときは、前に設定したフィルタも無効にする（[SWS_Dem_01266]）。
  *
- * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057}
+ * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057, SWS_Dem_01266}
  * \ServiceID      {0x13}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous}
@@ -1337,6 +1339,9 @@ Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCForm
         (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_DTC_FILTER, DEM_E_UNINIT);
         return E_NOT_OK;
     }
+
+    /* [SWS_Dem_01266]: 設定に失敗したら、前のフィルタを残さず、後続の API を E_NOT_OK にする。 */
+    Dem_FilterActive = 0U;
 
     /* [SWS_Dem_00208]: 構成に合わない DTCFormat / DTCOrigin は DEM_E_WRONG_CONFIGURATION を
      * 報告して E_NOT_OK を返す。Severity を持たない本プロジェクトでは
@@ -1368,9 +1373,9 @@ Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCForm
  * \param[out]  NumberOfFilteredDTC  一致した DTC の件数。NULL 禁止。
  *
  * \retval  E_OK      正常取得。
- * \retval  E_NOT_OK  未初期化、NumberOfFilteredDTC が NULL、またはフィルタ未設定。
+ * \retval  E_NOT_OK  未初期化、NumberOfFilteredDTC が NULL、またはフィルタ未設定（DEM_E_WRONG_CONDITION）。
  *
- * \AUTOSARReq     {SWS_Dem_00214}
+ * \AUTOSARReq     {SWS_Dem_00214, SWS_Dem_01300}
  * \ServiceID      {0x17}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
@@ -1393,7 +1398,9 @@ Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilter
 
     if (Dem_FilterActive == 0U)
     {
-        return E_NOT_OK;  /* [SWS_Dem_00214]: No DTC filter set */
+        /* [SWS_Dem_00214]: No DTC filter set。[SWS_Dem_01300]/[SWS_Dem_01267]: DEM_E_WRONG_CONDITION を報告する */
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_NUMBER_OF_FILTERED_DTC, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
     }
 
     uint16 count = 0U;
@@ -1422,10 +1429,10 @@ Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilter
  * \param[out]  DTCStatus  DTC のステータスバイト。NULL 禁止。
  *
  * \retval  E_OK                次の DTC を返した。
- * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定（DEM_E_WRONG_CONDITION）。
  * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
  *
- * \AUTOSARReq     {SWS_Dem_00215}
+ * \AUTOSARReq     {SWS_Dem_00215, SWS_Dem_01300}
  * \ServiceID      {0x18}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous（本実装は DEM_PENDING を返さない）}
@@ -1448,7 +1455,9 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
 
     if (Dem_FilterActive == 0U)
     {
-        return E_NOT_OK;  /* [SWS_Dem_00215]: No DTC filter set */
+        /* [SWS_Dem_00215]: No DTC filter set。[SWS_Dem_01300]/[SWS_Dem_01267]: DEM_E_WRONG_CONDITION を報告する */
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_NEXT_FILTERED_DTC, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
     }
 
     while (Dem_FilterNextEvent < DEM_EVENT_COUNT)
@@ -1480,10 +1489,10 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
  * \param[out]  DTCFaultDetectionCounter Fault Detection Counter。NULL 禁止。
  *
  * \retval  E_OK                次の DTC を返した。
- * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタ未設定（DEM_E_WRONG_CONDITION）。
  * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
  *
- * \AUTOSARReq     {SWS_Dem_00227}
+ * \AUTOSARReq     {SWS_Dem_00227, SWS_Dem_01300}
  * \ServiceID      {0x3b}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
@@ -1506,7 +1515,9 @@ Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* 
 
     if (Dem_FilterActive == 0U)
     {
-        return E_NOT_OK;  /* [SWS_Dem_00227]: No DTC filter set */
+        /* [SWS_Dem_00227]: No DTC filter set。[SWS_Dem_01300]/[SWS_Dem_01267]: DEM_E_WRONG_CONDITION を報告する */
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_NEXT_FILTERED_DTC_AND_FDC, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
     }
 
     while (Dem_FilterNextEvent < DEM_EVENT_COUNT)

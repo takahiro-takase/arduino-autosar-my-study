@@ -566,8 +566,9 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
  * \retval  E_OK      フィルタを設定した。
  * \retval  E_NOT_OK  未初期化、または DTCFormat / DTCOrigin / FilterWithSeverity が
  *                    非対応の値（後 3 者は DEM_E_WRONG_CONFIGURATION も報告する）。
+ *                    E_OK 以外のときは、前に設定したフィルタも無効になり、後続の API は E_NOT_OK を返す（[SWS_Dem_01266]）。
  *
- * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057}
+ * \AUTOSARReq     {SWS_Dem_00208, SWS_Dem_00057, SWS_Dem_01266}
  * \ServiceID      {0x13}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous}
@@ -587,9 +588,9 @@ Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCForm
  *
  * \retval  E_OK      正常取得。
  * \retval  E_NOT_OK  未初期化、NumberOfFilteredDTC が NULL、または Dem_SetDTCFilter()
- *                    でフィルタが設定されていない。
+ *                    でフィルタが設定されていない（DEM_E_WRONG_CONDITION、[SWS_Dem_01300]）。
  *
- * \AUTOSARReq     {SWS_Dem_00214}
+ * \AUTOSARReq     {SWS_Dem_00214, SWS_Dem_01300}
  * \ServiceID      {0x17}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
@@ -607,10 +608,10 @@ Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilter
  * \param[out]  DTCStatus  DTC のステータスバイト。NULL 禁止。E_OK 以外のときは不定。
  *
  * \retval  E_OK                次の DTC を返した。
- * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタが設定されていない。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタが設定されていない（DEM_E_WRONG_CONDITION、[SWS_Dem_01300]）。
  * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
  *
- * \AUTOSARReq     {SWS_Dem_00215}
+ * \AUTOSARReq     {SWS_Dem_00215, SWS_Dem_01300}
  * \ServiceID      {0x18}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Synchronous（本実装は DEM_PENDING を返さない）}
@@ -631,10 +632,10 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
  * \param[out]  DTCFaultDetectionCounter Fault Detection Counter。NULL 禁止。
  *
  * \retval  E_OK                次の DTC を返した。
- * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタが設定されていない。
+ * \retval  E_NOT_OK            未初期化、ポインタが NULL、またはフィルタが設定されていない（DEM_E_WRONG_CONDITION、[SWS_Dem_01300]）。
  * \retval  DEM_NO_SUCH_ELEMENT 一致する DTC をすべて返し終えた。
  *
- * \AUTOSARReq     {SWS_Dem_00227}
+ * \AUTOSARReq     {SWS_Dem_00227, SWS_Dem_01300}
  * \ServiceID      {0x3b}
  * \Reentrancy     {Reentrant for different ClientIds, Non Reentrant for the same ClientId}
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}

@@ -65,6 +65,10 @@ Dem_GetNextFilteredDTCAndFDC(ClientId, &dtc, &fdc)← 同上。FDC は Dem_GetFa
 `DEM_E_WRONG_CONFIGURATION` を報告して `E_NOT_OK` を返します。常に同期的に完了し、
 `DEM_PENDING` は返しません。
 
+フィルタを設定する前に、件数・次の DTC（FDC 付きを含む）を取ろうとすると、`DEM_E_WRONG_CONDITION`（0x40）を報告して
+`E_NOT_OK` を返します（[SWS_Dem_01300]/[SWS_Dem_01267]）。`Dem_SetDTCFilter()` が `E_OK` 以外を返したときは、前に設定した
+フィルタも無効にします（[SWS_Dem_01266]。失敗したのに、古いフィルタで結果を返してしまうのを防ぎます）。
+
 ## デバウンス (Counter-based Debouncing)
 
 各イベントは `Dem_Cfg.h` の `DEM_DEBOUNCE_LIMIT_*` で**イベントごとに個別設定**する
