@@ -1405,7 +1405,7 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * 落ちてしまう（Bus-Off 回復中のため拒否される）。その結果
      * ComM_NmReleasePending が解除されないまま Bus-Off が回復すると、
      * 誰も望んでいないのに CanSM_RequestComMode(NO_COM) を再送してコントローラを
-     * 眠らせてしまい、CAN_CS_SLEEP からの CAN_T_START は Can.c が拒否する
+     * 眠らせてしまい、CAN_CS_SLEEP からの CAN_CS_STARTED は Can.c が拒否する
      * （SWS_Can_00200/00409-00412）ため、外部からの CAN ウェイクアップ割り込みが
      * 来るまで ECU が誤って眠り続ける（/code-review で指摘・検証済み）。 */
     if ((aggregated == COMM_FULL_COMMUNICATION) && ComM_NmReleasePending[0U])
@@ -1451,7 +1451,7 @@ static Std_ReturnType ComM_ApplyAggregatedRequest(ComM_ModeType aggregated)
      * 重大な回帰）、CanNm が Bus-Sleep Mode へまだ到達していない（Prepare
      * Bus-Sleep Mode で他ノードの NM フレームによるキャンセルを待っている
      * 最中）にも関わらず CanSM_RequestComMode(NO_COM) が直接呼ばれてしまう。
-     * CAN_T_SLEEP は CanSM_State に関わらず常に成功する（CanSM.c 参照）ため、
+     * CAN_CS_SLEEP は CanSM_State に関わらず常に成功する（CanSM.c 参照）ため、
      * この呼び出しは黙って成功し、コントローラを物理的に即座にスリープさせて
      * しまう。結果、CanNm の内部状態（Prepare Bus-Sleep Mode、まだキャンセル
      * されうる）と物理コントローラの状態（CAN_CS_SLEEP、受信も停止）が

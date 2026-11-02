@@ -37,7 +37,7 @@ Com_MainFunctionTx() → Com_DoTransmit() → PduR_ComTransmit() → CanIf_Trans
 ```
 Can_Write(Hth, PduInfo):
   Can_Hw_Send() が成功したら、PduInfo->swPduHandle を TX 確認保留キューへ積むだけで
-  即座に E_OK 相当（CAN_OK）を返す（CanIf_TxConfirmation() はまだ呼ばない）
+  即座に `E_OK` を返す（CanIf_TxConfirmation() はまだ呼ばない）
 
 Can_MainFunction_Write()（1ms 周期、Os_PBCfg.c Task 14）:
   保留キューが空になるまで、投入順に CanIf_TxConfirmation() を呼び出す
@@ -140,22 +140,24 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
 <a id="can-controller-states"></a>
 ## コントローラの状態遷移と Bus-Off の検出
 
-**状態遷移（`Can_SetControllerMode()`）**: AUTOSAR の状態遷移を MCP2515 の動作モードへ
-対応づけています。標準の 4 遷移に加え、協調スリープのための遷移を 1 つ持ちます。
+**状態遷移（`Can_SetControllerMode()`）**: 引数は遷移後の状態（`Can_ControllerStateType`。
+4.2.2 で `Can_StateTransitionType` が廃止された）です。Can が持つ現在の状態と合わせて遷移を決め、
+MCP2515 の動作モードへ対応づけています。標準の遷移に加え、協調スリープのための遷移を 1 つ持ちます。
 
 | 要求 | 遷移 | MCP2515 |
 |------|------|---------|
-| `CAN_T_START` | `CAN_CS_STOPPED` → `CAN_CS_STARTED`（`STARTED` からの再要求は何もせず許可する） | 通常モード |
-| `CAN_T_STOP` | `CAN_CS_STARTED` → `CAN_CS_STOPPED` | 受信専用（Listen-Only） |
-| `CAN_T_SLEEP` | `CAN_CS_STOPPED` → `CAN_CS_SLEEP`。**`CAN_CS_STARTED` からの直接遷移も許可する**（本プロジェクト固有の拡張） | スリープ |
-| `CAN_T_WAKEUP` | `CAN_CS_SLEEP` → `CAN_CS_STOPPED` | 受信専用 |
+| `CAN_CS_STARTED` | `CAN_CS_STOPPED` → `CAN_CS_STARTED`（`STARTED` からの再要求は何もせず許可する。`SLEEP` からは拒否） | 通常モード |
+| `CAN_CS_STOPPED` | `CAN_CS_STARTED` → `CAN_CS_STOPPED`（停止）、`CAN_CS_SLEEP` → `CAN_CS_STOPPED`（ウェイクアップ） | 受信専用（Listen-Only） |
+| `CAN_CS_SLEEP` | `CAN_CS_STOPPED` → `CAN_CS_SLEEP`。**`CAN_CS_STARTED` からの直接遷移も許可する**（本プロジェクト固有の拡張） | スリープ |
 
 `STARTED` から直接スリープできるのは、CanNm の協調スリープのためです。ComM は CanNm が
 実際に Bus-Sleep Mode へ到達するまで CanSM に NO_COM を伝えずコントローラを稼働させ続け、
-到達した瞬間に `CanSM_RequestComMode(NO_COM)` が `CAN_T_STOP` を経由せず直接スリープさせます
-（[`CanSM_Notes.md`](./CanSM_Notes.md) 参照）。`CAN_CS_SLEEP` からは、まず `CAN_T_WAKEUP` で
-`CAN_CS_STOPPED` へ戻らないと `CAN_T_START` / `CAN_T_STOP` へ到達できません。
-`Can_Write()` は `CAN_CS_STARTED` 以外では送信を拒否します（`CAN_NOT_OK`）。
+到達した瞬間に `CanSM_RequestComMode(NO_COM)` が `STOPPED` を経由せず直接スリープさせます
+（[`CanSM_Notes.md`](./CanSM_Notes.md) 参照）。`CAN_CS_SLEEP` からは、まず `CAN_CS_STOPPED` で
+ウェイクアップしないと `CAN_CS_STARTED` へ到達できません。
+`Can_Write()` は `CAN_CS_STARTED` 以外では送信を拒否します（`E_NOT_OK`）。
+`Can_Write()` と `Can_SetControllerMode()` の戻り値は、4.3.1 で `Std_ReturnType` に統一されました
+（`Can_Write()` だけが、それに加えて `CAN_BUSY`（0x02）を返せる。本実装は返さない）。
 
 **Bus-Off の検出は 2 経路あります**（どちらも `CanIf_ControllerBusOff()` で上位へ通知する）:
 
@@ -169,6 +171,54 @@ NOT_OK を返すまで継続する。MCP2515 の INT はレベル方式（未読
    バス上に他のノードが居ない（ACK が返らない）状況でも、この経路で Bus-Off と判定されます。
 
 Bus-Off 検出後の回復は CanSM が L1/L2 バックオフで行います（[`CanSM_Notes.md`](./CanSM_Notes.md)）。
+
+## ウェイクアップの確認（`Can_CheckWakeup`、2026-11）
+
+スリープ中の起床は、`Can_MainFunction_Wakeup()` が、INT ピンの LOW（または割り込みのフラグ）で検出します。検出したら、
+「スリープへ入ってから起床を検出した」という記録（`Can_WakeupDetected`）を残して、`EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)`
+（[SWS_Can_00271]）を呼びます。EcuM はそこから `CanIf_CheckWakeup()` を呼び、CanIf が `Can_CheckWakeup(0)`
+を呼びます。`Can_CheckWakeup()` は、記録があれば `EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN)` を呼んで `E_OK`
+を返し（[SWS_Can_00361]）、なければ `E_NOT_OK` を返します（DET は報告しません）。未初期化は `CAN_E_UNINIT`、
+`Controller` が範囲外は `CAN_E_PARAM_CONTROLLER` です。
+
+- 記録は、スリープから出る（`Can_SetControllerMode(CAN_CS_STOPPED)`）か、次にスリープへ入るか、`Can_DeInit()` で消えます。
+  起床を検出したあとの確認が済んだら、あとから呼ばれた `Can_CheckWakeup()` が同じ起床をもう一度通知しないためと、
+  検証に失敗して再びスリープへ入ったときに、前回の起床を引きずらないためです。
+- 以前は、`Can_MainFunction_Wakeup()` が検出したあとの `EcuM_CheckWakeup()` が、起床の確認と検証待ちへの登録を
+  兼ねていました。今は、仕様どおり `Can_CheckWakeup()` を経由して `EcuM_SetWakeupEvent()` が登録します
+  （[`EcuM_Notes.md`](./EcuM_Notes.md)）。
+- **簡略化**: `CanWakeupFunctionalityAPI` による有効・無効の切り替え（[SWS_Can_00485]）は持たず、常に有効です。
+  `CanWakeupSourceRef` の通知先も、`ECUM_WKSOURCE_CAN` に固定です。
+
+## トリガ送信（`Can_Write` の `sdu = NULL`、2026-11）
+
+`Can_Write()` は、`PduInfo->sdu` が NULL のとき、データを渡さない送信（トリガ送信）の要求として扱います
+（設定 `Can_ConfigType.triggerTransmitEnable` が 1 のときだけ。[SWS_Can_00503]）。送信できる状態（`CAN_CS_STARTED`）なら、
+`CanIf_TriggerTransmit()` を、バッファの最大長（クラシック CAN は 8 バイト、CAN FD 有効時は 64 バイト）とともに呼んで、
+データと長さを受け取り、その長さで送ります（[SWS_Can_00504]）。
+
+- `CanIf_TriggerTransmit()` が `E_OK` 以外なら、`Can_Write()` も `E_NOT_OK` です（[SWS_Can_00506]）。返った長さが
+  最大長を超えるのも、同じく失敗として扱い、送信しません。送信の失敗ではないので、Bus-Off の補完カウンタは進めません。
+- 無効の設定で NULL を受けたときは、`CAN_E_PARAM_POINTER` を報告して `E_NOT_OK` です（[SWS_Can_00505]）。
+  `sdu` が与えられたときは、有効でも、取りに行かず、そのまま送ります。NULL のときの `length` は使いません。
+- CAN FD 有効時に、取得したデータの長さが CAN FD で有効でない値（9〜11 など）なら、通常の送信と同じく、
+  上へ切り上げて、`CAN_FD_PADDING_VALUE` で埋めます（[SWS_Can_00502]）。
+- **簡略化**: 仕様の `CanTriggerTransmitEnable` はハードウェアオブジェクトごとの設定ですが、本実装は HTH が 1 つだけなので、
+  設定に 1 つだけ持ちます（`config/data/Can.json` の `triggerTransmitEnable`。既定は無効）。本番では無効で、
+  `CanNm` なども、データを渡して送ります。呼び出し側の経路は、[`CanIf_Notes.md`](./CanIf_Notes.md) の「CanIf_TriggerTransmit」を参照してください。
+
+## 受信の取りこぼし（`CAN_E_DATALOST`、2026-11）
+
+MCP2515 は、受信バッファが埋まっているところへ新しいフレームが届くと、EFLG レジスタの `RX0OVR`/`RX1OVR` を立てます。
+`Can_MainFunction_Read()` は、受信を取り出す前に、このフラグを確認し（`Can_Hw_TakeRxOverflow()`）、立っていれば、
+実行時エラー `CAN_E_DATALOST`（[SWS_Can_00395]。開発エラーとは別の番号で、`Det_ReportRuntimeError()`）を報告します。
+バッファに残っているフレームは、通常どおり、上位へ渡します。スリープ中は、確認しません（受信を処理しないため）。
+
+- フラグは MCU が消さないと立ったままになるので、`Can_Hw_TakeRxOverflow()` が、読んだあとに消します。mcp_can には、
+  レジスタを書く公開 API が無いため、BIT MODIFY のコマンドを SPI で直接送ります（`Can_Hw.cpp`）。
+- **実機では、再現していません**: 割り込みで素早く取り出すため、バッファが溢れる状況を作りにくく、報告の経路は、
+  ホストのテスト（模擬のハードウェアがオーバーフローを返す）だけで確かめています。実機で、フラグの読み取りと消去の
+  SPI が動くことは、バスを短い間隔で多数のフレームで埋める、などの方法で確認する必要があります。
 
 ## Can_Hw（下位ドライバ実装）
 

@@ -104,6 +104,10 @@
         }
       }
     },
+    "triggerTransmitEnable": {
+      "type": "boolean",
+      "description": "トリガ送信を有効にする（AUTOSAR の CanTriggerTransmitEnable 相当。省略時は false）。true のとき Can_Write() が sdu = NULL を受け付け、CanIf_TriggerTransmit() でデータを取得する"
+    },
     "fd": {
       "type": "object",
       "additionalProperties": false,

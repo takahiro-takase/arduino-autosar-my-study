@@ -94,4 +94,47 @@ TEST_F(Can_Init_Test, Can_Init_NG_NullConfig)
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
 }
 
+TEST_F(Can_Init_Test, Can_Init_OK_Basic)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
+    EXPECT_EQ(FakeCanHw_InitCount, 1U);
+    EXPECT_EQ(FakeCanHw_AttachRxIsrCount, 1U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Can_Init_Test, Can_Init_NG_AlreadyInitialized)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_TRANSITION);   // [SWS_Can_00174/00408]
+    EXPECT_EQ(FakeDetHw_LastApiId, 0x00U);
+    EXPECT_EQ(FakeCanHw_InitCount, 1U);                    // 再初期化しない
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STARTED);   // 状態を壊さない
+}
+
 }  // namespace

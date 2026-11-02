@@ -21,7 +21,7 @@ Bus-Off 検出直後（回復試行の前）に `ComM_BusSM_ModeIndication(SILEN
 CanNm（CanNm 状態機械）が Prepare Bus-Sleep Mode へ入ると ComM 経由で SILENT_COM
 （TX 停止）へ移り、Bus-Sleep Mode へ到達した通知（`Nm_BusSleepMode()` →
 `ComM_Nm_BusSleepMode()` を経て ComM が呼ぶ `CanSM_RequestComMode(NO_COM)`）を
-受けてから `CanIf_SetControllerMode(CAN_CS_SLEEP)`（→ `Can_SetControllerMode(CAN_T_SLEEP)`）で
+受けてから `CanIf_SetControllerMode(CAN_CS_SLEEP)`（→ `Can_SetControllerMode(CAN_CS_SLEEP)`）で
 実 HW を実際にスリープさせる
 （協調スリープ、詳細は [`CanNm_Notes.md`](./CanNm_Notes.md) 参照）。`CanSM_StartWakeupSource()`
 による復帰経路を持ち、復帰は即座に確定せず、ウェイクアップ検証（Wakeup Validation
@@ -70,7 +70,7 @@ stateDiagram-v2
 > 冒頭のガードは `BUS_OFF` しかチェックしておらず、`WAKEUP_VALIDATING` 中に呼ばれても
 > 素通りする。`RequestComMode(FULL_COM)` は直接 `FULL_COM` へ（有効フレームの受信確認後に
 > `ComM_EcuM_WakeUpIndication()` が呼ぶ場合は、これが正規の経路。受信確認を経ない呼び出しでも
-> 同じ遷移になる）、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_T_SLEEP)`
+> 同じ遷移になる）、`RequestComMode(NO_COM)` は `Can_SetControllerMode(CAN_CS_SLEEP)`
 > を呼ばないまま状態だけ `NO_COM` にしてしまい、コントローラが Listen-Only
 > （`CAN_CS_STOPPED`）のまま起きた状態で残る（`NO_COM` の「物理的にスリープ済み」
 > という不変条件と矛盾する）。ただし `ComM_RequestComMode()` の呼び出し元
@@ -88,7 +88,7 @@ stateDiagram-v2
 | `RequestComMode(FULL_COM)` | `CanIf_SetControllerMode(STARTED)`（失敗したら状態を変えず `E_NOT_OK`）→ `CanIf_SetPduMode(ONLINE)`（ベストエフォート）→ Bus-Off リトライ回数を 0 に戻す → `ComM_BusSM_ModeIndication(FULL_COM)` |
 | `RequestComMode(SILENT_COM)` | FULL_COM からのときだけ `CanIf_SetPduMode(TX_OFFLINE)`（コントローラは `CAN_CS_STARTED` のまま、PDU の送信だけを止める）→ `ComM_BusSM_ModeIndication(SILENT_COM)` |
 | `RequestComMode(NO_COM)` | `CanIf_SetControllerMode(SLEEP)` → `ComM_BusSM_ModeIndication(NO_COM)` |
-| `StartWakeupSource()`（ウェイクアップ。EcuM の `EcuM_CheckWakeup()` から） | NO_COM のときだけ効く。`CanIf_SetControllerMode(STOPPED)`（Listen-Only）にして `WAKEUP_VALIDATING` へ。それ以外の状態では、要求だけ受理して何もしない（`E_OK`） |
+| `StartWakeupSource()`（ウェイクアップ。EcuM の `EcuM_SetWakeupEvent()`（`EcuM_CheckWakeup()` → `CanIf_CheckWakeup()` → `Can_CheckWakeup()` の先）から） | NO_COM のときだけ効く。`CanIf_SetControllerMode(STOPPED)`（Listen-Only）にして `WAKEUP_VALIDATING` へ。それ以外の状態では、要求だけ受理して何もしない（`E_OK`） |
 | `StopWakeupSource()` | `WAKEUP_VALIDATING` のときだけ効く。`CanIf_SetControllerMode(SLEEP)` で再スリープして NO_COM へ（検証タイムアウトと共通の処理）。EcuM は、検証が期限切れになったときに、`EcuM_StopWakeupSources()` から呼ぶ（通常は、CanSM が先に再スリープしているので、何も起こらない） |
 | `ControllerModeIndication()`（コントローラのモード変更の完了通知。Can の `Can_MainFunction_Mode()` から、CanIf 経由） | `PRE_FULL_COM` / `PRE_NO_COM` で、待っているモードへ達した通知が、手順を次へ進める。それ以外は、何もしない（下の「コントローラのモード変更の手順」参照） |
 | `RequestComMode(FULL_COM)`（検証中に有効フレームを確認した後、`ComM_EcuM_WakeUpIndication()` から） | `CanIf_SetControllerMode(STARTED)` → PDU を ONLINE → `ComM_BusSM_ModeIndication(FULL_COM)` |

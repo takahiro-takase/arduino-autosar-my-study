@@ -134,9 +134,9 @@ TEST_F(Can_MainFunction_Mode_Test, Can_MainFunction_Mode_OK_NotifiesEachSuccessf
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    ASSERT_EQ(Can_SetControllerMode(0U, CAN_T_START), CAN_OK);
-    ASSERT_EQ(Can_SetControllerMode(0U, CAN_T_STOP), CAN_OK);
-    ASSERT_EQ(Can_SetControllerMode(0U, CAN_T_SLEEP), CAN_OK);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STOPPED), E_OK);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
     ASSERT_EQ(CallCount_CanSM_ControllerModeIndication, 0U);   // 要求の中では、通知しない
 
     /* ----------------------- */
@@ -160,11 +160,11 @@ TEST_F(Can_MainFunction_Mode_Test, Can_MainFunction_Mode_OK_FailedTransitionIsNo
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    ASSERT_EQ(Can_SetControllerMode(0U, CAN_T_SLEEP), CAN_OK);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
     Can_MainFunction_Mode();   // SLEEP の通知を出し切る
     const uint32 before = CallCount_CanSM_ControllerModeIndication;
     FakeDetHw_LogSuppressed = 1U;   // 不正な遷移の DET ログは抑制する
-    ASSERT_EQ(Can_SetControllerMode(0U, CAN_T_START), CAN_NOT_OK);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_NOT_OK);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -186,7 +186,7 @@ TEST_F(Can_MainFunction_Mode_Test, Can_MainFunction_Mode_OK_DropsNotificationsBe
     Can_Init(&config);
     for (uint8 i = 0U; i < 6U; i++)
     {
-        ASSERT_EQ(Can_SetControllerMode(0U, ((i % 2U) == 0U) ? CAN_T_START : CAN_T_STOP), CAN_OK);
+        ASSERT_EQ(Can_SetControllerMode(0U, ((i % 2U) == 0U) ? CAN_CS_STARTED : CAN_CS_STOPPED), E_OK);
     }
 
     /* ----------------------- */

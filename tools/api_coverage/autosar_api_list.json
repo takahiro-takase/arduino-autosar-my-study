@@ -219,7 +219,7 @@
    ]
   },
   "Can": {
-   "spec": "AUTOSAR_SWS_CANDriver.pdf",
+   "spec": "R19-11/AUTOSAR_SWS_CANDriver.pdf",
    "sources": [
     "src/Bsw/Can/Can.c"
    ],
@@ -242,11 +242,11 @@
     },
     {
      "name": "Can_SetBaudrate",
-     "id": null
+     "id": "0x0f"
     },
     {
      "name": "Can_SetControllerMode",
-     "id": null
+     "id": "0x03"
     },
     {
      "name": "Can_DisableControllerInterrupts",
@@ -262,7 +262,7 @@
     },
     {
      "name": "Can_Write",
-     "id": null
+     "id": "0x06"
     },
     {
      "name": "Can_MainFunction_Write",
@@ -286,7 +286,19 @@
     },
     {
      "name": "Can_SetIcomConfiguration",
-     "id": "0xf"
+     "id": "0x21"
+    },
+    {
+     "name": "Can_DeInit",
+     "id": "0x10"
+    },
+    {
+     "name": "Can_GetControllerErrorState",
+     "id": "0x11"
+    },
+    {
+     "name": "Can_GetControllerMode",
+     "id": "0x12"
     }
    ]
   },

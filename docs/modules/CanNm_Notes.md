@@ -165,7 +165,7 @@ CanNm が Prepare Bus-Sleep Mode へ入ると `ComM_Nm_PrepareBusSleepMode()`
 
 CanNm が実際に Bus-Sleep Mode へ到達すると `ComM_Nm_BusSleepMode()`
 （`[SWS_ComM_00392]`）を呼びます。CanSM はこの通知を受けて初めて
-`Can_SetControllerMode(CAN_T_SLEEP)` を実行し、CAN コントローラを物理的に
+`Can_SetControllerMode(CAN_CS_SLEEP)` を実行し、CAN コントローラを物理的に
 スリープさせます（以前は `ComM_RequestComMode(NO_COM)` の時点で即座に
 スリープしていましたが、CanNm 導入に伴い変更しました）。
 

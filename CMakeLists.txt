@@ -465,6 +465,8 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     CanIf_TxConfirmation
     CanIf_RxIndication
     CanIf_ControllerBusOff
+    CanIf_TriggerTransmit
+    CanIf_CheckWakeup
     # CanNm.h の AUTOSAR IF 全15関数（Wrap_CanNm.h/.c 参照）。
     CanNm_Init
     CanNm_DeInit
@@ -709,6 +711,7 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     EcuM_RequestRUN
     EcuM_ReleaseRUN
     EcuM_CheckWakeup
+    EcuM_SetWakeupEvent
 )
 foreach(wrap_symbol IN LISTS NATIVE_CHAIN_WRAP_SYMBOLS)
     target_link_options(native_chain_tests PRIVATE "-Wl,--wrap=${wrap_symbol}")

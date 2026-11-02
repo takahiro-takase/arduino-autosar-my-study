@@ -324,7 +324,7 @@ CanIf_ControllerBusOff → CanSM_ControllerBusOff
   受け付けるのは CANSM_STATE_FULL_COM と CANSM_STATE_SILENT_COM の 2 つのみ
   （SILENT_COM は PDU チャネルの TX 抑制だけでコントローラは稼働中のため、
    この状態でも Bus-Off は実際に起こりうる）。直前の状態は CanSM_PreBusOffState に記録する
-  └→ CanIf_SetControllerMode(CAN_CS_STOPPED)（→ Can_SetControllerMode(CAN_T_STOP)）
+  └→ CanIf_SetControllerMode(CAN_CS_STOPPED)（→ Can_SetControllerMode(CAN_CS_STOPPED)）
        └→ ComM_BusSM_ModeIndication(SILENT_COM)  ← CanSM が ComM へ通知（下→上）
             ├→ Nm_NetworkRelease()  ← CanNm の送信試行を止める（Can_Write() に拒否され続けて
             │                          NM-Timeout を報告し続けるのを防ぐ）
@@ -332,7 +332,7 @@ CanIf_ControllerBusOff → CanSM_ControllerBusOff
 
 【Bus-Off 回復試行時（L1/L2 バックオフで無期限に継続）】
 CanSM_MainFunction（10ms タスク）
-  └→ CanIf_SetControllerMode(CAN_CS_STARTED)（→ Can_SetControllerMode(CAN_T_START)）で再起動を試行
+  └→ CanIf_SetControllerMode(CAN_CS_STARTED)（→ Can_SetControllerMode(CAN_CS_STARTED)）で再起動を試行
        └→ 復帰先は Bus-Off 発生直前の状態（CanSM_PreBusOffState）で分岐する
           ├─ 発生時 FULL_COM だった場合: PDU モードを CANIF_ONLINE へ戻し CanSM state → FULL_COM
           │    └→ ComM_BusSM_ModeIndication(FULL_COM)  ← CanSM が ComM へ通知（下→上）
@@ -362,7 +362,7 @@ App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
                       │    └→ CanSM_RequestComMode(SILENT_COM)  ← PDU の TX を停止
                       └→ Bus-Sleep Mode 到達: Nm_BusSleepMode() → ComM_Nm_BusSleepMode()
                            └→ CanSM_RequestComMode(NO_COM) → CanIf_SetControllerMode(CAN_CS_SLEEP)
-                                （→ Can_SetControllerMode(CAN_T_SLEEP)）
+                                （→ Can_SetControllerMode(CAN_CS_SLEEP)）
                                 └→ ComM_BusSM_ModeIndication(NO_COM)
                                      └→ EcuM_ReleaseRUN(ECUM_USER_COMM)
                                           └→ EcuM: RUN → POST_RUN → (5秒後) → SHUTDOWN
@@ -371,10 +371,13 @@ App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
 Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHUTDOWN 中も常に有効）
   └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
        └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
-            がフラグをドレインし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)  ← Can が EcuM へ直接通知（[SWS_Can_00271]）
-                 └→ CanSM_StartWakeupSource(0)
-                      └→ Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
-                           └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
+            がフラグをドレインし、起床を記録して EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)  ← Can が EcuM へ直接通知（[SWS_Can_00271]）
+                 └→ CanIf_CheckWakeup(ECUM_WKSOURCE_CAN)             ← EcuM が CAN の要因を確認（[SWS_CANIF_00395]）
+                      └→ Can_CheckWakeup(0)                          ← 記録した起床を確認（[SWS_Can_00361]）
+                           └→ EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN) ← 検証待ち（PENDING）にして、タイムアウトを起算
+                                └→ CanSM_StartWakeupSource(0)
+                                     └→ Can_SetControllerMode(CAN_CS_STOPPED)   ← SLEEP→STOPPED (Listen-Only) のみ
+                                          └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
 
 【2nd phase-a: 検証成功（検証タイマ内に有効な CAN フレームを受信）】
 Can_MainFunction_Read（Listen-Only になったため通常の RX ドレインが有効。
@@ -383,12 +386,12 @@ Can_MainFunction_Read（Listen-Only になったため通常の RX ドレイン�
        └→ （同じフレームがそのまま PduR/Com/Dcm 等へも配信される）
 
 EcuM_MainFunction()（SHUTDOWN 中も動作）:
-  検証待ちの起床要因（EcuM_CheckWakeup() が保留）がある ?
+  検証待ちの起床要因（EcuM_SetWakeupEvent() が保留）がある ?
     YES → CanIf_CheckValidation(ECUM_WKSOURCE_CAN)    ← 記憶した受信があれば:
             └→ EcuM_ValidateWakeupEvent(ECUM_WKSOURCE_CAN)
                  └→ ComM_EcuM_WakeUpIndication(0)    ← チャネルが NO_COM のとき
                       └→ CanSM_RequestComMode(FULL_COM)
-                           └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_T_START)）
+                           └→ CanSM: WAKEUP_VALIDATING → FULL_COM（Can_SetControllerMode(CAN_CS_STARTED)）
                                 └→ ComM_BusSM_ModeIndication(FULL_COM)
                                      └→ EcuM_RequestRUN(ECUM_USER_COMM)
                                           └→ EcuM: SHUTDOWN → RUN（全タスク再有効化）
@@ -396,7 +399,7 @@ EcuM_MainFunction()（SHUTDOWN 中も動作）:
 【2nd phase-b: 検証失敗（検証タイマ超過、ノイズによる誤ウェイクアップ）】
 CanSM_MainFunction（10ms タスク、SHUTDOWN 中も動き続ける）
   └→ CANSM_WAKEUP_VALIDATION_MS 超過を検出
-       └→ Can_SetControllerMode(CAN_T_SLEEP)   ← STOPPED→SLEEP、ウェイクアップ割り込み再武装
+       └→ Can_SetControllerMode(CAN_CS_SLEEP)   ← STOPPED→SLEEP、ウェイクアップ割り込み再武装
             └→ CanSM: WAKEUP_VALIDATING → NO_COM（ComM/EcuM は一切関与せず、静かに再スリープ）
 ```
 
@@ -411,9 +414,9 @@ ComM/CanSM/CanNm 各モジュールの本プロジェクトでの役割は、上
 ウェイクアップ成功時の `EcuM_RequestRUN()` など、EcuM/BswM が関わる箇所は
 以下のコールチェーン図中に個別に注釈しています。
 
-#### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_T_SLEEP)`）
+#### CAN コントローラの実スリープ（`Can_SetControllerMode(CAN_CS_SLEEP)`）
 
-`Can.c` の `CAN_T_SLEEP`/`CAN_T_WAKEUP` 遷移（MCP2515 を実際にスリープさせる
+`Can.c` の SLEEP への遷移とウェイクアップ（SLEEP → STOPPED）（MCP2515 を実際にスリープさせる
 `Can_Hw_SetMode(CAN_HW_MODE_SLEEP)`）は、唯一の経路として ComM の NO_COM
 要求に端を発する `CanNm`（CanNm 状態機械）の協調スリープから実際にスリープします。
 
@@ -480,8 +483,9 @@ Can_Isr()（INT ピン立ち下がりの真のハードウェア割り込み、S
 
 Can_MainFunction_Wakeup()（1ms 周期、SHUTDOWN 中も動作）:
   CAN_CS_SLEEP 中 かつ Can_WakeupIrqPending ?
-    YES → フラグをクリアし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanSM_StartWakeupSource(0)
-            → Can_SetControllerMode(CAN_T_WAKEUP)   ← SLEEP→STOPPED (Listen-Only) のみ
+    YES → フラグをクリアし、起床を記録して EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanIf_CheckWakeup() → Can_CheckWakeup()
+            → EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN) → CanSM_StartWakeupSource(0)
+            → Can_SetControllerMode(CAN_CS_STOPPED)   ← SLEEP→STOPPED (Listen-Only) のみ
             → CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ通知しない）
 
 Can_MainFunction_Read()（1ms 周期、SHUTDOWN 中も動作）:
@@ -494,13 +498,13 @@ EcuM_MainFunction()（SHUTDOWN 中も動作）:
   検証待ちの起床要因がある ?
     YES → CanIf_CheckValidation() → （記憶した受信があれば）EcuM_ValidateWakeupEvent()
             → ComM_EcuM_WakeUpIndication(0) → CanSM_RequestComMode(FULL_COM)
-            → 検証成功: Can_SetControllerMode(CAN_T_START) → CANSM_STATE_FULL_COM
+            → 検証成功: Can_SetControllerMode(CAN_CS_STARTED) → CANSM_STATE_FULL_COM
                → ComM_BusSM_ModeIndication(FULL_COM) → EcuM_RequestRUN
 
 CanSM_MainFunction()（10ms 周期、SHUTDOWN 中も動作）:
   CANSM_STATE_WAKEUP_VALIDATING 中 ?
     YES → CANSM_WAKEUP_VALIDATION_MS (既定 2000ms) 超過 ?
-            YES → 検証失敗: Can_SetControllerMode(CAN_T_SLEEP)（再スリープ、割り込み再武装）
+            YES → 検証失敗: Can_SetControllerMode(CAN_CS_SLEEP)（再スリープ、割り込み再武装）
                    → CANSM_STATE_NO_COM（ComM/EcuM は一切関与しない）
 ```
 

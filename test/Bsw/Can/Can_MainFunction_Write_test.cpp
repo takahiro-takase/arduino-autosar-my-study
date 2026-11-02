@@ -97,7 +97,7 @@ TEST_F(Can_MainFunction_Write_Test, Can_MainFunction_Write_OK)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     Can_PduType pdu;
     pdu.id = 0x123U;
@@ -128,7 +128,7 @@ TEST_F(Can_MainFunction_Write_Test, Can_MainFunction_Write_OK_BurstOfDiagRespons
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     /* 周期フレーム（TX PDU 数）に加えて、診断応答（同じ PDU）が 8 件続いた状態を想定する。
      * 実機では、診断要求 5 件の連続処理中に確認が 7 件たまり、旧サイズ（TX PDU 数）では取りこぼした。 */

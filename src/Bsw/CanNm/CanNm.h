@@ -28,7 +28,7 @@
  *            （[SWS_Nm_00162]）を呼び、Nm が ComM_Nm_BusSleepMode()
  *            （[SWS_ComM_00392]）へ転送する。ComM はこれを受けて初めて
  *            CanSM_RequestComMode(NO_COM) を呼び、CanSM が
- *            Can_SetControllerMode(CAN_T_SLEEP) で実際に CAN コントローラを
+ *            Can_SetControllerMode(CAN_CS_SLEEP) で実際に CAN コントローラを
  *            スリープさせる（ComM.c/CanSM.c 参照）。これにより、他ノード
  *            （仮想他ECU）が NM フレームを送信し続けている間は本 ECU が
  *            実際にはスリープしないことを実機で確認できる。

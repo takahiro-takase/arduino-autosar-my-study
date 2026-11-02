@@ -17,6 +17,7 @@
     "0x100 (COM データ) と 0x7E0 (UDS 診断) を同時に受信するために必要。",
     "本来は RX バッファごとに mask/filter を設定するが、学習用実装のため省略。"
   ],
+  "triggerTransmitEnable": false,
   "fd": {
     "enabled": false,
     "dataBitrate": 2000000,

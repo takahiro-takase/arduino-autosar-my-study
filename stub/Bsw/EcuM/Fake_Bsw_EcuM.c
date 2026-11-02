@@ -20,10 +20,12 @@ uint8 FakeEcuM_PassThrough = 0U;
 uint32 FakeEcuM_RequestRUNCount = 0U;
 uint32 FakeEcuM_ReleaseRUNCount = 0U;
 uint32 FakeEcuM_CheckWakeupCount = 0U;
+uint32 FakeEcuM_SetWakeupEventCount = 0U;
 
 EcuM_UserType FakeEcuM_LastRequestUser = 0xFFU;
 EcuM_UserType FakeEcuM_LastReleaseUser = 0xFFU;
 EcuM_WakeupSourceType FakeEcuM_LastWakeupSource = 0U;
+EcuM_WakeupSourceType FakeEcuM_LastSetWakeupEventSources = 0U;
 
 /* ======================================================================
  * Function Prototypes
@@ -33,6 +35,7 @@ EcuM_WakeupSourceType FakeEcuM_LastWakeupSource = 0U;
 Std_ReturnType __real_EcuM_RequestRUN(EcuM_UserType user);
 Std_ReturnType __real_EcuM_ReleaseRUN(EcuM_UserType user);
 void __real_EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource);
+void __real_EcuM_SetWakeupEvent(EcuM_WakeupSourceType sources);
 
 /* ======================================================================
  * Functions
@@ -43,9 +46,11 @@ void FakeEcuM_Reset(void)
     FakeEcuM_RequestRUNCount  = 0U;
     FakeEcuM_ReleaseRUNCount  = 0U;
     FakeEcuM_CheckWakeupCount = 0U;
+    FakeEcuM_SetWakeupEventCount = 0U;
     FakeEcuM_LastRequestUser  = 0xFFU;
     FakeEcuM_LastReleaseUser  = 0xFFU;
     FakeEcuM_LastWakeupSource = 0U;
+    FakeEcuM_LastSetWakeupEventSources = 0U;
     FakeEcuM_PassThrough      = 0U;
 }
 
@@ -88,4 +93,18 @@ void __wrap_EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
         return;
 
     (void)CanSM_StartWakeupSource(0U);
+}
+
+/* EcuM_SetWakeupEvent() は、Can_CheckWakeup() が起床を検出したときの通知先。素通しでないときは、
+ * 呼び出しの記録だけを残す（検証の開始は、上の __wrap_EcuM_CheckWakeup() が既に CanSM へ委譲している）。 */
+void __wrap_EcuM_SetWakeupEvent(EcuM_WakeupSourceType sources)
+{
+    if (FakeEcuM_PassThrough != 0U)
+    {
+        __real_EcuM_SetWakeupEvent(sources);
+        return;
+    }
+
+    FakeEcuM_SetWakeupEventCount++;
+    FakeEcuM_LastSetWakeupEventSources = sources;
 }

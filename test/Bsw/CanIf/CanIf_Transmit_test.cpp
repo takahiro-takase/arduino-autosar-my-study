@@ -61,6 +61,28 @@ const CanIf_ConfigType kTestCanIfConfig = {
     &kTestRxPdu, 1U
 };
 
+/* トリガ送信に対応する TX PDU（TriggerTransmitFct あり）。関数の実体は呼ばれない（CanIf_TriggerTransmit() 自体を wrap で差し替えるため）。 */
+Std_ReturnType DummyUpperTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    (void)TxPduId;
+    (void)PduInfoPtr;
+    return E_NOT_OK;
+}
+
+const CanIf_TxPduConfigType kTriggerTxPdu = {
+    /* UpperLayerTxPduId */ 0U,
+    /* CanId */             0x100U,
+    /* Dlc */               8U,
+    /* Hth */               0U,
+    /* TxConfirmFct */      NULL,
+    /* TriggerTransmitFct */ DummyUpperTriggerTransmit
+};
+
+const CanIf_ConfigType kTriggerCanIfConfig = {
+    &kTriggerTxPdu, 1U,
+    &kTestRxPdu,    1U
+};
+
 /* ======================================================================
  * Test Fixture
  * ====================================================================== */
@@ -88,6 +110,50 @@ protected:
         CanIf_DeInit();
         CanSM_DeInit();
     }
+};
+
+/* トリガ送信の TX PDU の送信（CanIf_Transmit() の SduDataPtr = NULL）の単体テスト用フィクスチャ。
+ * SetUp(): Can を、トリガ送信を有効にして Can_Init() し、CanIf を kTriggerCanIfConfig で初期化して、コントローラを STARTED、PDU モードを ONLINE にする
+ *          （Can_Write() は実体。CanIf_TriggerTransmit() は wrap で、上位層が返すデータを差し込む）。
+ * TearDown(): CanIf_DeInit() と CanSM_DeInit() で未初期化へ戻す。 */
+class CanIf_Transmit_TriggerTransmit_Test : public ::testing::Test
+{
+protected:
+    void SetUp() override
+    {
+        FakeCanHw_Reset();
+        WrapCan_Reset();
+        WrapCanIf_Reset();
+        FakeDetHw_LogSuppressed = 1U;
+
+        canConfig.filter.filterId = 0x0220U;
+        canConfig.filter.mask     = 0x1FFFU;
+        canConfig.csPin           = 10U;
+        canConfig.intPin          = 2U;
+        canConfig.baudrate        = 500000U;
+        canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
+        canConfig.fdEnabled       = 0U;
+        canConfig.triggerTransmitEnable = 1U;
+
+        Can_Test_SetConfigPtr(NULL);
+        Can_Init(&canConfig);
+        CanSM_Init(NULL);
+        CanIf_Init(&kTriggerCanIfConfig);
+        (void)CanIf_SetControllerMode(0U, CAN_CS_STARTED);
+        (void)CanIf_SetPduMode(0U, CANIF_ONLINE);   // 送信できる状態（CanIf_Init() 直後は OFFLINE）
+        FakeDetHw_Reset();
+        FakeDetHw_LogSuppressed = 0U;
+    }
+
+    void TearDown() override
+    {
+        FakeDetHw_LogSuppressed = 1U;
+        WrapCan_Reset();
+        CanIf_DeInit();
+        CanSM_DeInit();
+    }
+
+    Can_ConfigType canConfig;
 };
 
 /* ======================================================================
@@ -217,6 +283,79 @@ TEST_F(CanIf_Transmit_Test, CanIf_Transmit_NG_UninitializedReportsDet)
     EXPECT_EQ(FakeDetHw_ReportCount, 1U);   // 未初期化は DET へ報告する（[SWS_CANIF_00901]）
     EXPECT_EQ(FakeDetHw_LastErrorId, CANIF_E_UNINIT);
     EXPECT_EQ(FakeDetHw_LastApiId, CANIF_API_ID_TRANSMIT);
+}
+
+TEST_F(CanIf_Transmit_TriggerTransmit_Test, CanIf_Transmit_OK_NullSduDataPtrIsPassedToCanForTriggerTransmitPdu)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 0U };   // トリガ送信の TX PDU は、SduDataPtr = NULL を受け付ける（[SWS_CANIF_00882]）
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_OK;
+    ForcedSduLength_CanIf_TriggerTransmit   = 2U;
+    ForcedSduData_CanIf_TriggerTransmit[0]  = 0xC1U;
+    ForcedSduData_CanIf_TriggerTransmit[1]  = 0xC2U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_Transmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 1U);          // NULL のまま Can_Write() へ渡り、Can がデータを取りに来た
+    EXPECT_EQ(LastPduId_CanIf_TriggerTransmit, 0U);          // 取りに来た PDU は、送信を要求した TxPduId
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 2U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0xC1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0xC2U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(CanIf_Transmit_TriggerTransmit_Test, CanIf_Transmit_NG_NullSduDataPtrWhenTriggerTransmitFails)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    PduInfoType info = { NULL, 0U };
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_NOT_OK;   // 上位層がデータを渡せない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_Transmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);   // [SWS_Can_00506] を経て、CanIf_Transmit() も E_NOT_OK
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+TEST_F(CanIf_Transmit_TriggerTransmit_Test, CanIf_Transmit_OK_NonNullSduDataPtrIsSentAsIs)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[2] = { 0x11U, 0x22U };
+    PduInfoType info = { sdu, 2U };   // トリガ送信の PDU でも、データを渡されたら、取りに行かず、そのまま送る
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_Transmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 0U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 2U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x11U);
 }
 
 }  // namespace

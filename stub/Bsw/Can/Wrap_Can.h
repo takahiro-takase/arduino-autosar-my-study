@@ -109,18 +109,18 @@ extern uint32 FailFromCallCount_Can_Write;
 /* ----------------------------------------------------------------------
  * 閾値到達後の強制戻り値（戻り値を持つ3関数のみ）
  * ---------------------------------------------------------------------- */
-extern Can_ReturnType ForcedReturn_Can_SetControllerMode;      /**< 既定 CAN_NOT_OK */
+extern Std_ReturnType ForcedReturn_Can_SetControllerMode;      /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Can_GetControllerErrorState; /**< 既定 E_NOT_OK */
-extern Can_ReturnType ForcedReturn_Can_Write;                   /**< 既定 CAN_NOT_OK */
+extern Std_ReturnType ForcedReturn_Can_Write;                   /**< 既定 E_NOT_OK */
 
 /** 直近の `Can_Write()` が呼び出し元へ返した実際の戻り値（本物の戻り値、または故障注入した
  *  `ForcedReturn_Can_Write`）。コールチェーンのテストで、途中の戻り値を確認するために使う
- *  。既定 CAN_NOT_OK。 */
-extern Can_ReturnType Return_Can_Write;
+ *  。既定 E_NOT_OK。 */
+extern Std_ReturnType Return_Can_Write;
 
 /** 直近の `Can_SetControllerMode()` が呼び出し元へ返した実際の戻り値（`Return_Can_Write` と同じ方式）。
- *  既定 CAN_NOT_OK。 */
-extern Can_ReturnType Return_Can_SetControllerMode;
+ *  既定 E_NOT_OK。 */
+extern Std_ReturnType Return_Can_SetControllerMode;
 
 /* ======================================================================
  * Functions

@@ -189,6 +189,7 @@ protected:
         canConfig.baudrate        = 500000U;
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
+        Can_Test_SetConfigPtr(NULL);  // 未初期化へ戻す（Can_Init() は初期化済みだと CAN_E_TRANSITION で拒否する）
         Can_Init(&canConfig);
         CanIf_Init(&kTestCanIfConfig);
         CanSM_Init(NULL);
@@ -335,7 +336,7 @@ TEST_F(NmStack_SleepCoordination_VoluntarySleep_Test, OK_DefersPhysicalSleepUnti
     /* ----------------------- */
     // ここで初めて物理スリープと ComM/EcuM の更新が起きる
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_SLEEP);
-    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（SLEEP）が受理された
+    EXPECT_EQ(Return_Can_SetControllerMode, E_OK);  // 最後の遷移（SLEEP）が受理された
     EXPECT_EQ(FakeEcuM_ReleaseRUNCount, 1U);
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_NO_COMMUNICATION));
@@ -697,7 +698,7 @@ TEST_F(NmStack_SleepCoordination_BusOff_Test, OK_DuringNmWinddownDoesNotResurrec
  *          Bus-Off 回復中のため拒否される。ここで ComM_NmReleasePending を
  *          解除し損ねると、Bus-Off 回復後に「誰も再要求していない」と
  *          誤認してコントローラを眠らせてしまい、CAN_CS_SLEEP からの
- *          CAN_T_START は Can.c が拒否するため、外部 CAN ウェイクアップ
+ *          CAN_CS_STARTED は Can.c が拒否するため、外部 CAN ウェイクアップ
  *          割り込みが来るまで ECU が誤って眠り続ける。
  */
 TEST_F(NmStack_SleepCoordination_BusOff_Test, OK_ReRequestFullComDuringBusOffRestoresFullComAfterRecovery)
@@ -931,7 +932,7 @@ TEST_F(NmStack_SleepCoordination_BusOff_Test, OK_DuringSilentComRestoresSilentCo
     // を一切呼ばない設計のため、ここで STOPPED になったことは Bus-Off が
     // 正しく処理された証拠になる（ガードで無視されていれば STARTED のまま）。
     EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
-    EXPECT_EQ(Return_Can_SetControllerMode, CAN_OK);  // 最後の遷移（STOP）が受理された
+    EXPECT_EQ(Return_Can_SetControllerMode, E_OK);  // 最後の遷移（STOP）が受理された
     ComM_ModeType mode = COMM_FULL_COMMUNICATION;
     ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &mode), E_OK);
     EXPECT_EQ(mode, static_cast<ComM_ModeType>(COMM_SILENT_COMMUNICATION));

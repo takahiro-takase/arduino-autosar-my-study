@@ -70,6 +70,7 @@ protected:
         canConfig.baudrate        = 500000U;
         canConfig.crystalFreq     = CAN_CRYSTAL_16MHZ;
 
+        Can_Test_SetConfigPtr(NULL);  // 未初期化へ戻す（Can_Init() は初期化済みだと CAN_E_TRANSITION で拒否する）
         Can_Init(&canConfig);
         CanIf_Init(&kControllerModeCanIfConfig);
         FakeDetHw_Reset();             // Init 自体の記録を後続の検証対象から除く
@@ -160,7 +161,7 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_NG_CanDriverRejectsTransi
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     FailFromCallCount_Can_SetControllerMode = 0U;   // Can ドライバが、状態遷移を受け付けない
-    ForcedReturn_Can_SetControllerMode      = CAN_NOT_OK;
+    ForcedReturn_Can_SetControllerMode      = E_NOT_OK;
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -177,7 +178,7 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_NG_CanDriverRejectsTransi
     EXPECT_EQ(mode, CAN_CS_STOPPED);   // 追跡している状態は変えない
 }
 
-TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StartedFromStoppedUsesCanTStart)
+TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StartedFromStopped)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -199,11 +200,10 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StartedFromStoppedUses
     EXPECT_EQ(mode, CAN_CS_STARTED);
 }
 
-/* CAN_CS_STOPPED の要求は、CanIf が追跡する遷移元状態によって Can_T_STOP
- * （STARTED から）と CAN_T_WAKEUP（SLEEP から）を使い分ける、本モジュールの
- * 中核ロジック。両方の遷移元を独立して検証する。 */
+/* CAN_CS_STOPPED の要求は、遷移元が STARTED（停止）でも SLEEP（ウェイクアップ）でも
+ * 目標モードのまま Can へ渡り、Can が自分の状態で区別する。両方の遷移元を独立して検証する。 */
 
-TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromStartedUsesCanTStop)
+TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromStarted)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -229,7 +229,7 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromStartedUses
     EXPECT_EQ(mode, CAN_CS_STOPPED);
 }
 
-TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromSleepUsesCanTWakeup)
+TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromSleepWakesUp)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -250,9 +250,7 @@ TEST_F(CanIf_SetControllerMode_Test, SetControllerMode_OK_StoppedFromSleepUsesCa
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
-    /* CAN_T_STOP は CAN_CS_SLEEP からの遷移を拒否する（Can.c 参照）ため、
-     * ここで実際に CAN_CS_STOPPED へ遷移していれば CAN_T_WAKEUP が
-     * 選ばれたことの間接的な証明になる。 */
+    /* SLEEP からの STOPPED 要求が、Can でウェイクアップとして受理されたことの確認。 */
     EXPECT_EQ(canState, CAN_CS_STOPPED);
     ASSERT_EQ(retGet, E_OK);
     EXPECT_EQ(mode, CAN_CS_STOPPED);

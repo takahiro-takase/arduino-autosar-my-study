@@ -642,22 +642,19 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
  * \details 実仕様の `EcuM_CheckWakeup()` は EcuM 本体ではなく ECU 統合側が
  *          実装する「コールアウト」（EcuM 自身がポーリング時に、CAN
  *          ドライバの ISR/Can_MainFunction_Wakeup が割り込み時にそれぞれ
- *          呼ぶ）と位置づけられるが、本プロジェクトは単一 ECU 構成で、EcuM の
- *          ウェイクアップソース管理のうち、検証待ち（PENDING）・検証済み（VALIDATED）・
- *          期限切れ（EXPIRED）の保持と、検証のタイムアウト（`ECUM_VALIDATION_TIMEOUT_MS`）だけを
- *          持つ（`EcuM_SetWakeupEvent` の代わりに本関数が、検証待ちにして、タイムアウトを起算し、
- *          BswM へ `BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING)` を通知する）ため、
- *          EcuM.c 内の通常関数として簡略実装する。
+ *          呼ぶ）と位置づけられる。本プロジェクトは単一 ECU 構成なので、EcuM.c 内の
+ *          通常関数として実装する。
+ *
+ *          CAN の要因については、`CanIf_CheckWakeup()` を呼ぶ（[SWS_CANIF_00395]）。
+ *          CanIf は `Can_CheckWakeup()` でコントローラが起床を検出したか調べ、
+ *          検出していれば Can が `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
+ *          検証待ち（PENDING）にして、検証を始めるのは、その `EcuM_SetWakeupEvent()` である
+ *          （以前は、本関数が兼ねていた。2026-11 に仕様の経路へ分けた）。
  *
  *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
- *          起床（`ECUM_WKSOURCE_CAN`）のみである。実際の検証は、Listen-Only
- *          によるノイズ除去（`CanSM_StartWakeupSource()` が始める CanSM 側の
- *          ステートマシン）と、有効フレーム受信の確認（`CanIf_CheckValidation()`
- *          → `EcuM_ValidateWakeupEvent()` → `ComM_EcuM_WakeUpIndication()`
- *          → `CanSM_RequestComMode(FULL_COM)` による FULL_COM 確定）が担うため、
- *          本関数は起床要因を検証待ちとして保留し、CanSM へ委譲する。
+ *          起床（`ECUM_WKSOURCE_CAN`）のみである。
  *
- * \param[in]  wakeupSource  検出されたウェイクアップ要因のビットマスク。
+ * \param[in]  wakeupSource  確認するウェイクアップ要因のビットマスク。
  *                           `ECUM_WKSOURCE_CAN` ビットが立っていない場合は
  *                           未知の要因として `ECUM_E_INVALID_PAR` を DET へ
  *                           報告し、何もしない（本プロジェクトが持つ
@@ -673,7 +670,6 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user)
  */
 void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
 {
-
     if ((wakeupSource & ECUM_WKSOURCE_CAN) == 0U)
     {
         DET_LOGW(TAG, "CheckWakeup: unknown source=0x%08lX", (unsigned long)wakeupSource);
@@ -681,7 +677,49 @@ void EcuM_CheckWakeup(EcuM_WakeupSourceType wakeupSource)
         return;
     }
 
-    DET_LOGI(TAG, "CheckWakeup: CAN wakeup source confirmed");
+    DET_LOGI(TAG, "CheckWakeup: CAN wakeup source -> CanIf_CheckWakeup");
+    (void)CanIf_CheckWakeup(ECUM_WKSOURCE_CAN);
+}
+
+/* ----------------------------------------------------------------------
+ * EcuM_SetWakeupEvent
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   起床を検出した要因を、検証待ち（PENDING）にして、検証を始める（[SWS_EcuM_02826]）。
+ *
+ * \details ウェイクアップ要因を持つドライバ（CAN では `Can_CheckWakeup()`）が、起床を検出したときに
+ *          一度呼ぶ（[SWS_EcuM_01117]）。要因を検証待ちにして、検証のタイムアウト
+ *          （`ECUM_VALIDATION_TIMEOUT_MS`）を起算し（[SWS_EcuM_02707]）、BswM へ
+ *          `BswM_EcuM_CurrentWakeup(ECUM_WKSOURCE_CAN, ECUM_WKSTATUS_PENDING)` を通知して、
+ *          起床の検証を始める（`EcuM_StartWakeupSources()`。CanSM の検証 `CanSM_StartWakeupSource()` へ続く）。
+ *          同じ要因が検証待ちの間に再び呼ばれたときは、タイムアウトを起算し直さず、BswM へも
+ *          通知しない（[SWS_EcuM_02712]）。前回の検証済み・期限切れの記録は、新しい起床で消す。
+ *
+ *          実際の検証は、Listen-Only によるノイズ除去（`CanSM_StartWakeupSource()` が始める CanSM 側の
+ *          ステートマシン）と、有効フレーム受信の確認（`CanIf_CheckValidation()`
+ *          → `EcuM_ValidateWakeupEvent()` → `ComM_EcuM_WakeUpIndication()`
+ *          → `CanSM_RequestComMode(FULL_COM)` による FULL_COM 確定）が担う。
+ *
+ * \param[in]  sources  起床を検出した要因のビットマスク。`ECUM_WKSOURCE_CAN` 以外のビットを含む、
+ *                      または 0 の場合は、未知の要因として `ECUM_E_UNKNOWN_WAKEUP_SOURCE`
+ *                      （[SWS_EcuM_02867]）を DET へ報告し、何もしない。
+ *
+ * \AUTOSARReq     {SWS_EcuM_02826, SWS_EcuM_01117, SWS_EcuM_02707, SWS_EcuM_02712, SWS_EcuM_02867}
+ * \ServiceID      {0x0C}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void EcuM_SetWakeupEvent(EcuM_WakeupSourceType sources)
+{
+    if ((sources == 0U) || ((sources & (EcuM_WakeupSourceType)(~ECUM_WKSOURCE_CAN)) != 0U))
+    {
+        DET_LOGW(TAG, "SetWakeupEvent: unknown source=0x%08lX", (unsigned long)sources);
+        (void)Det_ReportError(ECUM_MODULE_ID, 0U, ECUM_API_ID_SET_WAKEUP_EVENT, ECUM_E_UNKNOWN_WAKEUP_SOURCE);
+        return;
+    }
+
+    DET_LOGI(TAG, "SetWakeupEvent: CAN wakeup event set");
     if ((EcuM_PendingWakeupSources & ECUM_WKSOURCE_CAN) == 0U)
     {
         /* 新しい起床: 検証のタイムアウトを起算する（[SWS_EcuM_02709]）。同じ要因が検証待ちの間の再通知では、起算し直さず、
@@ -869,12 +907,6 @@ EcuM_WakeupSourceType EcuM_GetExpiredWakeupEvents(void)
 
 /* ----------------------------------------------------------------------
  * EcuM_GetBootTarget
- * ---------------------------------------------------------------------- */
-
-/* 未実装 */
-
-/* ----------------------------------------------------------------------
- * EcuM_SetWakeupEvent
  * ---------------------------------------------------------------------- */
 
 /* 未実装 */

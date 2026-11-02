@@ -41,10 +41,14 @@
 
 /** 開発エラーコード（SWS_Can_00104 Error Classification 表より、実際に使用する分のみ） */
 #define CAN_E_PARAM_POINTER     0x01U  /* [SWS_Can_00175 等]: NULL ポインタチェック */
-#define CAN_E_PARAM_DLC         0x03U  /* [SWS_Can_00218]: Can_Write の length が 8 バイト超過 */
+#define CAN_E_PARAM_HANDLE      0x02U  /* [SWS_Can_00217]: Can_Write の Hth が設定にない */
+#define CAN_E_PARAM_DATA_LENGTH 0x03U  /* [SWS_Can_00218]: Can_Write の length が上限超過 */
 #define CAN_E_PARAM_CONTROLLER  0x04U  /* [SWS_Can_00199 等]: Controller が範囲外 */
 #define CAN_E_UNINIT            0x05U  /* [SWS_Can_00198 等]: Can_Init 前に呼ばれた */
 #define CAN_E_TRANSITION        0x06U  /* [SWS_Can_00200 等]: 不正な状態遷移要求 */
+
+/** 実行時エラーコード（SWS_Can_00104 の 7.11.2。開発エラーとは別の番号付け） */
+#define CAN_E_DATALOST          0x01U  /* [SWS_Can_00395]: 受信したメッセージを失った（受信バッファの上書き・オーバーラン） */
 
 /** クラシック CAN フレームの最大データ長（バイト）。SWS_Can_00218 参照。 */
 #define CAN_FRAME_MAX_DLC       8U
@@ -59,8 +63,11 @@
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
 #define CAN_API_ID_INIT                  0x00U
+#define CAN_API_ID_DEINIT                0x10U
+#define CAN_API_ID_GET_CONTROLLER_MODE   0x12U
 #define CAN_API_ID_MAIN_FUNCTION_WRITE   0x01U
 #define CAN_API_ID_SET_CONTROLLER_MODE   0x03U
+#define CAN_API_ID_CHECK_WAKEUP          0x0BU
 #define CAN_API_ID_WRITE                 0x06U
 #define CAN_API_ID_MAIN_FUNCTION_READ    0x08U
 #define CAN_API_ID_MAIN_FUNCTION_BUSOFF  0x09U
@@ -83,6 +90,11 @@
 /** CAN コントローラ数（本実装は MCP2515 を 1 個使用） */
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CAN_CONTROLLER_COUNT   1U
+
+/** ハードウェア送信ハンドル（HTH）の数。MCP2515 は送信バッファ 3 個を自動選択するため、
+ *  Can_Write() が受け付ける Hth は 0 の 1 個だけ（CanIf_PBCfg.c の .Hth と一致させること）。
+ *  [SWS_Can_00217] の「設定された HTH か」の判定に使う。 */
+#define CAN_HTH_COUNT          1U
 
 /* @@GEN-BEGIN can-pins  生成元: config/data/Can.json  （自動生成: 手編集禁止） */
 /** MCP2515 チップセレクト (CS) ピン番号 */
@@ -179,6 +191,9 @@ typedef struct
                                       *   （AUTOSAR の CanControllerFdBaudRate 相当。通常のビットレートの整数倍） */
     uint8               txBitRateSwitch; /**< 1 = 送信時にデータ部でビットレートを切り替える
                                       *   （AUTOSAR の CanControllerTxBitRateSwitch 相当） */
+    uint8               triggerTransmitEnable; /**< 1 = Can_Write() が sdu = NULL（トリガ送信の要求）を受け付ける
+                                      *   （AUTOSAR の CanTriggerTransmitEnable 相当。仕様はハードウェアオブジェクトごと。
+                                      *   本実装は HTH が 1 つだけなので、設定に 1 つ持つ） */
 } Can_ConfigType;
 
 #endif /* CAN_CFG_H */

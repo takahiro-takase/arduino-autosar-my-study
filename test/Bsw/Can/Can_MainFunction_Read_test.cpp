@@ -97,7 +97,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_NG_On_Sleep)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_SLEEP);
+    Can_SetControllerMode(0U, CAN_CS_SLEEP);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -116,7 +116,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_NG_Can_Hw_CheckReceive_
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -137,7 +137,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     Can_Init(&config);
-    Can_SetControllerMode(0U, CAN_T_START);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
 
     FakeCanHw_RxPendingCount = 1U;  // 受信フレーム 1 件を模擬
     FakeCanHw_RxId  = 0x100U;
@@ -164,6 +164,102 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK)
     EXPECT_EQ(LastData_CanIf_RxIndication[1], 0xADU);
     EXPECT_EQ(LastData_CanIf_RxIndication[2], 0xBEU);
     EXPECT_EQ(LastData_CanIf_RxIndication[3], 0xEFU);
+}
+
+TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_RxOverflowReportsDataLost)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    FakeCanHw_TakeRxOverflowReturn = CAN_HW_OK;   // 受信バッファのオーバーフローを検出
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_TakeRxOverflowCount, 1U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 1U);
+    EXPECT_EQ(FakeDetHw_LastModuleId, CAN_MODULE_ID);
+    EXPECT_EQ(FakeDetHw_LastApiId, CAN_API_ID_MAIN_FUNCTION_READ);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_DATALOST);   // [SWS_Can_00395]
+}
+
+TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_RxOverflowStillDrainsReceivedFrames)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    FakeCanHw_TakeRxOverflowReturn = CAN_HW_OK;
+    FakeCanHw_RxPendingCount = 1U;
+    FakeCanHw_RxId = 0x123U;
+    FakeCanHw_RxDlc = 1U;
+    FakeCanHw_RxData[0] = 0x5AU;
+    WrapCanIf_Reset();
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_TakeRxOverflowCount, 1U);   // オーバーフローは検出した（CAN_E_DATALOST の報告は、上のテストで確認）
+    EXPECT_EQ(FakeCanHw_RxPendingCount, 0U);
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 1U);   // 失ったのは溢れた分で、バッファに残っているフレームは、通常どおり渡す
+}
+
+TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_NoRxOverflowReportsNothing)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_TakeRxOverflowCount, 1U);   // 毎回確認する
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_NG_OnSleepDoesNotCheckRxOverflow)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);
+    FakeCanHw_TakeRxOverflowReturn = CAN_HW_OK;
+    FakeDetHw_Reset();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_TakeRxOverflowCount, 0U);   // スリープ中は、受信を処理しない
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
 }  // namespace

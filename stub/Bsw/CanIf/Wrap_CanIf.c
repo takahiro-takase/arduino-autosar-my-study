@@ -41,6 +41,8 @@ uint32 CallCount_CanIf_RxIndication            = 0U;
 uint32 CallCount_CanIf_TxConfirmation          = 0U;
 uint32 CallCount_CanIf_ControllerBusOff        = 0U;
 uint32 CallCount_CanIf_GetTxConfirmationState  = 0U;
+uint32 CallCount_CanIf_TriggerTransmit         = 0U;
+uint32 CallCount_CanIf_CheckWakeup             = 0U;
 
 uint32 FailFromCallCount_CanIf_SetControllerMode       = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanIf_GetControllerMode       = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -52,6 +54,8 @@ uint32 FailFromCallCount_CanIf_ReadRxNotifStatus       = WRAP_CANIF_FAIL_FROM_CA
 uint32 FailFromCallCount_CanIf_SetPduMode              = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanIf_GetPduMode              = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_CanIf_GetTxConfirmationState  = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_CanIf_TriggerTransmit         = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_CanIf_CheckWakeup             = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
 
 Std_ReturnType ForcedReturn_CanIf_SetControllerMode        = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanIf_GetControllerMode        = E_NOT_OK;
@@ -66,6 +70,13 @@ CanIf_NotifStatusType ForcedReturn_CanIf_ReadRxNotifStatus = CANIF_NO_NOTIFICATI
 Std_ReturnType ForcedReturn_CanIf_SetPduMode               = E_NOT_OK;
 Std_ReturnType ForcedReturn_CanIf_GetPduMode               = E_NOT_OK;
 CanIf_NotifStatusType ForcedReturn_CanIf_GetTxConfirmationState  = CANIF_NO_NOTIFICATION;
+Std_ReturnType ForcedReturn_CanIf_TriggerTransmit          = E_NOT_OK;
+Std_ReturnType ForcedReturn_CanIf_CheckWakeup              = E_NOT_OK;
+PduLengthType  ForcedSduLength_CanIf_TriggerTransmit       = 0U;
+uint8          ForcedSduData_CanIf_TriggerTransmit[WRAP_CANIF_TRIGGER_DATA_MAX] = { 0U };
+PduIdType      LastPduId_CanIf_TriggerTransmit             = 0U;
+PduLengthType  LastMaxLength_CanIf_TriggerTransmit         = 0U;
+EcuM_WakeupSourceType LastWakeupSource_CanIf_CheckWakeup   = 0U;
 
 uint8         LastData_CanIf_RxIndication[8]      = { 0U };
 Can_HwType    LastMailbox_CanIf_RxIndication      = { 0U, 0U, 0U };
@@ -95,6 +106,8 @@ void WrapCanIf_Reset(void)
     CallCount_CanIf_TxConfirmation          = 0U;
     CallCount_CanIf_ControllerBusOff        = 0U;
     CallCount_CanIf_GetTxConfirmationState  = 0U;
+    CallCount_CanIf_TriggerTransmit         = 0U;
+    CallCount_CanIf_CheckWakeup             = 0U;
 
     FailFromCallCount_CanIf_SetControllerMode       = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanIf_GetControllerMode       = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -104,6 +117,8 @@ void WrapCanIf_Reset(void)
     FailFromCallCount_CanIf_SetPduMode              = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanIf_GetPduMode              = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_CanIf_GetTxConfirmationState  = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_CanIf_TriggerTransmit         = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_CanIf_CheckWakeup             = WRAP_CANIF_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_CanIf_SetControllerMode       = E_NOT_OK;
     ForcedReturn_CanIf_GetControllerMode       = E_NOT_OK;
@@ -115,6 +130,14 @@ void WrapCanIf_Reset(void)
     ForcedReturn_CanIf_SetPduMode              = E_NOT_OK;
     ForcedReturn_CanIf_GetPduMode              = E_NOT_OK;
     ForcedReturn_CanIf_GetTxConfirmationState  = CANIF_NO_NOTIFICATION;
+    ForcedReturn_CanIf_TriggerTransmit         = E_NOT_OK;
+    ForcedReturn_CanIf_CheckWakeup             = E_NOT_OK;
+    ForcedSduLength_CanIf_TriggerTransmit      = 0U;
+    for (uint8 i = 0U; i < WRAP_CANIF_TRIGGER_DATA_MAX; i++)
+        ForcedSduData_CanIf_TriggerTransmit[i] = 0U;
+    LastPduId_CanIf_TriggerTransmit            = 0U;
+    LastMaxLength_CanIf_TriggerTransmit        = 0U;
+    LastWakeupSource_CanIf_CheckWakeup         = 0U;
 
     LastPduId_CanIf_Transmit               = 0U;
     LastLength_CanIf_Transmit              = 0U;
@@ -392,7 +415,21 @@ void __wrap_CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * CanIf_CheckWakeup
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_CanIf_CheckWakeup(EcuM_WakeupSourceType WakeupSource);
+Std_ReturnType __wrap_CanIf_CheckWakeup(EcuM_WakeupSourceType WakeupSource)
+{
+    CallCount_CanIf_CheckWakeup++;
+    Log_Write(LOG_T, TAG, "CanIf_CheckWakeup", "called %u times", CallCount_CanIf_CheckWakeup);
+
+    LastWakeupSource_CanIf_CheckWakeup = WakeupSource;
+
+    if (CallCount_CanIf_CheckWakeup >= FailFromCallCount_CanIf_CheckWakeup)
+    {
+        return ForcedReturn_CanIf_CheckWakeup;
+    }
+    return __real_CanIf_CheckWakeup(WakeupSource);
+}
 
 /* ----------------------------------------------------------------------
  * CanIf_CheckValidation
@@ -450,7 +487,33 @@ CanIf_NotifStatusType __wrap_CanIf_GetTxConfirmationState(uint8 ControllerId)
  * CanIf_TriggerTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/* 閾値到達後に ForcedReturn が E_OK のときは、ForcedSduData/ForcedSduLength を PduInfoPtr へ書いて返す
+ * （Can_Write() のトリガ送信が、上位層から受け取るデータの再現）。 */
+extern
+Std_ReturnType __real_CanIf_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr);
+Std_ReturnType __wrap_CanIf_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
+{
+    CallCount_CanIf_TriggerTransmit++;
+    Log_Write(LOG_T, TAG, "CanIf_TriggerTransmit", "called %u times", CallCount_CanIf_TriggerTransmit);
+
+    LastPduId_CanIf_TriggerTransmit = TxPduId;
+    if (PduInfoPtr != NULL)
+    {
+        LastMaxLength_CanIf_TriggerTransmit = PduInfoPtr->SduLength;
+    }
+
+    if (CallCount_CanIf_TriggerTransmit >= FailFromCallCount_CanIf_TriggerTransmit)
+    {
+        if ((ForcedReturn_CanIf_TriggerTransmit == E_OK) && (PduInfoPtr != NULL) && (PduInfoPtr->SduDataPtr != NULL))
+        {
+            for (PduLengthType i = 0U; (i < ForcedSduLength_CanIf_TriggerTransmit) && (i < WRAP_CANIF_TRIGGER_DATA_MAX); i++)
+                PduInfoPtr->SduDataPtr[i] = ForcedSduData_CanIf_TriggerTransmit[i];
+            PduInfoPtr->SduLength = ForcedSduLength_CanIf_TriggerTransmit;
+        }
+        return ForcedReturn_CanIf_TriggerTransmit;
+    }
+    return __real_CanIf_TriggerTransmit(TxPduId, PduInfoPtr);
+}
 
  /* ----------------------------------------------------------------------
  * CanIf_TxConfirmation
