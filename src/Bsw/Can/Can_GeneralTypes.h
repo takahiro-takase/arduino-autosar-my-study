@@ -54,11 +54,8 @@ typedef enum
  * \details 値は MCP2515 の EFLG レジスタから Can_Hw_GetErrorState() が導出する
  *          （bit5=Bus-Off、bit4=TX Error-Passive、bit3=RX Error-Passive
  *          （TEC/REC いずれか一方でも閾値超過すれば Passive）、いずれも
- *          立っていなければ Active。Can_Hw.cpp 参照）。実 AUTOSAR
- *          SWS_CANDriver 4.3.1 は本型を
- *          使う `Can_GetControllerErrorState()` 相当の Service を規定していない
- *          （CanIf 側のみが定義された API）ため、本プロジェクトの
- *          `Can_GetControllerErrorState()` は AUTOSAR 非標準の拡張である。
+ *          立っていなければ Active。Can_Hw.cpp 参照）。本型は SWS_CAN の 4.2.2、
+ *          これを使う `Can_GetControllerErrorState()` は 4.3.0 で追加された（Can.c 参照）。
  */
 typedef enum
 {

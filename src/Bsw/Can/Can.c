@@ -1047,24 +1047,23 @@ static void Can_Isr(void)
  * \brief   CAN コントローラのエラー状態 (Active/Passive/Bus-Off) を取得する。
  *
  * \details [SWS_CANIF_91001] の CanIf_GetControllerErrorState() が「対応する
- *          CAN ドライバのサービスを呼ぶ」と規定する、その CAN ドライバ側
- *          サービスに相当する。実 AUTOSAR SWS_Can 4.3.1 は本関数に相当する
- *          Service を規定していない（CanIf 側 API のみが定義されている）ため
- *          AUTOSAR 非標準の拡張だが、CanIf から呼べる実体が必要なため用意する。
+ *          CAN ドライバのサービスを呼ぶ」と規定する、その CAN ドライバ側サービス（[SWS_Can_91004]、
+ *          Service ID 0x11。0x0B は Can_CheckWakeup）。SWS_CAN の 4.3.0 で追加された API。
  *          MCP2515 の EFLG レジスタ（Bus-Off/TX Error-Passive ビット）から
- *          導出する（Can_Hw_GetErrorState() 参照）。
+ *          導出する（Can_Hw_GetErrorState() 参照）[SWS_Can_91008]。
  *
- * \param[in]   Controller     対象コントローラ ID (0 固定)。
+ * \param[in]   ControllerId   対象コントローラ ID (0 固定)。
  * \param[out]  ErrorStatePtr  エラー状態の格納先。NULL 禁止。
  *
  * \retval  E_OK      ErrorStatePtr へ格納した。
- * \retval  E_NOT_OK  未初期化、Controller が範囲外、または ErrorStatePtr が NULL。
+ * \retval  E_NOT_OK  未初期化、ControllerId が範囲外、または ErrorStatePtr が NULL。
  *
- * \ServiceID      {0x0B}
- * \Reentrancy     {Reentrant}
+ * \ServiceID      {0x11}
+ * \AUTOSARReq     {SWS_Can_91004, SWS_Can_91005, SWS_Can_91006, SWS_Can_91007, SWS_Can_91008}
+ * \Reentrancy     {Non Reentrant for the same ControllerId}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType* ErrorStatePtr)
+Std_ReturnType Can_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateType* ErrorStatePtr)
 {
     if (Can_ConfigPtr == NULL)
     {
@@ -1072,7 +1071,7 @@ Std_ReturnType Can_GetControllerErrorState(uint8 Controller, Can_ErrorStateType*
         return E_NOT_OK;
     }
 
-    if (Controller != 0U)
+    if (ControllerId != 0U)
     {
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_GET_CONTROLLER_ERROR_STATE, CAN_E_PARAM_CONTROLLER);
         return E_NOT_OK;

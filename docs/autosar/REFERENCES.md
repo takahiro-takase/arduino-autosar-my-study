@@ -30,7 +30,7 @@ PDF ファイルは著作権により再配布禁止のため git 管理外（`.
 
 | 文書名 | ファイル名 | 説明 |
 |--------|-----------|------|
-| SWS CAN Driver | `AUTOSAR_SWS_CANDriver.pdf` | Can モジュール API（Can_Init / Can_Write / Bus-Off 検出） |
+| SWS CAN Driver | `AUTOSAR_SWS_CANDriver.pdf` | Can モジュール API（Can_Init / Can_Write / Bus-Off 検出）。**R19-11 版**。変更履歴は 4.3.1（2017-12）を含み、その後は 4.4.0（文書状態の変更のみ）と R19-11（軽微な修正のみ）なので、4.3.1 の内容として読める。4.3.0 で Can_GetControllerErrorState / Can_DeInit / Can_GetControllerMode を追加、4.3.1 で戻り値型を Std_ReturnType へ統一・Can_StateTransitionType を廃止。以前の版（表紙は V4.3.0 だが、内容は 4.1.3 世代）は `AUTOSAR_SWS_CANDriver_old.pdf` に退避（2026-11-02） |
 | SWS CAN Interface | `AUTOSAR_SWS_CANInterface.pdf` | CanIf の PDU マッピング・コールバック |
 | SWS PDU Router | `AUTOSAR_SWS_PDURouter.pdf` | PduR のルーティングテーブル |
 | SWS COM | `AUTOSAR_SWS_COM.pdf` | シグナルパック/アンパック・受信デッドライン監視 |
