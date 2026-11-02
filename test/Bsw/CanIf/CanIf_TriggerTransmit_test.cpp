@@ -42,13 +42,15 @@ namespace
 uint32         gUpperCallCount;
 PduIdType      gUpperPduId;
 PduInfoType*   gUpperPduInfo;
+PduLengthType  gUpperSeenLength;   // 呼ばれた時点で渡された最大長（SduLength）
 Std_ReturnType gUpperReturn;
 
 Std_ReturnType FakeUpperTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
 {
     gUpperCallCount++;
-    gUpperPduId   = TxPduId;
-    gUpperPduInfo = PduInfoPtr;
+    gUpperPduId      = TxPduId;
+    gUpperPduInfo    = PduInfoPtr;
+    gUpperSeenLength = PduInfoPtr->SduLength;
     return gUpperReturn;
 }
 
@@ -90,6 +92,7 @@ protected:
         gUpperCallCount = 0U;
         gUpperPduId     = 0xFFFFU;
         gUpperPduInfo   = NULL;
+        gUpperSeenLength = 0U;
         gUpperReturn    = E_OK;
         WrapCanIf_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
@@ -134,6 +137,48 @@ TEST_F(CanIf_TriggerTransmit_Test, CanIf_TriggerTransmit_OK_ForwardsToUpperLayer
     EXPECT_EQ(gUpperPduId, 7U);          // UpperLayerTxPduId へ翻訳する（[SWS_CANIF_00885]）
     EXPECT_EQ(gUpperPduInfo, &info);     // PduInfoPtr は、そのまま渡す
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(CanIf_TriggerTransmit_Test, CanIf_TriggerTransmit_OK_MaxLengthIsCappedToConfiguredDlc)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[64] = { 0 };
+    PduInfoType info = { sdu, 64U };   // 呼び出し側（CAN FD 有効の Can）が、64 バイトまで入ると伝える
+    gUpperReturn = E_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_TriggerTransmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(gUpperSeenLength, 8U);   // 上位層には、設定 DLC（8）を超える最大長を渡さない
+}
+
+TEST_F(CanIf_TriggerTransmit_Test, CanIf_TriggerTransmit_OK_MaxLengthBelowDlcIsKept)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sdu[8] = { 0 };
+    PduInfoType info = { sdu, 3U };
+    gUpperReturn = E_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_TriggerTransmit(0U, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(gUpperSeenLength, 3U);   // 設定 DLC より小さい最大長は、そのまま渡す
 }
 
 TEST_F(CanIf_TriggerTransmit_Test, CanIf_TriggerTransmit_OK_ReturnsUpperLayerReturnValue)

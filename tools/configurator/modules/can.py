@@ -1,7 +1,7 @@
 """Can（Can_Cfg.h / Can_PBCfg.c）の生成。
 
 Can.json に書く値: コントローラの種類、SPI のチップセレクトと割り込みのピン番号、ボーレート、水晶の周波数、
-CAN FD の設定（有効かどうか、データ部のビットレート、ビットレート切替）、受信フィルタ、各項目の説明。
+CAN FD の設定（有効かどうか、データ部のビットレート、ビットレート切替）、トリガ送信の有効（省略時は無効）、受信フィルタ、各項目の説明。
 生成する値: ピン番号のマクロ（Can_Cfg.h）と、Can_Config（Can_PBCfg.c）。
 検査:
   - ボーレート・水晶の指定が、Can_Cfg.h の CAN_BAUDRATE_* / CAN_CRYSTAL_*MHZ に実在すること。
@@ -94,7 +94,9 @@ def render_config(cfg, ctx):
     out += block_comment(fd["note"], indent=4)
     out.append("    .fdEnabled       = %dU," % (1 if fd["enabled"] else 0))
     out.append("    .fdBaudrate      = %dUL," % fd["dataBitrate"])
-    out.append("    .txBitRateSwitch = %dU" % (1 if fd["txBitRateSwitch"] else 0))
+    out.append("    .txBitRateSwitch = %dU," % (1 if fd["txBitRateSwitch"] else 0))
+    out.append("    /* トリガ送信（CanTriggerTransmitEnable 相当）。1 のとき Can_Write() が sdu = NULL を受け付け、CanIf_TriggerTransmit() でデータを取得する。 */")
+    out.append("    .triggerTransmitEnable = %dU" % (1 if cfg.get("triggerTransmitEnable", False) else 0))
     out.append("};")
     return "\n".join(out)
 

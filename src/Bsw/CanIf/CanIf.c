@@ -398,7 +398,10 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
  * \param[in]  TxPduId     送信する TX PDU の ID。
  *                         設定済み TxPduCount 未満であること。
  * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。
- *                         NULL 禁止。SduDataPtr も NULL 禁止。
+ *                         NULL 禁止。SduDataPtr は、トリガ送信の TX PDU（TriggerTransmitFct を持つ）
+ *                         だけ NULL にできる（[SWS_CANIF_00882]）。NULL のときは、そのまま Can_Write() へ
+ *                         渡し、Can が CanIf_TriggerTransmit() でデータを取得する。SduLength は、NULL でも
+ *                         設定 DLC との照合に使う（実際に送る長さは、トリガ送信で上位層が返した長さで決まる）。
  *
  * \retval  E_OK      PDU が Can_Write() に正常に渡された。
  * \retval  E_NOT_OK  CanIf 未初期化、TxPduId 不正、NULL ポインタ、
@@ -409,7 +412,7 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
  * \pre        CanIf_Init() が正常に完了していること。
  * \pre        CAN コントローラが CAN_CS_STARTED 状態であること。
  *
- * \AUTOSARReq     {SWS_CANIF_00005}
+ * \AUTOSARReq     {SWS_CANIF_00005, SWS_CANIF_00882}
  * \ServiceID      {0x49}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -429,14 +432,15 @@ Std_ReturnType CanIf_Transmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr)
         return E_NOT_OK;
     }
 
-    if ((PduInfoPtr == NULL) || (PduInfoPtr->SduDataPtr == NULL))
+    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[TxPduId];
+
+    /* SduDataPtr が NULL なのは、トリガ送信の PDU だけ許される（[SWS_CANIF_00882]）。 */
+    if ((PduInfoPtr == NULL) || ((PduInfoPtr->SduDataPtr == NULL) && (txCfg->TriggerTransmitFct == NULL)))
     {
         DET_LOGE(TAG, "TX E: PduInfoPtr NULL");
         (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_TRANSMIT, CANIF_E_PARAM_POINTER);
         return E_NOT_OK;
     }
-
-    const CanIf_TxPduConfigType* txCfg = &CanIf_ConfigPtr->TxPduConfig[TxPduId];
 
     if (PduInfoPtr->SduLength > txCfg->Dlc)
     {
@@ -895,7 +899,47 @@ void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
  * CanIf_CheckWakeup
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CAN コントローラが起床を検出したかを調べる（[SWS_CANIF_00219]）。
+ *
+ * \details EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼ぶ
+ *          （[SWS_CANIF_00395]）。起床を検出したコントローラを `Can_CheckWakeup()` で調べ、
+ *          検出していれば Can が `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
+ *          戻り値は、`Can_CheckWakeup()` の戻り値をそのまま返す（[SWS_CANIF_00720]/[SWS_CANIF_00678]）。
+ *          本プロジェクトの CAN コントローラは 1 つだけで、CAN トランシーバのドライバは持たない。
+ *          構成項目 `CanIfWakeupSupport`/`CanIfCtrlWakeupSupport` による有効・無効の切り替えは持たない
+ *          （[SWS_CANIF_00180]/[SWS_CANIF_00892]）。
+ *
+ * \param[in]  WakeupSource  確認する起床要因（`ECUM_WKSOURCE_CAN` のビット）。
+ *                          ビットが立っていなければ `CANIF_E_PARAM_WAKEUPSOURCE`
+ *                          （[SWS_CANIF_00398]）を DET へ報告する。
+ *
+ * \retval  E_OK      コントローラが起床を検出していた（`EcuM_SetWakeupEvent()` を呼んだ）。
+ * \retval  E_NOT_OK  WakeupSource が不正、CanIf が未初期化、または起床を検出していない。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00219, SWS_CANIF_00395, SWS_CANIF_00398, SWS_CANIF_00720, SWS_CANIF_00678}
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType CanIf_CheckWakeup(EcuM_WakeupSourceType WakeupSource)
+{
+    if (CanIf_ConfigPtr == NULL)
+    {
+        CanIf_ReportUninit(CANIF_API_ID_CHECK_WAKEUP);
+        return E_NOT_OK;
+    }
+
+    if ((WakeupSource & ECUM_WKSOURCE_CAN) == 0U)
+    {
+        DET_LOGE(TAG, "CheckWakeup: unknown source=0x%08lX", (unsigned long)WakeupSource);
+        (void)Det_ReportError(CANIF_MODULE_ID, 0U, CANIF_API_ID_CHECK_WAKEUP, CANIF_E_PARAM_WAKEUPSOURCE);
+        return E_NOT_OK;
+    }
+
+    /* 本プロジェクトの CAN コントローラは 1 つだけ（CANIF_CONTROLLER_MAX=1）。 */
+    return Can_CheckWakeup(0U);
+}
 
 /* ----------------------------------------------------------------------
  * CanIf_CheckValidation
@@ -1114,6 +1158,12 @@ Std_ReturnType CanIf_TriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfoPtr)
     {
         DET_LOGD(TAG, "TriggerTransmit iPdu=%u: not configured for trigger transmit", (unsigned)TxPduId);
         return E_NOT_OK;
+    }
+
+    /* 上位層へ渡す最大長は、設定 DLC を超えないようにする（通常の送信が SduLength <= Dlc を守らせるのと同じ）。 */
+    if (PduInfoPtr->SduLength > txCfg->Dlc)
+    {
+        PduInfoPtr->SduLength = txCfg->Dlc;
     }
 
     DET_LOGD(TAG, "TriggerTransmit id=%u -> upper=%u", (unsigned)TxPduId, (unsigned)txCfg->UpperLayerTxPduId);

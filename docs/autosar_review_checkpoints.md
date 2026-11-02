@@ -428,6 +428,10 @@ TRANSITION/DATALOST/PARAM_BAUDRATE/ICOM_CONFIG_INVALID の9件）と値の並び
 `CAN_E_TRANSITION=0x06` となり、本実装の定義済み値と完全に一致することを確認した
 （「気づいたが実際には正しかった」ケース。修正はしていない）。
 （2026-11-02 追記: 上の `CAN_E_PARAM_DLC` は、R19-11 版の仕様で `CAN_E_PARAM_DATA_LENGTH` と確認し、実装も改名した。`CAN_E_PARAM_HANDLE=0x02` も追加済み。）
+（2026-11-02 追記 2: R19-11 の 7.11.2「Runtime Errors」の表で、`CAN_E_DATALOST` は実行時エラーとして `0x01`（開発エラーとは別の番号付け）と確認し、
+`Can_MainFunction_Read()` が受信バッファのオーバーフローで `Det_ReportRuntimeError()` から報告するようにした。`Can_CheckWakeup`（0x0B）と、
+`Can_Write` の `sdu = NULL`（トリガ送信、[SWS_Can_00503-00506]）も実装した。`Can_CheckWakeup` から `EcuM_SetWakeupEvent()` を呼ぶ仕様の経路に合わせ、
+`EcuM_SetWakeupEvent`（0x0C）と `CanIf_CheckWakeup`（0x11）を追加し、`EcuM_CheckWakeup` は `CanIf_CheckWakeup()` を呼ぶだけの窓口にした。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

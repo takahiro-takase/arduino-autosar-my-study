@@ -291,6 +291,7 @@ NvM、WdgM と同じく、信号表とは関係なく、それぞれの JSON だ
 | `csPin`、`intPin` | `Can_Cfg.h` の `CAN_CS_PIN`、`CAN_INT_PIN` |
 | `baudrate`、`crystalMhz`、`filter` | `Can_PBCfg.c` の `Can_Config`（フィルタ、ピン、ボーレート、水晶） |
 | `controller`、`fd` | `Can_Config` の `fdEnabled`、`fdBaudrate`、`txBitRateSwitch`（CAN FD の設定。AUTOSAR の `CanControllerFdBaudrateConfig` / `CanControllerTxBitRateSwitch` 相当） |
+| `triggerTransmitEnable`（省略時は false） | `Can_Config` の `triggerTransmitEnable`（`Can_Write()` が `sdu = NULL` のトリガ送信を受け付ける。AUTOSAR の `CanTriggerTransmitEnable` 相当。仕様はハードウェアオブジェクトごとだが、HTH が 1 つなので 1 つだけ） |
 
 - ボーレートと水晶の指定は、`Can_Cfg.h` の `CAN_BAUDRATE_<値>` / `CAN_CRYSTAL_<値>MHZ` に実在する名前でなければなりません。
 - `controller`（`MCP2515` または `MCP2518FD`）に応じて、次を検査します。

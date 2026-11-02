@@ -47,6 +47,9 @@
 #define CAN_E_UNINIT            0x05U  /* [SWS_Can_00198 等]: Can_Init 前に呼ばれた */
 #define CAN_E_TRANSITION        0x06U  /* [SWS_Can_00200 等]: 不正な状態遷移要求 */
 
+/** 実行時エラーコード（SWS_Can_00104 の 7.11.2。開発エラーとは別の番号付け） */
+#define CAN_E_DATALOST          0x01U  /* [SWS_Can_00395]: 受信したメッセージを失った（受信バッファの上書き・オーバーラン） */
+
 /** クラシック CAN フレームの最大データ長（バイト）。SWS_Can_00218 参照。 */
 #define CAN_FRAME_MAX_DLC       8U
 
@@ -64,6 +67,7 @@
 #define CAN_API_ID_GET_CONTROLLER_MODE   0x12U
 #define CAN_API_ID_MAIN_FUNCTION_WRITE   0x01U
 #define CAN_API_ID_SET_CONTROLLER_MODE   0x03U
+#define CAN_API_ID_CHECK_WAKEUP          0x0BU
 #define CAN_API_ID_WRITE                 0x06U
 #define CAN_API_ID_MAIN_FUNCTION_READ    0x08U
 #define CAN_API_ID_MAIN_FUNCTION_BUSOFF  0x09U
@@ -187,6 +191,9 @@ typedef struct
                                       *   （AUTOSAR の CanControllerFdBaudRate 相当。通常のビットレートの整数倍） */
     uint8               txBitRateSwitch; /**< 1 = 送信時にデータ部でビットレートを切り替える
                                       *   （AUTOSAR の CanControllerTxBitRateSwitch 相当） */
+    uint8               triggerTransmitEnable; /**< 1 = Can_Write() が sdu = NULL（トリガ送信の要求）を受け付ける
+                                      *   （AUTOSAR の CanTriggerTransmitEnable 相当。仕様はハードウェアオブジェクトごと。
+                                      *   本実装は HTH が 1 つだけなので、設定に 1 つ持つ） */
 } Can_ConfigType;
 
 #endif /* CAN_CFG_H */

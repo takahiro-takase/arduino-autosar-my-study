@@ -57,6 +57,8 @@ const Can_ConfigType Can_Config = {
      * dataBitrate は通常のビットレートの整数倍（データ部のビットレート）。 */
     .fdEnabled       = 0U,
     .fdBaudrate      = 2000000UL,
-    .txBitRateSwitch = 1U
+    .txBitRateSwitch = 1U,
+    /* トリガ送信（CanTriggerTransmitEnable 相当）。1 のとき Can_Write() が sdu = NULL を受け付け、CanIf_TriggerTransmit() でデータを取得する。 */
+    .triggerTransmitEnable = 0U
 };
 /* @@GEN-END can-config */

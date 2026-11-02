@@ -135,6 +135,10 @@ static volatile Can_ControllerStateType CanState = CAN_CS_UNINIT;
 static volatile uint8 Can_RxIrqPending     = 0U;
 static volatile uint8 Can_WakeupIrqPending = 0U;
 
+/** スリープへ入ってから、ウェイクアップを検出したか（Can_MainFunction_Wakeup() がセットし、
+ *  Can_CheckWakeup() が読む。メインループの文脈だけで触る）。スリープから出るか、次にスリープへ入るか、Can_DeInit() で戻す。 */
+static uint8 Can_WakeupDetected = 0U;
+
 /* -----------------------------------------------------------------------
  * Bus-Off ソフトウェア補完カウンタ
  *
@@ -336,7 +340,8 @@ void Can_DeInit(void)
     SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA();
 
     Can_ResetQueues();
-    Can_TxErrCount = 0U;
+    Can_TxErrCount     = 0U;
+    Can_WakeupDetected = 0U;
 
     CanState      = CAN_CS_UNINIT;
     Can_ConfigPtr = NULL;
@@ -470,10 +475,12 @@ Std_ReturnType Can_SetControllerMode(uint8 Controller, Can_ControllerStateType T
     case CAN_CS_STOPPED:    /* STARTED/STOPPED → STOPPED（停止）、SLEEP → STOPPED（ウェイクアップ）。どちらも同じ受信専用モード */
         (void)Can_Hw_SetMode(CAN_HW_MODE_LISTEN_ONLY);
         CanState = CAN_CS_STOPPED;
+        Can_WakeupDetected = 0U;   /* スリープから出た。検出した起床は消費済みなので、以後の Can_CheckWakeup() は E_NOT_OK にする */
         break;
     case CAN_CS_SLEEP:
         (void)Can_Hw_SetMode(CAN_HW_MODE_SLEEP);
         CanState = CAN_CS_SLEEP;
+        Can_WakeupDetected = 0U;   /* 新しいスリープ。前回の起床の記録は捨てる */
         break;
     default:
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
@@ -590,7 +597,50 @@ void Can_EnableControllerInterrupts(uint8 Controller)
  * Can_CheckWakeup
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   コントローラが起床を検出したかを調べ、検出していれば EcuM へ通知する。
+ *
+ * \details 呼び出しの経路は、`EcuM_CheckWakeup()` → `CanIf_CheckWakeup()` → 本関数
+ *          （[SWS_Can_00364]/[SWS_CANIF_00395]）。直前にスリープへ入ってから、ウェイクアップを
+ *          検出した（`Can_MainFunction_Wakeup()` がバスの活動を検出した）コントローラについて、
+ *          `EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN)` を呼んで、E_OK を返す（[SWS_Can_00361]）。
+ *          検出の記録は、スリープから出る（`Can_SetControllerMode(CAN_CS_STOPPED)`）か、次にスリープへ入る
+ *          （`CAN_CS_SLEEP`）か、`Can_DeInit()` を呼ぶまで残る。検出していなければ、何もせず E_NOT_OK を返す。
+ *          構成項目 `CanWakeupFunctionalityAPI` による有効・無効の切り替えは持たない（[SWS_Can_00485]）。
+ *
+ * \param[in]  Controller  対象コントローラ ID (0 固定)。
+ *
+ * \retval  E_OK      起床を検出していて、EcuM へ通知した。
+ * \retval  E_NOT_OK  未初期化、Controller が範囲外、または起床を検出していない。
+ *
+ * \AUTOSARReq     {SWS_Can_00360, SWS_Can_00361, SWS_Can_00362, SWS_Can_00363}
+ * \ServiceID      {0x0B}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Can_CheckWakeup(uint8 Controller)
+{
+    if (Can_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_CHECK_WAKEUP, CAN_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (Controller != 0U)
+    {
+        (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_CHECK_WAKEUP, CAN_E_PARAM_CONTROLLER);
+        return E_NOT_OK;
+    }
+
+    if (Can_WakeupDetected == 0U)
+    {
+        return E_NOT_OK;
+    }
+
+    DET_LOGI(TAG, "CheckWakeup: wakeup detected -> EcuM_SetWakeupEvent");
+    EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN);
+    return E_OK;
+}
 
 /* ======================================================================
  * Services affecting a Hardware Handle
@@ -648,19 +698,27 @@ static uint8 Can_FdRoundUpLength(uint8 length)
  *          即座に E_NOT_OK を返す。PduInfo->length が 8 バイトを超える場合も
  *          同様に拒否する（[SWS_Can_00218]、CAN_E_PARAM_DATA_LENGTH）。
  *
+ *          PduInfo->sdu が NULL のときは、トリガ送信の要求として扱う（設定
+ *          Can_ConfigType.triggerTransmitEnable が 1 のときだけ。[SWS_Can_00503/00504]）。
+ *          送信できる状態なら CanIf_TriggerTransmit() を、バッファの最大長（クラシック CAN は 8 バイト、
+ *          CAN FD 有効時は 64 バイト）とともに呼んでデータを取得し、返った長さで送る。
+ *          CanIf_TriggerTransmit() が E_OK 以外なら E_NOT_OK を返す（[SWS_Can_00506]）。
+ *          無効の設定で NULL なら、CAN_E_PARAM_POINTER を報告して拒否する（[SWS_Can_00505]）。
+ *          NULL のときの PduInfo->length は使わない。
+ *
  * \param[in]  Hth      ハードウェア送信ハンドル。CAN_HTH_COUNT 未満であること
  *                      （範囲外は CAN_E_PARAM_HANDLE で拒否する、[SWS_Can_00217]）。
  *                      MCP2515 が TX バッファを自動選択するため、それ以外の用途には使わない。
  * \param[in]  PduInfo  送信する PDU へのポインタ。NULL 禁止。
  *                      使用メンバー: id, length, sdu, swPduHandle。
- *                      length は 8 バイト以下であること。
+ *                      length は 8 バイト以下であること。sdu は、トリガ送信が有効なときだけ NULL にできる。
  *
  * \retval  E_OK      フレームが受理され、送信に成功した。
  * \retval  E_NOT_OK  コントローラ未起動、length が 8 バイト超過、
- *                    または MCP2515 送信失敗。
+ *                    トリガ送信でのデータ取得の失敗、または MCP2515 送信失敗。
  * \retval  CAN_BUSY  この実装では返さない（MCP2515 が自動リトライ）。
  *
- * \AUTOSARReq     {SWS_Can_00016, SWS_Can_00217}
+ * \AUTOSARReq     {SWS_Can_00016, SWS_Can_00217, SWS_Can_00503, SWS_Can_00504, SWS_Can_00505, SWS_Can_00506}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant (different Hth)}
  * \Synchronicity  {Synchronous}
@@ -680,16 +738,18 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
         return E_NOT_OK;
     }
 
-    if ((PduInfo == NULL) || (PduInfo->sdu == NULL))
+    /* sdu が NULL なのは、トリガ送信が有効なときだけ許される（[SWS_Can_00503/00505]）。 */
+    if ((PduInfo == NULL) || ((PduInfo->sdu == NULL) && (Can_ConfigPtr->triggerTransmitEnable == 0U)))
     {
         DET_LOGE(TAG, "Write: NULL PduInfo/sdu");
         (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_WRITE, CAN_E_PARAM_POINTER);
         return E_NOT_OK;
     }
 
-    const uint8 maxLength = (Can_ConfigPtr->fdEnabled != 0U) ? CAN_FD_FRAME_MAX_DLC : CAN_FRAME_MAX_DLC;
+    const uint8   maxLength  = (Can_ConfigPtr->fdEnabled != 0U) ? CAN_FD_FRAME_MAX_DLC : CAN_FRAME_MAX_DLC;
+    const boolean useTrigger = (PduInfo->sdu == NULL);
 
-    if (PduInfo->length > maxLength)
+    if ((!useTrigger) && (PduInfo->length > maxLength))
     {
         /* [SWS_Can_00218]: length が上限（クラシック CAN は 8 バイト、CAN FD 有効時は 64 バイト）を超える場合は CAN_E_PARAM_DATA_LENGTH を
          * 報告して拒否する。上位層（CanIf_Transmit）は設定 DLC（常に 8 以下）
@@ -713,14 +773,33 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     uint8        txLength = (uint8)PduInfo->length;
     const uint8* txData   = PduInfo->sdu;
 
+    if (useTrigger)
+    {
+        /* [SWS_Can_00504]: バッファの最大長を渡して、上位層からデータを取得する。 */
+        PduInfoType triggerInfo = { .SduDataPtr = txBuf, .SduLength = (PduLengthType)maxLength };
+
+        if ((CanIf_TriggerTransmit(PduInfo->swPduHandle, &triggerInfo) != E_OK) || (triggerInfo.SduLength > maxLength))
+        {
+            DET_LOGE(TAG, "Write E: trigger transmit failed (pdu=%u)", (unsigned)PduInfo->swPduHandle);
+            return E_NOT_OK;   /* [SWS_Can_00506]（返った長さが最大長を超えるのも、取得の失敗として扱う） */
+        }
+        txLength = (uint8)triggerInfo.SduLength;
+        txData   = txBuf;
+    }
+
+    const uint8* srcData   = txData;     /* パディング前のデータ（ログ用にも使う） */
+    const uint8  srcLength = txLength;
+
     if (Can_ConfigPtr->fdEnabled != 0U)
     {
         const uint8 padded = Can_FdRoundUpLength(txLength);
         if (padded != txLength)
         {
+            /* トリガ送信では srcData が txBuf 自身。前から順に読んで同じ位置へ書くので、
+             * i < srcLength の間は自分自身を書き戻すだけで、元のデータを壊さない。 */
             for (uint8 i = 0U; i < padded; i++)
             {
-                txBuf[i] = (i < txLength) ? PduInfo->sdu[i] : (uint8)CAN_FD_PADDING_VALUE;
+                txBuf[i] = (i < srcLength) ? srcData[i] : (uint8)CAN_FD_PADDING_VALUE;
             }
             txData   = txBuf;
             txLength = padded;
@@ -745,7 +824,7 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
     Can_TxErrCount = 0U;
 
     char hexbuf[25];
-    Log_HexStr(hexbuf, sizeof(hexbuf), PduInfo->sdu, PduInfo->length);
+    Log_HexStr(hexbuf, sizeof(hexbuf), srcData, srcLength);
     DET_LOGD(TAG, "TX id=0x%lX [%s]", (unsigned long)PduInfo->id, hexbuf);
 
     if (Can_TxConfLen >= CAN_TX_CONF_QUEUE_SIZE)
@@ -834,9 +913,13 @@ void Can_MainFunction_Write(void)
  *          CAN_CS_STOPPED = Listen-Only 状態で届くため、対象外なのは
  *          SLEEP のみでよい）。
  *
+ *          受信バッファのオーバーフロー（MCP2515 の EFLG.RX0OVR/RX1OVR）を検出したときは、
+ *          受信を捨てたということなので、実行時エラー CAN_E_DATALOST を報告する
+ *          （[SWS_Can_00395]。報告のあと、フラグは消す）。ドレインの前に確認する。
+ *
  * \pre        Can_Init() が正常に完了していること。
  *
- * \AUTOSARReq     {SWS_Can_00108}
+ * \AUTOSARReq     {SWS_Can_00108, SWS_Can_00395}
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -857,6 +940,12 @@ void Can_MainFunction_Read(void)
     SchM_Enter_Can_IRQFLAG_EXCLUSIVE_AREA();
     Can_RxIrqPending = 0U;
     SchM_Exit_Can_IRQFLAG_EXCLUSIVE_AREA();
+
+    if (Can_Hw_TakeRxOverflow() == CAN_HW_OK)
+    {
+        DET_LOGE(TAG, "Read E: RX buffer overflow (message lost)");
+        (void)Det_ReportRuntimeError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_DATALOST);
+    }
 
     while (Can_Hw_CheckReceive() == CAN_HW_OK)
     {
@@ -920,13 +1009,15 @@ void Can_MainFunction_BusOff(void)
  *          判明した（Can_MainFunction_Read() のコメント参照）ため、
  *          INT ピンの直接ポーリング（`Can_Hw_IsWakeupPending()`、旧実装と
  *          同じ digitalRead() 方式を Can_Hw 層へ委譲したもの）も
- *          フォールバックとして併用する。いずれか一方でも検出できれば
+ *          フォールバックとして併用する。いずれか一方でも検出できれば、検出を記録して
  *          `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)`（[SWS_Can_00271]）で
  *          ECU State Manager へ直接通知する（2026-09-05 是正前は、実仕様に
  *          存在しない独自 API `CanIf_ControllerWakeup()` を経由していた）。
- *          `EcuM_CheckWakeup()` は内部で `CanSM_StartWakeupSource()`
+ *          `EcuM_CheckWakeup()` は `CanIf_CheckWakeup()` を呼び、CanIf が呼ぶ
+ *          `Can_CheckWakeup()` が、記録を見て `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
+ *          `EcuM_SetWakeupEvent()` が、内部で `CanSM_StartWakeupSource()`
  *          （AUTOSAR EcuM Wakeup Validation Protocol 相当を CanSM 側で模した
- *          検証シーケンス、CanSM.c 参照）へ委譲する（EcuM.h 参照）。
+ *          検証シーケンス、CanSM.c 参照）へ続ける（EcuM.h 参照）。
  *
  *          BswM は SHUTDOWN 中も本タスクだけは無効化しない
  *          （WdgM_MainFunction・Can_MainFunction_Read・CanSM_MainFunction・
@@ -969,6 +1060,7 @@ void Can_MainFunction_Wakeup(void)
     if ((pending) != 0U)
     {
         DET_LOGI(TAG, "Wakeup detected (INT asserted during SLEEP)");
+        Can_WakeupDetected = 1U;   /* EcuM_CheckWakeup() が呼び返す Can_CheckWakeup() が読む */
         EcuM_CheckWakeup(ECUM_WKSOURCE_CAN);
     }
 }

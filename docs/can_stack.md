@@ -371,10 +371,13 @@ App_EngineManager_Run（3000ms タスク、ENGINE_STATE_OFF が5周期継続）
 Can_Isr（INT ピン立ち下がりの真のハードウェア割り込み。SHUTDOWN 中も常に有効）
   └→ Can_WakeupIrqPending フラグをセットするのみ（SPI/Serial は行わない）
        └→ Can_MainFunction_Wakeup（1ms タスク、SHUTDOWN 中もこのタスクだけは動き続ける）
-            がフラグをドレインし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)  ← Can が EcuM へ直接通知（[SWS_Can_00271]）
-                 └→ CanSM_StartWakeupSource(0)
-                      └→ Can_SetControllerMode(CAN_CS_STOPPED)   ← SLEEP→STOPPED (Listen-Only) のみ
-                           └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
+            がフラグをドレインし、起床を記録して EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)  ← Can が EcuM へ直接通知（[SWS_Can_00271]）
+                 └→ CanIf_CheckWakeup(ECUM_WKSOURCE_CAN)             ← EcuM が CAN の要因を確認（[SWS_CANIF_00395]）
+                      └→ Can_CheckWakeup(0)                          ← 記録した起床を確認（[SWS_Can_00361]）
+                           └→ EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN) ← 検証待ち（PENDING）にして、タイムアウトを起算
+                                └→ CanSM_StartWakeupSource(0)
+                                     └→ Can_SetControllerMode(CAN_CS_STOPPED)   ← SLEEP→STOPPED (Listen-Only) のみ
+                                          └→ CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ何も通知しない）
 
 【2nd phase-a: 検証成功（検証タイマ内に有効な CAN フレームを受信）】
 Can_MainFunction_Read（Listen-Only になったため通常の RX ドレインが有効。
@@ -383,7 +386,7 @@ Can_MainFunction_Read（Listen-Only になったため通常の RX ドレイン�
        └→ （同じフレームがそのまま PduR/Com/Dcm 等へも配信される）
 
 EcuM_MainFunction()（SHUTDOWN 中も動作）:
-  検証待ちの起床要因（EcuM_CheckWakeup() が保留）がある ?
+  検証待ちの起床要因（EcuM_SetWakeupEvent() が保留）がある ?
     YES → CanIf_CheckValidation(ECUM_WKSOURCE_CAN)    ← 記憶した受信があれば:
             └→ EcuM_ValidateWakeupEvent(ECUM_WKSOURCE_CAN)
                  └→ ComM_EcuM_WakeUpIndication(0)    ← チャネルが NO_COM のとき
@@ -480,7 +483,8 @@ Can_Isr()（INT ピン立ち下がりの真のハードウェア割り込み、S
 
 Can_MainFunction_Wakeup()（1ms 周期、SHUTDOWN 中も動作）:
   CAN_CS_SLEEP 中 かつ Can_WakeupIrqPending ?
-    YES → フラグをクリアし EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanSM_StartWakeupSource(0)
+    YES → フラグをクリアし、起床を記録して EcuM_CheckWakeup(ECUM_WKSOURCE_CAN) → CanIf_CheckWakeup() → Can_CheckWakeup()
+            → EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN) → CanSM_StartWakeupSource(0)
             → Can_SetControllerMode(CAN_CS_STOPPED)   ← SLEEP→STOPPED (Listen-Only) のみ
             → CanSM: NO_COM → WAKEUP_VALIDATING（ComM/EcuM へはまだ通知しない）
 

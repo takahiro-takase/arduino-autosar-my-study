@@ -148,6 +148,31 @@ CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId);
 Std_ReturnType CanIf_CheckValidation(EcuM_WakeupSourceType WakeupSource);
 
 /**
+ * \brief   CAN コントローラが起床を検出したかを調べる（[SWS_CANIF_00219]）。
+ *
+ * \details EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼ぶ
+ *          （[SWS_CANIF_00395]）。起床を検出したコントローラを `Can_CheckWakeup()` で調べ、
+ *          検出していれば Can が `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
+ *          戻り値は、`Can_CheckWakeup()` の戻り値をそのまま返す（[SWS_CANIF_00720]/[SWS_CANIF_00678]）。
+ *          本プロジェクトの CAN コントローラは 1 つだけで、CAN トランシーバのドライバは持たない。
+ *          構成項目 `CanIfWakeupSupport`/`CanIfCtrlWakeupSupport` による有効・無効の切り替えは持たない
+ *          （[SWS_CANIF_00180]/[SWS_CANIF_00892]）。
+ *
+ * \param[in]  WakeupSource  確認する起床要因（`ECUM_WKSOURCE_CAN` のビット）。
+ *                          ビットが立っていなければ `CANIF_E_PARAM_WAKEUPSOURCE`
+ *                          （[SWS_CANIF_00398]）を DET へ報告する。
+ *
+ * \retval  E_OK      コントローラが起床を検出していた（`EcuM_SetWakeupEvent()` を呼んだ）。
+ * \retval  E_NOT_OK  WakeupSource が不正、CanIf が未初期化、または起床を検出していない。
+ *
+ * \AUTOSARReq     {SWS_CANIF_00219, SWS_CANIF_00395, SWS_CANIF_00398, SWS_CANIF_00720, SWS_CANIF_00678}
+ * \ServiceID      {0x11}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType CanIf_CheckWakeup(EcuM_WakeupSourceType WakeupSource);
+
+/**
  * \brief   指定コントローラで、直近の起動以降に一度でも TX 確認があったかを返す
  *          （[SWS_CANIF_00734]）。
  *

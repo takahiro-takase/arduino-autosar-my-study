@@ -110,11 +110,29 @@ TX PDU は、トリガ送信に対応しないので `E_NOT_OK` です（[SWS_CA
 `TxPduId` が範囲外なら `CANIF_E_INVALID_TXPDUID`、NULL のポインタは `CANIF_E_PARAM_POINTER` を報告します。
 未初期化は、他の API と同じく、`CANIF_E_UNINIT` を報告して `E_NOT_OK` です。
 
-**本番コードからは呼ばれません**: 本プロジェクトの Can ドライバ（MCP2515）は、送信の直前にデータを
-取りに来ません。`Can_Write()` へデータを渡さずに送信を要求する経路もないので、`CanIf_Transmit()` が
-NULL の `SduDataPtr` を受け付ける動作（[SWS_CANIF_00882]）も未実装です。構成項目
+**呼び出し元は、Can の `Can_Write()` です（2026-11）**。`Can_Write()` が、データの代わりに NULL の `sdu` を受けたとき
+（トリガ送信の要求、[SWS_Can_00503/00504]）、送信できる状態なら、本関数を呼んでデータを取得します
+（詳細は [`Can_Notes.md`](./Can_Notes.md) の「トリガ送信」）。`CanIf_Transmit()` は、`TriggerTransmitFct` を持つ
+TX PDU に限り、NULL の `SduDataPtr` を受け付けて、そのまま `Can_Write()` へ渡します（[SWS_CANIF_00882]。
+持たない PDU の NULL は、従来どおり `CANIF_E_PARAM_POINTER`）。データを渡された場合は、トリガ送信の PDU でも、
+取りに行かず、そのまま送ります。
+
+**本番の設定では、実際には使われません**: Can の設定 `triggerTransmitEnable` が、本番では 0（無効）で、
+NM の PDU も、CanNm が `CanIf_Transmit()` へデータを渡して送ります。構成項目
 `CanIfTriggerTransmitSupport` による有効・無効の切り替えは持たず、TX PDU ごとの `TriggerTransmitFct` の
 有無だけで決めます。全体の流れは、[`Com_Notes.md`](./Com_Notes.md) の「Com_TriggerTransmit」を参照してください。
+
+## CanIf_CheckWakeup（起床の検出の確認）
+
+EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼びます（[SWS_CANIF_00395]）。
+`Can_CheckWakeup()` で、コントローラが起床を検出したかを調べ、その戻り値をそのまま返します
+（[SWS_CANIF_00720]/[SWS_CANIF_00678]。検出していれば `E_OK`）。検出していた場合は、Can が `EcuM_SetWakeupEvent()` を
+呼びます。`WakeupSource` に `ECUM_WKSOURCE_CAN` のビットが無いときは `CANIF_E_PARAM_WAKEUPSOURCE`
+（[SWS_CANIF_00398]）、未初期化のときは `CANIF_E_UNINIT` を報告して `E_NOT_OK` です。
+
+**簡略化**: CAN コントローラは 1 つだけで、CAN トランシーバのドライバ（`CanTrcv_CheckWakeup()`）は持ちません。
+構成項目 `CanIfWakeupSupport`/`CanIfCtrlWakeupSupport` による有効・無効の切り替えも持たず、常に有効です
+（[SWS_CANIF_00180]/[SWS_CANIF_00892]）。流れの全体は、[`EcuM_Notes.md`](./EcuM_Notes.md) の「ウェイクアップ通知」を参照してください。
 
 ## 通知状態の読み出し API
 

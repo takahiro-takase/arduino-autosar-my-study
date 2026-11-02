@@ -19,6 +19,7 @@
  * ====================================================================== */
 
 #include <Arduino.h>
+#include <SPI.h>
 #include "Can_Hw.h"
 #include <mcp_can.h>
 #include <new>
@@ -36,6 +37,7 @@
 #define MCP_EFLG_TXBO  0x20U  /* bit5: Bus-Off             */
 #define MCP_EFLG_TXEP  0x10U  /* bit4: TX Error-Passive    */
 #define MCP_EFLG_RXEP  0x08U  /* bit3: RX Error-Passive    */
+#define MCP_EFLG_RXOVR 0xC0U  /* bit7: RX1OVR / bit6: RX0OVR（受信バッファのオーバーフロー） */
 
 
 /* ======================================================================
@@ -48,6 +50,7 @@
 
 static uint8_t  driverBuf[sizeof(MCP_CAN)];
 static MCP_CAN* driver = nullptr;
+static uint8_t  Can_Hw_CsPin  = 0xFFU;  /**< Can_Hw_Init() の csPin（EFLG のフラグを SPI で直接消すのに使う） */
 static uint8_t  Can_Hw_IntPin = 0xFFU;  /**< Can_Hw_AttachRxIsr() が登録したピン番号 */
 static void (*Can_Hw_Isr)(void) = nullptr;  /**< Can_Hw_EnableRxIsr() での再登録用に記憶する ISR */
 
@@ -72,6 +75,7 @@ Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalF
     }
 
     driver = new (driverBuf) MCP_CAN(csPin);
+    Can_Hw_CsPin = csPin;
 
     return (driver->begin(MCP_STDEXT, baudrate, mcpClock) == CAN_OK)
            ? CAN_HW_OK : CAN_HW_FAIL;
@@ -203,6 +207,28 @@ Can_Hw_ReturnType Can_Hw_IsBusOff(void)
 
     /* MCP2515 EFLG bit5 = TXBO（Bus-Off Error Flag） */
     return ((eflg & MCP_EFLG_TXBO) != 0U) ? CAN_HW_OK : CAN_HW_FAIL;
+}
+
+Can_Hw_ReturnType Can_Hw_TakeRxOverflow(void)
+{
+    if (driver == nullptr) return CAN_HW_FAIL;
+
+    const uint8_t observed = (uint8_t)(driver->getError() & MCP_EFLG_RXOVR);
+    if (observed == 0U) return CAN_HW_FAIL;
+
+    /* RXnOVR は MCU が消さないと立ったままになる。mcp_can にはレジスタを書く公開 API が無いので、
+     * ライブラリの mcp2515_modifyRegister() と同じ BIT MODIFY の手順（SPI 設定も同じ）を直接送る。
+     * 読み取ったビットだけを消し、読んだ後に立った別のバッファの分は残す。
+     * 協調スケジューラ上の単一の流れから呼ばれ、割り込みは SPI に触れない（フラグを立てるだけ）。 */
+    SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+    digitalWrite(Can_Hw_CsPin, LOW);
+    SPI.transfer(MCP_BITMOD);
+    SPI.transfer(MCP_EFLG);
+    SPI.transfer(observed);
+    SPI.transfer(0x00U);
+    digitalWrite(Can_Hw_CsPin, HIGH);
+    SPI.endTransaction();
+    return CAN_HW_OK;
 }
 
 Can_Hw_ReturnType Can_Hw_GetErrorState(uint8_t* errorStateOut)

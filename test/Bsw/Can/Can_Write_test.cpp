@@ -69,6 +69,7 @@ protected:
         config.baudrate        = 500000U;
         config.crystalFreq     = CAN_CRYSTAL_16MHZ;
         config.fdEnabled       = 0U;  // 既定はクラシック CAN（CAN FD のテストは自分で 1 にする）
+        config.triggerTransmitEnable = 0U;  // 既定はトリガ送信なし（トリガ送信のテストは自分で 1 にする）
     }
     Can_ConfigType config;
 };
@@ -169,6 +170,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_NullPduInfoSdu)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 0U);   // トリガ送信が無効なら、NULL は拒否するだけ
 }
 
 TEST_F(Can_Write_Test, Can_Write_NG_LengthExceeds)
@@ -434,6 +436,255 @@ TEST_F(Can_Write_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 成功で 0 にリセットされる
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_NullSduUsesTriggerTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.triggerTransmitEnable = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_OK;
+    ForcedSduLength_CanIf_TriggerTransmit   = 3U;
+    ForcedSduData_CanIf_TriggerTransmit[0]  = 0xA1U;
+    ForcedSduData_CanIf_TriggerTransmit[1]  = 0xA2U;
+    ForcedSduData_CanIf_TriggerTransmit[2]  = 0xA3U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 1U);
+    EXPECT_EQ(LastPduId_CanIf_TriggerTransmit, 7U);            // swPduHandle を CanIf_TriggerTransmit() の TxPduId に渡す
+    EXPECT_EQ(LastMaxLength_CanIf_TriggerTransmit, 8U);        // クラシック CAN のバッファの最大長（[SWS_Can_00504]）
+    EXPECT_EQ(FakeCanHw_SendCount, 1U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 3U);                      // 上位層が返した長さで送る
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0xA1U);
+    EXPECT_EQ(FakeCanHw_LastSendData[1], 0xA2U);
+    EXPECT_EQ(FakeCanHw_LastSendData[2], 0xA3U);
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_NullSduFdEnabledPassesMaxLength64)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.fdEnabled = 1U;
+    config.triggerTransmitEnable = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_OK;
+    ForcedSduLength_CanIf_TriggerTransmit   = 12U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(LastMaxLength_CanIf_TriggerTransmit, 64U);       // CAN FD 有効時の最大長
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 12U);
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_NullSduFdEnabledPadsTriggeredData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.fdEnabled = 1U;
+    config.triggerTransmitEnable = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_OK;
+    ForcedSduLength_CanIf_TriggerTransmit   = 13U;   // CAN FD で有効でない長さ（次は 16）
+    for (uint8_t b = 0U; b < 13U; b++)
+        ForcedSduData_CanIf_TriggerTransmit[b] = (uint8_t)(0x30U + b);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 16U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x30U);                            // 取得したデータが、埋めても壊れない
+    EXPECT_EQ(FakeCanHw_LastSendData[12], 0x3CU);
+    EXPECT_EQ(FakeCanHw_LastSendData[13], CAN_FD_PADDING_VALUE);
+    EXPECT_EQ(FakeCanHw_LastSendData[15], CAN_FD_PADDING_VALUE);
+}
+
+TEST_F(Can_Write_Test, Can_Write_NG_NullSduTriggerTransmitFails)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.triggerTransmitEnable = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);                  // [SWS_Can_00506]
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 1U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);        // 送信しない
+    EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);   // 送信の失敗ではないので、Bus-Off の補完カウンタは進めない
+}
+
+TEST_F(Can_Write_Test, Can_Write_NG_NullSduTriggerTransmitReturnsTooLong)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.triggerTransmitEnable = 1U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+    FailFromCallCount_CanIf_TriggerTransmit = 1U;
+    ForcedReturn_CanIf_TriggerTransmit      = E_OK;
+    ForcedSduLength_CanIf_TriggerTransmit   = 9U;   // クラシック CAN の上限 8 を超える
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+TEST_F(Can_Write_Test, Can_Write_NG_NullSduNotStartedDoesNotCallTriggerTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.triggerTransmitEnable = 1U;
+    Can_Init(&config);   // STOPPED のまま
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 0U);   // 送信できる状態でなければ、データを取りに行かない
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+TEST_F(Can_Write_Test, Can_Write_NG_NullSduTriggerTransmitDisabled)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.triggerTransmitEnable = 0U;
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 0U;   // トリガ送信では使わない
+    pdu.sdu = NULL;
+    pdu.swPduHandle = 7U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_PARAM_POINTER);   // [SWS_Can_00505]
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 0U);
+    EXPECT_EQ(FakeCanHw_SendCount, 0U);
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_NonNullSduDoesNotCallTriggerTransmit)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.triggerTransmitEnable = 1U;   // 有効でも、sdu が与えられていれば、取りに行かない
+    Can_Init(&config);
+    Can_Test_SetControllerState(CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 2U;
+    uint8_t sdu[2] = {0x55U, 0x66U};
+    pdu.sdu = sdu;
+    pdu.swPduHandle = 7U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(CallCount_CanIf_TriggerTransmit, 0U);
+    EXPECT_EQ(FakeCanHw_LastSendDlc, 2U);
+    EXPECT_EQ(FakeCanHw_LastSendData[0], 0x55U);
 }
 
 }  // namespace

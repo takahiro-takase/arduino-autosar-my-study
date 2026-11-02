@@ -62,6 +62,15 @@ Can_Hw_ReturnType Can_Hw_SetMode(Can_Hw_Mode mode);
 Can_Hw_ReturnType Can_Hw_CheckReceive(void);
 Can_Hw_ReturnType Can_Hw_IsBusOff(void);
 
+/** MCP2515 の EFLG レジスタの受信オーバーフロー（RX0OVR/RX1OVR）を確認し、立っていれば
+ *  フラグを消して知らせる（読んで消す）。受信バッファが埋まっているところへ新しいフレームが届き、
+ *  取りこぼした（上書きされた、または捨てられた）ことを表す。フラグは MCU が消さないと立ったままになる。
+ *  mcp_can ライブラリにはレジスタを書く公開 API が無いため、BIT MODIFY を SPI で直接送って消す
+ *  （Can_Hw_Init() の csPin を覚えている）。
+ *  \retval  CAN_HW_OK    受信オーバーフローがあった（フラグを消した）
+ *  \retval  CAN_HW_FAIL  オーバーフローなし、またはドライバ未初期化 */
+Can_Hw_ReturnType Can_Hw_TakeRxOverflow(void);
+
 /** MCP2515 の EFLG レジスタから、Bus-Off/Error-Passive/Active の3状態を
  *  導出して *errorStateOut に格納する（0=Active, 1=Passive, 2=Bus-Off。
  *  Can_GeneralTypes.h の Can_ErrorStateType と同じ数値のため、呼び出し元は

@@ -104,6 +104,8 @@ extern uint32 CallCount_CanIf_GetTxConfirmationState;
 extern uint32 CallCount_CanIf_TxConfirmation;
 extern uint32 CallCount_CanIf_RxIndication;
 extern uint32 CallCount_CanIf_ControllerBusOff;
+extern uint32 CallCount_CanIf_TriggerTransmit;
+extern uint32 CallCount_CanIf_CheckWakeup;
 
 extern uint32 FailFromCallCount_CanIf_SetControllerMode;
 extern uint32 FailFromCallCount_CanIf_GetControllerMode;
@@ -115,6 +117,8 @@ extern uint32 FailFromCallCount_CanIf_ReadRxNotifStatus;
 extern uint32 FailFromCallCount_CanIf_SetPduMode;
 extern uint32 FailFromCallCount_CanIf_GetPduMode;
 extern uint32 FailFromCallCount_CanIf_GetTxConfirmationState;
+extern uint32 FailFromCallCount_CanIf_TriggerTransmit;
+extern uint32 FailFromCallCount_CanIf_CheckWakeup;
 
 /** 閾値到達後に返す戻り値（既定 E_NOT_OK）。 */
 extern Std_ReturnType ForcedReturn_CanIf_SetControllerMode;
@@ -127,6 +131,19 @@ extern CanIf_NotifStatusType ForcedReturn_CanIf_ReadRxNotifStatus;
 extern Std_ReturnType ForcedReturn_CanIf_SetPduMode;
 extern Std_ReturnType ForcedReturn_CanIf_GetPduMode;
 extern CanIf_NotifStatusType ForcedReturn_CanIf_GetTxConfirmationState;
+extern Std_ReturnType ForcedReturn_CanIf_TriggerTransmit;
+extern Std_ReturnType ForcedReturn_CanIf_CheckWakeup;
+
+/** CanIf_TriggerTransmit() が閾値到達後（ForcedReturn が E_OK のとき）に PduInfoPtr へ返すデータと長さ。
+ *  Can_Write() のトリガ送信（sdu = NULL）の検証用。最大 64 バイト（CAN FD の上限）。 */
+#define WRAP_CANIF_TRIGGER_DATA_MAX 64U
+extern PduLengthType ForcedSduLength_CanIf_TriggerTransmit;
+extern uint8         ForcedSduData_CanIf_TriggerTransmit[WRAP_CANIF_TRIGGER_DATA_MAX];
+/** 直近の CanIf_TriggerTransmit() の引数（TxPduId と、呼び出し元が渡したバッファの最大長）。 */
+extern PduIdType     LastPduId_CanIf_TriggerTransmit;
+extern PduLengthType LastMaxLength_CanIf_TriggerTransmit;
+/** 直近の CanIf_CheckWakeup() の引数。 */
+extern EcuM_WakeupSourceType LastWakeupSource_CanIf_CheckWakeup;
 
 extern PduIdType     LastPduId_CanIf_Transmit;
 extern PduLengthType LastLength_CanIf_Transmit;

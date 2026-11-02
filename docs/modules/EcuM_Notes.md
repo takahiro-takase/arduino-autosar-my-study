@@ -163,14 +163,25 @@ Bus-Off 回復中に SILENT_COM を何度挟んでも、EcuM への再通知は�
 エラーコード（`ECUM_E_MULTIPLE_RUN_REQUESTS` / `ECUM_E_MISMATCHED_RUN_RELEASE`）を共用します。
 **本プロジェクトの本番コードにこの 2 関数を呼ぶ箇所はありません**（ユニットテストのみ）。
 
-## ウェイクアップ通知（`EcuM_CheckWakeup`）
+## ウェイクアップ通知（`EcuM_CheckWakeup` と `EcuM_SetWakeupEvent`）
 
 [SWS_Can_00271]。Can ドライバの `Can_MainFunction_Wakeup()` が、スリープ中の CAN バス活動を
-検出すると `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)` を呼びます（旧 `CanIf_ControllerWakeup()` の
+検出すると、検出を記録して `EcuM_CheckWakeup(ECUM_WKSOURCE_CAN)` を呼びます（旧 `CanIf_ControllerWakeup()` の
 役割を引き継ぐ）。EcuM は CAN 以外の要因を持たないため、`ECUM_WKSOURCE_CAN` 以外には
-`ECUM_E_INVALID_PAR` を報告します。CAN の場合は `CanSM_StartWakeupSource()`（[SWS_CanSM_00609]。以前は `CanSM_ControllerModeIndication()` を起床の合図に
-流用していた）を呼んで、ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始め、検証に成功すると ComM 経由で
-`EcuM_RequestRUN()` が呼ばれて SHUTDOWN から RUN へ戻ります
+`ECUM_E_INVALID_PAR` を報告します。
+
+**2026-11 に、仕様の経路へ分けました**。以前は、`EcuM_CheckWakeup()` が、起床の確認と、検証待ち（PENDING）への登録を
+兼ねていました（`EcuM_SetWakeupEvent()` は未実装）。今は、次の順に呼ばれます。
+
+1. `EcuM_CheckWakeup()`（コールアウト。ECU 統合側の役目）が、CAN の要因について `CanIf_CheckWakeup()` を呼ぶ（[SWS_CANIF_00395]）。
+2. CanIf が `Can_CheckWakeup()` で、コントローラが起床を検出したかを調べる。
+3. 検出していれば、Can が `EcuM_SetWakeupEvent(ECUM_WKSOURCE_CAN)` を呼ぶ（[SWS_Can_00361]。[SWS_EcuM_02826]）。
+4. `EcuM_SetWakeupEvent()` が、検証待ちにして、検証のタイムアウトを起算し、BswM へ PENDING を通知して、
+   `CanSM_StartWakeupSource()`（[SWS_CanSM_00609]。以前は `CanSM_ControllerModeIndication()` を起床の合図に
+   流用していた）を呼んで、ウェイクアップ検証（CanSM の `WAKEUP_VALIDATING`）を始める。
+   `ECUM_WKSOURCE_CAN` 以外の要因を含むときは、`ECUM_E_UNKNOWN_WAKEUP_SOURCE`（[SWS_EcuM_02867]）を報告して、何もしない。
+
+検証に成功すると ComM 経由で `EcuM_RequestRUN()` が呼ばれて SHUTDOWN から RUN へ戻ります
 （詳細は [`CanSM_Notes.md`](./CanSM_Notes.md) と [can_stack.md](../can_stack.md#can-controller-sleep)）。
 
 ### 起床要因の状態と検証のタイムアウト（2026-10 追加）
@@ -182,11 +193,11 @@ EcuM は、起床要因を、仕様（[SWS_EcuM_04091]）の4つの状態で持�
 | 状態 | 意味 | 取得 | 遷移 |
 | --- | --- | --- | --- |
 | NONE | 起床が無い、または消した | — | `EcuM_ClearWakeupEvent()` |
-| PENDING | 起床を検出したが、まだ検証されていない | `EcuM_GetPendingWakeupEvents()` | `EcuM_CheckWakeup()` が立て、検証のタイムアウトを起算する（[SWS_EcuM_02709]）。検証待ちの間の再通知では、起算し直さない（[SWS_EcuM_02712]） |
+| PENDING | 起床を検出したが、まだ検証されていない | `EcuM_GetPendingWakeupEvents()` | `EcuM_SetWakeupEvent()` が立て、検証のタイムアウトを起算する（[SWS_EcuM_02709]）。検証待ちの間の再通知では、起算し直さない（[SWS_EcuM_02712]） |
 | VALIDATED | 検証された | `EcuM_GetValidatedWakeupEvents()` | `EcuM_ValidateWakeupEvent()`。検証待ちが無くなるので、タイムアウトは意味を失う（[SWS_EcuM_02710]） |
 | EXPIRED | 検証されないまま、タイムアウトした | `EcuM_GetExpiredWakeupEvents()` | `ECUM_VALIDATION_TIMEOUT_MS` が経つと、`EcuM_MainFunction()` が、検証待ちから外して、立てる（[SWS_EcuM_04081]） |
 
-- 新しく起床を検出（`EcuM_CheckWakeup()`）すると、前回の VALIDATED・EXPIRED の記録は消えます。期限切れの後に、遅れて検証された場合は、
+- 新しく起床を検出（`EcuM_SetWakeupEvent()`）すると、前回の VALIDATED・EXPIRED の記録は消えます。期限切れの後に、遅れて検証された場合は、
   EXPIRED を外して、VALIDATED にします。
 - `ECUM_VALIDATION_TIMEOUT_MS`（既定 3000 ms、`config/data/EcuM.json`）は、CanSM の検証の時間（`CANSM_WAKEUP_VALIDATION_MS`、2000 ms）より長くしてあります。
   ノイズの起床では、CanSM が先に、コントローラをスリープへ戻し、1 秒後に、EcuM が EXPIRED にします。

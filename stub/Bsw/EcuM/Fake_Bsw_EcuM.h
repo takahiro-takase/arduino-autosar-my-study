@@ -62,11 +62,14 @@ extern uint8 FakeEcuM_PassThrough;
 extern uint32 FakeEcuM_RequestRUNCount;
 extern uint32 FakeEcuM_ReleaseRUNCount;
 extern uint32 FakeEcuM_CheckWakeupCount;
+extern uint32 FakeEcuM_SetWakeupEventCount;
 
 /** 直近の呼び出しの引数。 */
 extern EcuM_UserType FakeEcuM_LastRequestUser;
 extern EcuM_UserType FakeEcuM_LastReleaseUser;
 extern EcuM_WakeupSourceType FakeEcuM_LastWakeupSource;
+/** 直近の EcuM_SetWakeupEvent() の引数（Can_CheckWakeup() が通知する起床要因）。 */
+extern EcuM_WakeupSourceType FakeEcuM_LastSetWakeupEventSources;
 
 /* ======================================================================
  * Functions

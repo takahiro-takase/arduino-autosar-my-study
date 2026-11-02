@@ -47,6 +47,7 @@ extern uint32 FakeCanHw_InitFilterCount;
 extern uint32 FakeCanHw_SetModeCount;
 extern uint32 FakeCanHw_CheckReceiveCount;
 extern uint32 FakeCanHw_IsBusOffCount;
+extern uint32 FakeCanHw_TakeRxOverflowCount;
 extern uint32 FakeCanHw_GetErrorStateCount;
 extern uint32 FakeCanHw_IsWakeupPendingCount;
 extern uint32 FakeCanHw_AttachRxIsrCount;
@@ -84,6 +85,8 @@ extern uint8_t  FakeCanHw_RxData[FAKECANHW_DATA_MAX];
 extern Can_Hw_ReturnType FakeCanHw_InitReturn;
 extern Can_Hw_ReturnType FakeCanHw_SendReturn;
 extern Can_Hw_ReturnType FakeCanHw_IsBusOffReturn;
+/** Can_Hw_TakeRxOverflow() の戻り値（既定 CAN_HW_FAIL = オーバーフローなし）。 */
+extern Can_Hw_ReturnType FakeCanHw_TakeRxOverflowReturn;
 extern Can_Hw_ReturnType FakeCanHw_IsWakeupPendingReturn;
 
 /** Can_Hw_GetErrorState() が *errorStateOut へ書き込む値（既定 0 = Active）と
