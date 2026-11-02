@@ -36,13 +36,14 @@
  *            経年回復 (Aging) 完了 → CDTC を自動クリア (詳細は下記)
  *
  *          PendingDTC (PDTC) の操作サイクル境界での自動クリア:
- *            SWS_Dem_00390 (Figure 7.19) 準拠。Dem_Init() が起動ごとに
- *            「直前の操作サイクル」の最終ステータスを評価し (TF/TFTOC/TNCTC を
- *            新サイクル用にリセットする直前の値を見る)、PDTC=1 かつ
+ *            SWS_Dem_00390 (Figure 7.19) 準拠。操作サイクルの終了
+ *            （Dem_SetOperationCycleState(END)、Dem_EndOperationCycle()）で、
+ *            そのサイクルの最終ステータスを評価し、PDTC=1 かつ
  *            TFTOC=0（このサイクル中に FAILED 確定なし）かつ TNCTC=0（テスト済み）
- *            であれば即座に PDTC をクリアする。CDTC のような多サイクルの
- *            エージングカウンタは介さず、クリーンなサイクルが 1 回来た時点で
- *            即クリアする点が CDTC との違い（Dem_EvaluatePendingClear()）。
+ *            であれば即座に PDTC をクリアする。電源 OFF で終わる電源サイクルは END が呼ばれないので、
+ *            次の起動の Dem_Init() が、前回の最終ステータスで評価する（再開始も同じ）。
+ *            CDTC のような多サイクルのエージングカウンタは介さず、クリーンなサイクルが
+ *            1 回来た時点で即クリアする点が CDTC との違い（Dem_EvaluatePendingClear()）。
  *
  *          経年回復 (Aging) — 操作サイクルベースの CDTC 自動回復:
  *            Dem_Init() が起動ごとに「直前の操作サイクル」の最終ステータスを評価する
@@ -172,6 +173,7 @@ static uint8 Dem_FilterMatches(Dem_EventIdType EventId);
 static void Dem_EvaluateAging(Dem_EventIdType EventId);
 static void Dem_EvaluatePendingClear(Dem_EventIdType EventId);
 static uint8 Dem_BeginOperationCycle(uint8 notifyFim);
+static uint8 Dem_EndOperationCycle(void);
 
 /* ======================================================================
  * Functions
@@ -1085,7 +1087,8 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
  *          最終ステータスで、経年回復（Aging）と PendingDTC の自動クリアを評価し、イベントごとに TestFailed・
  *          TestFailedThisOperationCycle をクリア、TestNotCompletedThisOperationCycle を立て、デバウンスカウンタを
  *          0 へ戻す。開始してから、`Dem_SetEventStatus()` の報告を、再び受け付ける（[SWS_Dem_00481]）。
- *          END: 操作サイクルを終了する。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
+ *          END: 操作サイクルを終了する。そのサイクルの最終ステータスで、PendingDTC の自動クリアを評価する
+ *          （[SWS_Dem_00390]）。終了している間、`Dem_SetEventStatus()` の報告は無視され、その報告による
  *          UDS ステータスの変化は起きない（[SWS_Dem_00482]。`Dem_ClearDTC()` のような、明示的な操作は、サイクルの
  *          状態に関係なく働く）。既に終了済みなら、何もしない（[SWS_Dem_00484]）。
  *
@@ -1125,6 +1128,10 @@ Std_ReturnType Dem_SetOperationCycleState(uint8 OperationCycleId, Dem_OperationC
         if (Dem_OperationCycleState[OperationCycleId] != DEM_CYCLE_STATE_END)
         {
             Dem_OperationCycleState[OperationCycleId] = DEM_CYCLE_STATE_END;
+            if (Dem_EndOperationCycle() != 0U)
+            {
+                (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
+            }
             DET_LOGI(TAG, "operation cycle %u ended", (unsigned)OperationCycleId);
         }
         return E_OK;
@@ -2273,7 +2280,7 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   PendingDTC (UDS status bit2) を操作サイクル境界で判定する。
+ * \brief   PendingDTC (UDS status bit2) を、操作サイクルの最終ステータスで判定する。
  *
  * \details SWS_Dem_00390 (Figure 7.19): PendingDTC は
  *          「NOT TestFailedThisOperationCycle AND NOT TestNotCompletedThisOperationCycle
@@ -2281,9 +2288,11 @@ static void Dem_EvaluateAging(Dem_EventIdType EventId)
  *          CONFIRMED (bit3) のような多サイクルのエージングは行わず、直前サイクルが
  *          1 回でもクリーン（そのサイクル中に FAILED 確定が無く、かつテスト済み）
  *          であれば即座にクリアする点が Dem_EvaluateAging() との違い。
- *          Dem_EvaluateAging() と同じく、TF/TFTOC/TNCTC が新サイクル用に
- *          リセットされる前の値を見る必要があるため、Dem_BeginOperationCycle() からのみ、
+ *          TF/TFTOC/TNCTC が新サイクル用にリセットされる前の値を見る必要があるため、
+ *          Dem_EndOperationCycle()（END）と、Dem_BeginOperationCycle()（起動・再開始）からのみ、
  *          かつそのリセットより前に呼び出すこと（呼び出し順序に依存するため非公開）。
+ *          END のあとの START では、評価し直しても結果は同じ（終了している間、報告ではステータスが変わらず、
+ *          Dem_ClearDTC() は PendingDTC ごと戻すので、END でクリアされなかったものが、クリーンになることはない）。
  *
  * \param[in]  EventId  イベント ID。範囲チェックは呼び出し元の責務。
  */
@@ -2304,6 +2313,38 @@ static void Dem_EvaluatePendingClear(Dem_EventIdType EventId)
         Dem_StatusTable[EventId] &= (uint8)(~DEM_STATUS_PENDING);
         DET_LOGI(TAG, "ev=%u pendingDTC cleared (clean operation cycle)", (unsigned)EventId);
     }
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_EndOperationCycle
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   操作サイクルを終える（Dem_SetOperationCycleState(END) の処理）。
+ *
+ * \details イベントごとに、そのサイクルの最終ステータスで、PendingDTC の自動クリアを評価する（[SWS_Dem_00390]）。
+ *          経年回復は、本実装は START で評価する（Dem_BeginOperationCycle()）。
+ *          NvM への書き込みは、呼び出し元の責務。
+ *
+ * \retval  1  ステータスが、1 つでも変わった。0  変わらなかった。
+ */
+static uint8 Dem_EndOperationCycle(void)
+{
+    uint8 changed = 0U;
+
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        const uint8 prevStatus = Dem_StatusTable[i];
+
+        Dem_EvaluatePendingClear(i);
+
+        if (Dem_StatusTable[i] != prevStatus)
+        {
+            changed = 1U;
+        }
+    }
+
+    return changed;
 }
 
 /* ----------------------------------------------------------------------

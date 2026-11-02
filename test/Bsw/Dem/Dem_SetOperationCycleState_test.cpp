@@ -272,6 +272,125 @@ TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_StartClear
     EXPECT_EQ(Status(kEvent) & DEM_STATUS_PENDING, 0U);
 }
 
+// END: そのサイクルが、クリーン（失敗なし、テスト済み）なら、次の START を待たずに、PendingDTC を自動でクリアする
+// （[SWS_Dem_00390]: 「END|RESTART」でクリア）
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndClearsPendingAfterCleanCycle)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);   // サイクル 1: 失敗
+    ASSERT_EQ(StartCycle(), E_OK);                                          // サイクル 2 へ
+    ASSERT_NE(Status(kEvent) & DEM_STATUS_PENDING, 0U);
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);   // サイクル 2: テスト済み・失敗なし
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_SetOperationCycleState(DemConf_DemOperationCycle_POWER, DEM_CYCLE_STATE_END);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(Status(kEvent) & DEM_STATUS_PENDING, 0U);   // START していないのに、クリアされている
+}
+
+// END: そのサイクルで失敗したイベントの PendingDTC は、クリアしない
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndKeepsPendingWhenCycleFailed)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(EndCycle(), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(Status(kEvent) & DEM_STATUS_PENDING, 0U);
+}
+
+// END: そのサイクルで、一度もテストされなかったイベントの PendingDTC は、クリアしない
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndKeepsPendingWhenNotTested)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);   // サイクル 1: 失敗
+    ASSERT_EQ(StartCycle(), E_OK);                                          // サイクル 2 へ（まだ、テストしていない）
+    ASSERT_NE(Status(kEvent) & DEM_STATUS_PENDING, 0U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(EndCycle(), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(Status(kEvent) & DEM_STATUS_PENDING, 0U);
+}
+
+// END: PendingDTC をクリアしたとき、変更したステータスを NvM へ書き込む
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndPersistsClearedPendingToNvM)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_FAILED), E_OK);
+    ASSERT_EQ(StartCycle(), E_OK);
+    ASSERT_EQ(Dem_SetEventStatus(kEvent, DEM_EVENT_STATUS_PASSED), E_OK);
+    uint8 sentinel[DEM_EVENT_COUNT];
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        sentinel[i] = 0xA5U;
+    }
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, sentinel), E_OK);   // 書き込まれたかを見分ける目印
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(EndCycle(), E_OK);
+    uint8 saved[DEM_EVENT_COUNT] = { 0U };
+    (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, saved);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(saved[kEvent] & DEM_STATUS_PENDING, 0U);
+}
+
+// END: 何も変わらない（クリアする PendingDTC が無い）ときは、NvM へ書き込まない（EEPROM を消耗させない）
+TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_EndWithoutChangeSkipsNvMWrite)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sentinel[DEM_EVENT_COUNT];
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        sentinel[i] = 0xA5U;
+    }
+    ASSERT_EQ(NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, sentinel), E_OK);   // 書き込まれたかを見分ける目印
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(EndCycle(), E_OK);   // 起動直後で、PendingDTC は無い
+    uint8 saved[DEM_EVENT_COUNT] = { 0U };
+    (void)NvM_ReadBlock(NVM_BLOCK_ID_DEM_STATUS, saved);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(saved[kEvent], 0xA5U);   // 目印のまま
+}
+
 // START: 直前のサイクルが、クリーンなら、経年回復カウンタを 1 つ進める。閾値に達したら、CONFIRMED を解除する
 TEST_F(Dem_SetOperationCycleState_Test, Dem_SetOperationCycleState_OK_StartAgesConfirmedEventAfterCleanCycles)
 {
