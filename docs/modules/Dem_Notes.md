@@ -105,6 +105,17 @@ ClearDTC のときのリセットは [SWS_Dem_00343] です。
 > 一致すればカウンタをリセットする）と同じ「割り込まれたら最初からやり直す」方式に
 > 合わせている（経緯は後述の「[開発の経緯](#デバウンスカウンタの反転バグ)」参照）。
 
+## デバウンスの状態の取得とリセット（2026-11 追加）
+
+| API | 役割 |
+|---|---|
+| `Dem_GetDebouncingOfEvent()` | デバウンスカウンタから、状態のビットを返す（[SWS_Dem_00730]）。FDC と同じ区分: `DEM_TEMPORARILY_DEFECTIVE`（0 < FDC < 127）、`DEM_FINALLY_DEFECTIVE`（FDC = 127）、`DEM_TEMPORARILY_HEALED`（-128 < FDC < 0）、`DEM_TEST_COMPLETE`（FDC = ±のはし）、`DEM_DTR_UPDATE`（テスト完了のとき。有効条件・保存条件を持たず、常に成立）。限界値が 1 のイベントは、PREFAILED で、すぐ確定するので、`DEM_TEMPORARILY_DEFECTIVE` の段階を経ない |
+| `Dem_ResetEventDebounceStatus()` | `DEM_DEBOUNCE_STATUS_RESET` でカウンタを 0 へ戻す（[SWS_Dem_00684]）。`DEM_DEBOUNCE_STATUS_FREEZE` は、止めるタイマがカウンタ式には無いので、何もしない。どちらも UDS ステータスには影響しない。Dem_PreInit のあと、すぐに使える API のため、`Dem_SetEventStatus()` と同じく、未初期化でも拒否しない |
+| `Dem_ResetEventStatus()` | PASSED を報告せずに、TestFailed とデバウンスを戻す（[SWS_Dem_00187]）。この操作サイクルでテスト済み（bit6 = 0）なら、E_NOT_OK（[SWS_Dem_00638]）。DTC の設定が無効の間は、何もしない（[SWS_Dem_00079]）。限定動作（limp home）を解除するときに、PASSED を報告できないモニタが使う |
+
+- 簡略化: `Dem_ResetEventStatus()` は、仕様では非同期（次のメイン関数）ですが、同期で処理します。ステータス変更のコールバックは持ちません。
+- `Dem_ResetEventStatus()` は、未テストのイベントにだけ効きます。未テストのイベントは、TestFailed がもともと 0 なので、実質、デバウンスカウンタを戻す動作です（PREFAILED の途中の積み上げが消える）。
+
 ## 閾値 (limit) の決め方
 
 モニタ（報告元）が Dem に報告する前に、**既に十分な持続性チェックを行っているか**で

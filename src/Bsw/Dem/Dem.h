@@ -147,6 +147,23 @@ typedef enum
 } Dem_EventStatusType;
 
 /**
+ * \brief   デバウンスの状態のビット集合（[SWS_Dem_01000]、`Dem_GetDebouncingOfEvent()` の出力）。
+ */
+typedef uint8 Dem_DebouncingStateType;
+#define DEM_TEMPORARILY_DEFECTIVE 0x01U  /**< bit0: 0 < FDC < 127（失敗側へ進行中）                   */
+#define DEM_FINALLY_DEFECTIVE     0x02U  /**< bit1: FDC = 127（失敗が確定）                           */
+#define DEM_TEMPORARILY_HEALED    0x04U  /**< bit2: -128 < FDC < 0（成功側へ進行中）                  */
+#define DEM_TEST_COMPLETE         0x08U  /**< bit3: FDC = -128 または 127（テスト完了）               */
+#define DEM_DTR_UPDATE            0x10U  /**< bit4: テスト完了かつデバウンス完了かつ有効/保存条件が成立 */
+
+/**
+ * \brief   デバウンスを止める / 戻す操作の型（[SWS_Dem_00927]、`Dem_ResetEventDebounceStatus()` に渡す）。
+ */
+typedef uint8 Dem_DebounceResetStatusType;
+#define DEM_DEBOUNCE_STATUS_FREEZE 0x00U  /**< 内部のデバウンスカウンタ/タイマを止める */
+#define DEM_DEBOUNCE_STATUS_RESET  0x01U  /**< 内部のデバウンスカウンタ/タイマを戻す   */
+
+/**
  * \brief   操作サイクルの状態の型（[SWS_Dem_00194]、`Dem_SetOperationCycleState()` に渡す新しい状態）。
  */
 typedef enum
@@ -253,6 +270,73 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr);
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId, Dem_EventStatusType EventStatus);
+
+/**
+ * \brief   イベントの失敗ステータスを、PASSED を報告せずに戻す（[SWS_Dem_00187]、[SWS_Dem_00331]）。
+ *
+ * \details TestFailed（UDS ステータスの bit0）を 0 にし、デバウンスカウンタを初期値（0）へ戻す。監視ステータスと、
+ *          UDS ステータスの bit6（TestNotCompletedThisOperationCycle）は変えない。モニタが、限定動作（limp home）を
+ *          解除して通常動作へ戻るときに、PASSED を報告できない場合に使う。
+ *          DTC の設定が無効（`Dem_DisableDTCSetting()`）の間は、UDS ステータスを更新しないので、何もせず E_OK を返す
+ *          （[SWS_Dem_00079]）。そうでなければ、既にこの操作サイクルでテスト済み（bit6 = 0）のイベントは、E_NOT_OK で
+ *          拒否する（[SWS_Dem_00638]）。操作サイクルが終了していても、動作する（報告ではないため、[SWS_Dem_00482] の対象外）。
+ *
+ * \param[in]  EventId  イベント ID（`DemConf_DemEventParameter_*`）。
+ *
+ * \retval  E_OK      受理した（DTC の設定が無効で、何もしなかった場合を含む）。
+ * \retval  E_NOT_OK  EventId が構成にない、またはこの操作サイクルでテスト済み。
+ *
+ * \note    Dem_SetEventStatus() と同じく、未初期化チェック（DEM_E_UNINIT）の対象外（[SWS_Dem_00124]）。
+ *          仕様は、非同期の処理（次のメイン関数で実行）と規定するが、本実装は、同期で処理する。ステータス変更の
+ *          コールバック（[SWS_Dem_00187]）は持たない。仕様は RTE 経由のみで Dem.h には公開しないが、本プロジェクトは
+ *          RTE を持たないので、ここで宣言する。
+ *
+ * \AUTOSARReq     {SWS_Dem_00187, SWS_Dem_00331, SWS_Dem_00638}
+ * \ServiceID      {0x05}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ResetEventStatus(Dem_EventIdType EventId);
+
+/**
+ * \brief   イベントのデバウンスを、止める / 戻す（[SWS_Dem_00683]）。
+ *
+ * \details RESET: デバウンスカウンタを 0 へ戻す（FDC も 0 になる、[SWS_Dem_00684]）。FREEZE: 止める対象のタイマが、
+ *          カウンタ式のデバウンスには無いので、何もしない（[SWS_Dem_00685] は、タイマ式のデバウンスの規定）。
+ *          どちらも、イベントの UDS ステータスには影響しない（デバウンスの状態だけが変わる）。
+ *          Dem_PreInit のあと、すぐに使える API のため、Dem_SetEventStatus() と同じく、未初期化チェックの対象外。
+ *
+ * \param[in]  EventId              イベント ID（`DemConf_DemEventParameter_*`）。
+ * \param[in]  DebounceResetStatus  DEM_DEBOUNCE_STATUS_FREEZE / DEM_DEBOUNCE_STATUS_RESET。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  EventId が構成にない（DEM_E_WRONG_CONFIGURATION）、または操作が FREEZE / RESET 以外（DEM_E_PARAM_DATA）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00683, SWS_Dem_00684, SWS_Dem_00685}
+ * \ServiceID      {0x09}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_ResetEventDebounceStatus(Dem_EventIdType EventId, Dem_DebounceResetStatusType DebounceResetStatus);
+
+/**
+ * \brief   イベントのデバウンスの状態を取得する（[SWS_Dem_00730]、[SWS_Dem_00844]）。
+ *
+ * \details 内部のデバウンスカウンタから、`Dem_DebouncingStateType` のビットを導く（FDC と同じ区分）。
+ *          DEM_DTR_UPDATE（bit4）は、テスト完了のとき立てる（有効条件・保存条件を持たず、常に成立しているため）。
+ *
+ * \param[in]   EventId         イベント ID（`DemConf_DemEventParameter_*`）。
+ * \param[out]  DebouncingState  デバウンスの状態（DEM_TEMPORARILY_DEFECTIVE 等のビットの組）。
+ *
+ * \retval  E_OK      取得した。
+ * \retval  E_NOT_OK  未初期化、NULL ポインタ、または EventId が構成にない。
+ *
+ * \AUTOSARReq     {SWS_Dem_00730, SWS_Dem_00844, SWS_Dem_01000}
+ * \ServiceID      {0x9F}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_GetDebouncingOfEvent(Dem_EventIdType EventId, Dem_DebouncingStateType* DebouncingState);
 
 /**
  * \brief   操作サイクルの状態を設定する（[SWS_Dem_00194]）。
