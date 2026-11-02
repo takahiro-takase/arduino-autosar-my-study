@@ -19,6 +19,7 @@ extern "C" {
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
 #include "Wrap_CanTp.h"
+#include "Wrap_CanIf.h"
 #include "Wrap_PduR.h"
 #include "Wrap_ComM.h"
 #include "Wrap_Dcm.h"
@@ -57,10 +58,11 @@ protected:
         FakeMillis_Reset();
         WrapCanTp_Reset();
         WrapDcm_Reset();
+        WrapCanIf_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         WrapPduR_Reset();
-        FailFromCallCount_PduR_CanTpTransmit = 0U;   // 既定: CAN フレームの送信（PduR 経由）は成功する
-        ForcedReturn_PduR_CanTpTransmit      = E_OK;
+        FailFromCallCount_CanIf_Transmit = 0U;   // 既定: CAN フレームの送信（CanIf_Transmit）は成功する
+        ForcedReturn_CanIf_Transmit           = E_OK;
         Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
         PduR_Init(&PduR_Config);
@@ -117,7 +119,7 @@ protected:
     {
         uint8 frame[8] = { (uint8)(0x30U | fs), bs, stMin, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // FF（総長 10: 先頭 6 バイト＋ CF 1 本）を、CanTp が受け取ったことにする。中身は TesterPresent 風の 0x3E で、残りは 0。
@@ -125,7 +127,7 @@ protected:
     {
         uint8 frame[8] = { 0x10U, 0x0AU, 0x3EU, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // VIN の応答（20 バイト）を FF まで送り、FC（続行、ブロックサイズ bs、STmin st）を受け取った状態にする。
@@ -260,7 +262,7 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_NG_TxAbortsWhenFrameSendKeeps
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     StartVinTransmitAfterFlowControl(0U, 0U);
-    ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;   // FF は送れたが、これ以降の CF の送信は失敗し続ける
+    ForcedReturn_CanIf_Transmit = E_NOT_OK;   // FF は送れたが、これ以降の CF の送信は失敗し続ける
     CanTp_MainFunction();   // CF の送信に失敗（再送する）
     ASSERT_EQ(CallCount_Dcm_TpTxConfirmation, 0U);
     ASSERT_TRUE(CanTp_Test_IsTxBusy());
@@ -361,7 +363,7 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_TxCompletesWithConsecutive
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 3U);   // FF ＋ CF 2 本
+    EXPECT_EQ(CallCount_CanIf_Transmit, 3U);   // FF ＋ CF 2 本
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);
     EXPECT_EQ(LastResult_Dcm_TpTxConfirmation, E_OK);
     EXPECT_FALSE(CanTp_Test_IsTxBusy());
@@ -375,7 +377,7 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_BlockSizeWaitsForNextFlowC
     StartVinTransmitAfterFlowControl(1U, 0U);   // ブロックサイズ 1（CF 1 本ごとに FC を待つ）
     CanTp_MainFunction();   // CF 1 本目
     CanTp_MainFunction();   // FC 待ちのため、送らない
-    ASSERT_EQ(CallCount_PduR_CanTpTransmit, 2U);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 2U);
     ReceiveFlowControl(0U, 1U, 0U);
 
     /* ----------------------- */
@@ -386,7 +388,7 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_BlockSizeWaitsForNextFlowC
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 3U);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 3U);
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);
     EXPECT_EQ(LastResult_Dcm_TpTxConfirmation, E_OK);
 }
@@ -398,7 +400,7 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_StMinDelaysConsecutiveFram
     /* ----------------------- */
     StartVinTransmitAfterFlowControl(0U, 10U);   // STmin 10 ms
     CanTp_MainFunction();   // まだ 10 ms 経っていない
-    ASSERT_EQ(CallCount_PduR_CanTpTransmit, 1U);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
     FakeMillis_Value += 10UL;
 
     /* ----------------------- */
@@ -409,7 +411,7 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_StMinDelaysConsecutiveFram
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 2U);   // FF ＋ CF 1 本目
+    EXPECT_EQ(CallCount_CanIf_Transmit, 2U);   // FF ＋ CF 1 本目
 }
 
 TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_FailedConsecutiveFrameIsResentUnchanged)
@@ -418,9 +420,9 @@ TEST_F(CanTp_MainFunction_Test, CanTp_MainFunction_OK_FailedConsecutiveFrameIsRe
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     StartVinTransmitAfterFlowControl(0U, 0U);
-    ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;   // CF 1 本目の送信が 1 回失敗する
+    ForcedReturn_CanIf_Transmit = E_NOT_OK;   // CF 1 本目の送信が 1 回失敗する
     CanTp_MainFunction();   // 失敗（組み立て済みの CF を保持する）
-    ForcedReturn_PduR_CanTpTransmit = E_OK;       // 以降は成功する
+    ForcedReturn_CanIf_Transmit = E_OK;       // 以降は成功する
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

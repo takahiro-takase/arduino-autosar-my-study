@@ -1,7 +1,7 @@
 /**
  * \file    CanTp.c
  * \brief   CAN トランスポートプロトコル実装 (AUTOSAR SWS_CanTp 準拠, ISO 15765-2)
- * \details CanIf/PduR と DCM の間で ISO 15765-2 フレームの組立・分割を担う。
+ * \details CanIf（下位層）と PduR（上位層への仲介）の間で ISO 15765-2 フレームの組立・分割を担う。
  *
  *          対応フレームタイプ:
  *            SF (Single Frame)      PCI 上位ニブル = 0x0
@@ -9,6 +9,8 @@
  *            CF (Consecutive Frame) PCI 上位ニブル = 0x2
  *            FC (Flow Control)      PCI 上位ニブル = 0x3
  *
+ *          下位層（CanIf）とは、PduR を経由せず直接やり取りする（SWS_CanTp の N-PDU。送信は CanIf_Transmit()、
+ *          受信は CanIf の CanTp_RxIndication() 呼び出し、送信確認は CanIf の CanTp_TxConfirmation() 呼び出し）。
  *          上位層（Dcm）との受け渡しは、PduR の TP の API（PduR_CanTp*()）で行う。PduR が、TP の
  *          ルーティングパスで上位層（Dcm）の PDU ID へ変換して、Dcm のコールバックへ転送する。
  *          CanTp は組み立て・分割用のバッファを持たず、フレームごとに上位層とやり取りする。
@@ -40,7 +42,7 @@
  *          CanTp_TxConfirmation（CanIf からの送信確認）について: 本実装は Can.c/CanIf.c の非同期 TX 確認経路が
  *          常に E_OK 固定（真の送信失敗を表現できない）であるため、
  *          CanTp_TxConfirmation() 自体は no-op のままとし、代わりに
- *          CanTp_SendFrame() の同期的な戻り値（PduR/CanIf/Can_Write が
+ *          CanTp_SendFrame() の同期的な戻り値（CanIf/Can_Write が
  *          その場で拒否した場合）と上記 N_As タイムアウトで送信失敗を検出する。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -55,6 +57,7 @@
  * ====================================================================== */
 
 #include "CanTp.h"
+#include "CanIf.h"
 #include "PduR.h"
 #include "Det.h"
 #include "Os.h"
@@ -448,13 +451,13 @@ void CanTp_MainFunction(void)
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   PduR から配信された受信 CAN フレームを処理する。
+ * \brief   CanIf から配信された受信 CAN フレーム（N-PDU）を処理する。
  *
  * \details フレームタイプを判定して SF/FF/CF/FC それぞれを処理する。
  *          SF/FF/CF のデータは、PduR_CanTpStartOfReception()/PduR_CanTpCopyRxData()/PduR_CanTpRxIndication() で
  *          Dcm へ渡す（組み立ては Dcm の受信バッファの上で行う）。
  *
- * \param[in]  RxPduId     受信 PDU ID (単一チャネルのため未使用)。
+ * \param[in]  RxPduId     受信 N-PDU の ID（CANTP_RX_NPDU_ID。CanIf の設定が渡す）。
  * \param[in]  PduInfoPtr  受信した 8 バイト CAN フレーム。NULL 禁止。
  *
  * \AUTOSARReq     {SWS_CanTp_00214}
@@ -470,7 +473,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         return;
     }
 
-    if (RxPduId != CANTP_RX_SDU_ID)
+    if (RxPduId != CANTP_RX_NPDU_ID)
     {
         DET_LOGE(TAG, "RX E: invalid RxPduId=%u", (unsigned)RxPduId);
         (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_RX_INDICATION, CANTP_E_INVALID_RX_ID);
@@ -709,20 +712,20 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   PduR からの送信完了通知を受け取る。
+ * \brief   CanIf からの送信完了通知を受け取る。
  *
- * \details 現状 no-op（意図的）。SWS_CanTp_00355 は本来
+ * \details 現状、ID の検査以外は no-op（意図的）。SWS_CanTp_00355 は本来
  *          「result==E_NOT_OK ならセッションを中断する」ことを要求するが、
  *          本プロジェクトの非同期 TX 確認経路（Can.c の TX 確認保留キュー →
  *          CanIf_TxConfirmation()）は物理送信が同期的に失敗した場合そもそも
  *          キューに積まれず、かつ CanIf_TxConfirmation() 自体が E_OK を
  *          固定で返すため、result にはこの経路では実質的に E_NOT_OK が
  *          渡ってこない（真に非同期の送信失敗を表現する手段がない）。
- *          実際に到達可能な送信失敗（PduR/CanIf/Can_Write が同期的に拒否する
+ *          実際に到達可能な送信失敗（CanIf/Can_Write が同期的に拒否する
  *          ケース）は CanTp_SendFrame() の戻り値と、CF 送信の N_As 相当
  *          タイムアウト（CanTp_SendNextCF() 参照）で別途検出している。
  *
- * \param[in]  TxPduId  完了した PDU ID (未使用)。
+ * \param[in]  TxPduId  完了した TX N-PDU の ID（CANTP_TX_NPDU_ID。CanIf の設定が渡す）。
  * \param[in]  result   送信結果 (未使用。上記理由により本経路では常に E_OK)。
  *
  * \AUTOSARReq     {SWS_CanTp_00215}
@@ -730,13 +733,18 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  */
 void CanTp_TxConfirmation(PduIdType TxPduId, Std_ReturnType result)
 {
-    (void)TxPduId;
     (void)result;
 
     if (!CanTp_Initialized)
     {
         (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TX_CONFIRMATION, CANTP_E_UNINIT);
         return;
+    }
+
+    if (TxPduId != CANTP_TX_NPDU_ID)
+    {
+        DET_LOGE(TAG, "TxConf E: invalid TxPduId=%u", (unsigned)TxPduId);
+        (void)Det_ReportError(CANTP_MODULE_ID, 0U, CANTP_API_ID_TX_CONFIRMATION, CANTP_E_INVALID_TX_ID);
     }
 }
 
@@ -765,16 +773,16 @@ static unsigned long CanTp_GetNowMs(void)
  * 内部ヘルパー: フレーム送信
  * ----------------------------------------------------------------------- */
 
-/** frame（8 バイト）を PduR 経由で CAN 0x7E8 に送信する。
+/** frame（8 バイト）を CanIf 経由で CAN 0x7E8 に送信する。
  *  \param[in] frame  送信する 8 バイトのフレーム（CanTp_TxFrameBuf か fcFrame）。
  *  \retval E_OK     送信受け付け成功。
- *  \retval E_NOT_OK PduR / CanIf / Can_Write が失敗（TX バッファビジー等）。 */
+ *  \retval E_NOT_OK CanIf / Can_Write が失敗（TX バッファビジー等）。 */
 static Std_ReturnType CanTp_SendFrame(uint8* frame)
 {
     static PduInfoType pdu;
     pdu.SduDataPtr = frame;
     pdu.SduLength  = CANTP_FRAME_LEN;
-    return PduR_CanTpTransmit(CANTP_PDUR_TX_SDU_ID, &pdu);
+    return CanIf_Transmit(CANTP_CANIF_TX_PDU_ID, &pdu);
 }
 
 /** TX チャネルが、送信の途中（FC 待ち、または CF の送信中）か。 */

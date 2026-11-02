@@ -7,6 +7,21 @@
 CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
 DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います。
 
+## 下位層（CanIf）との受け渡し（N-PDU）
+
+CanTp は、下位層の CanIf と、PduR を経由せず直接やり取りします（仕様どおり。2026-11 に、独自の `PduR_CanTpTransmit()` と
+PduR の IF の経路を廃止しました。CanNm・CanTSyn と同じ形です）。
+
+| 方向 | 呼び出し | ID |
+|------|------|------|
+| 送信 | CanTp が `CanIf_Transmit()` を呼ぶ | `CANTP_CANIF_TX_PDU_ID`（CanIf の TX PDU `DiagResp_Tx`。CAN 0x7E8） |
+| 送信完了 | CanIf が `CanTp_TxConfirmation()` を呼ぶ | `CANTP_TX_NPDU_ID`（CanIf の設定が渡す） |
+| 受信 | CanIf が `CanTp_RxIndication()` を呼ぶ | `CANTP_RX_NPDU_ID`（CanIf の設定が渡す。CAN 0x7E0） |
+
+N-PDU の ID は、PduR へ渡す N-SDU の ID（`CANTP_RX_SDU_ID`・`CANTP_TX_SDU_ID`）とは別の名前空間です（値も、わざと変えています。
+取り違えたときに、DET（`CANTP_E_INVALID_RX_ID`・`CANTP_E_INVALID_TX_ID`）で検出できます）。いずれも `CanTp.json`（`canIfTxPdu`・
+`txNPduId`・`rxNPduId`）が正本で、`CanIf.json` の `DiagResp_Tx`（`txConfirm`=`CANTP`）・`DiagReq_Rx`（`rxIndication`=`CANTP`）が、これらを参照します。
+
 ## 上位層（Dcm）との受け渡し（TP の API）
 
 CanTp は、組み立て・分割用のバッファを持ちません。フレームごとに、PduR の TP の API でやり取りします

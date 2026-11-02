@@ -52,7 +52,7 @@ IF の表の「CanTp」行（RX 1、TX 1）は、CanIf と CanTp の間の CAN �
   マクロ）: `SrcPduId` に一致する経路を探し、その経路に登録された**全ての宛先**の
   `RxIndFct` を順に呼びます（1 つの受信 PDU を複数の上位層へ配信できる）。一致する経路が
   なければ `PDUR_E_PDU_ID_INVALID` を報告します。
-- **TX**（`PduR_ComTransmit()`、`PduR_CanTpTransmit()`。後者は前者と完全に同じ）: `SrcPduId`
+- **TX**（`PduR_ComTransmit()`）: `SrcPduId`
   に一致する経路を探し、`TransmitOverrideFct` が設定されていればそちら（中間モジュール）へ、
   無ければ `CanIf_Transmit(CanIfTxPduId)` へ転送します。現在 `TransmitOverrideFct` を使う
   経路はありません（SecOC の TX を撤去したため。機構自体は学習用に残している）。
@@ -102,8 +102,8 @@ SecOC が組み立てて保持している Secured I-PDU を、下位層へ複�
 - ゲートウェイ（PDU を別のバスへ中継する機能）は実装していません。トランスポートプロトコル用の API
   （`PduR_CanTpStartOfReception` / `CopyRxData` / `RxIndication` / `CopyTxData` / `TxConfirmation`）は、
   CanTp ↔ Dcm の 1 本の診断の経路だけを持ちます（上の「TP のルーティング」）。`PduR_<User:Up>CancelTransmit` /
-  `CancelReceive` / `ChangeParameter` は未実装です。独自の `PduR_CanTpTransmit()`（CanTp が CAN フレームの送信に使う。
-  仕様では、CanTp が `CanIf_Transmit()` を直接呼ぶ）も、残っています。
+  `CancelReceive` / `ChangeParameter` は未実装です。CanTp の CAN フレーム（N-PDU）の送受信は、仕様どおり、
+  CanTp と CanIf が PduR を経由せず直接やり取りします（独自の `PduR_CanTpTransmit()` と、PduR の IF の経路は廃止しました）。
   トリガ送信（`PduR_CanIfTriggerTransmit()`）は、上位層の送信データを取りに行く経路だけを持ちます
   （ゲートウェイの FIFO やバッファを返す動作は、持ちません）。
 - 単体テストからだけ使える `PduR_Test_ResetInitState()`（`PDUR_UNIT_TEST`）で、未初期化状態へ

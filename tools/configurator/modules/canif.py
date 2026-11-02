@@ -15,6 +15,8 @@ UPPER_LAYERS = {
                 "triggerTransmit": "CanNm_TriggerTransmit", "header": "CanNm.h"},
     "CANTSYN": {"txConfirm": "CanTSyn_TxConfirmation", "rxIndication": "CanTSyn_RxIndication",
                 "header": "CanTSyn.h"},
+    "CANTP":   {"txConfirm": "CanTp_TxConfirmation", "rxIndication": "CanTp_RxIndication",
+                "header": "CanTp.h"},
 }
 DAVINCI_TX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/"
 DAVINCI_RX = "/ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/"
@@ -57,11 +59,13 @@ def resolve(pdu, ctx):
 
 def upper_tx_value(p, index, ctx):
     """上位層へ返す送信確認の ID。PduR 宛てなら PduR の送信元 PDU、NM 宛てなら CanNm の TX PDU のシンボリック名、
-    時刻同期宛ては CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID。"""
+    時刻同期宛ては CanTSyn_Cfg.h の CANTSYN_TX_PDU_ID、CanTp 宛ては CanTp_Cfg.h の CANTP_TX_NPDU_ID。"""
     if p["txConfirm"] == "PDUR":
         return symbols.pdur_src_for_canif_tx(ctx, p, index)
     if p["txConfirm"] == "CANTSYN":
         return "CANTSYN_TX_PDU_ID"
+    if p["txConfirm"] == "CANTP":
+        return "CANTP_TX_NPDU_ID"
     return symbols.cannm_tx_for_canif(ctx, p)
 
 
@@ -70,6 +74,8 @@ def upper_rx_value(p, ctx):
         return symbols.pdur_src_for_canif_rx(ctx, p)
     if p["rxIndication"] == "CANTSYN":
         return "CANTSYN_RX_PDU_ID"
+    if p["rxIndication"] == "CANTP":
+        return "CANTP_RX_NPDU_ID"
     return symbols.cannm_rx_for_canif(ctx, p)
 
 

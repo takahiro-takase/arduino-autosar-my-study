@@ -72,12 +72,49 @@ TEST_F(CanTp_TxConfirmation_Test, CanTp_TxConfirmation_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_TxConfirmation(CANTP_TX_SDU_ID, E_OK);
+    CanTp_TxConfirmation(CANTP_TX_NPDU_ID, E_OK);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_UNINIT);
+}
+
+TEST_F(CanTp_TxConfirmation_Test, CanTp_TxConfirmation_NG_InvalidTxPduId)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 準備なし（SetUp で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_TxConfirmation(CANTP_TX_NPDU_ID + 1U, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_INVALID_TX_ID);
+    EXPECT_EQ(FakeDetHw_LastApiId, CANTP_API_ID_TX_CONFIRMATION);
+}
+
+TEST_F(CanTp_TxConfirmation_Test, CanTp_TxConfirmation_OK_ValidTxPduIdReportsNothing)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 準備なし（SetUp で初期化済み）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_TxConfirmation(CANTP_TX_NPDU_ID, E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_ReportCount, 0U);   // no-op（DET を出さない）
 }
 
 }  // namespace

@@ -30,7 +30,6 @@
 typedef enum
 {
     PDUR_MODULE_COM   = 0,
-    PDUR_MODULE_CANTP = 1,
     PDUR_MODULE_DCM   = 2,
     PDUR_MODULE_SECOC = 3,
 } PduR_DestModuleType;
@@ -40,7 +39,7 @@ typedef void (*PduR_RxIndicationFctType)(PduIdType DestPduId, const PduInfoType*
 typedef void (*PduR_TxConfirmationFctType)(PduIdType DestPduId, Std_ReturnType result);
 
 /* SecOC_IfTransmit() 等、TX 経路上の中間モジュールへの委譲に使う関数ポインタ型。
- * PduR_ComTransmit()/PduR_CanTpTransmit() 自身と同じシグネチャ
+ * PduR_ComTransmit() 自身と同じシグネチャ
  * （Std_ReturnType(*)(PduIdType, const PduInfoType*)）を持つため、実 AUTOSAR の
  * SecOC_IfTransmit() のような「PduR_<Up>Transmit と同じ形の下位層エントリ
  * ポイント」をそのまま登録できる。 */
@@ -71,9 +70,9 @@ typedef struct
     PduIdType                 ConfDestPduId;
     PduR_TxConfirmationFctType ConfFct;
     /* TX 経路上に中間モジュール（SecOC 等）を挟む場合のみ使用。NULL（既定）なら
-     * PduR_ComTransmit()/PduR_CanTpTransmit() は従来どおり CanIf_Transmit() へ
+     * PduR_ComTransmit() は従来どおり CanIf_Transmit() へ
      * 直接転送する（既存の全 TX パスはこのフィールドを設定しないため無変更）。
-     * 非 NULL なら PduR_ComTransmit()/PduR_CanTpTransmit() は CanIf_Transmit()
+     * 非 NULL なら PduR_ComTransmit() は CanIf_Transmit()
      * の代わりにこの関数を TransmitOverrideId 付きで呼び、中間モジュールに変換
      * を委ねる。中間モジュールは変換完了後、PduR_SecOCTransmit()
      * （TransmitOverrideFct を評価しない専用エントリポイント）を呼んで

@@ -435,8 +435,11 @@ TRANSITION/DATALOST/PARAM_BAUDRATE/ICOM_CONFIG_INVALID の9件）と値の並び
 （2026-11-03 追記: CanTp ↔ Dcm の TP の経路を、PduR 4.3.1 の 8.3.4 章（`PduR_<User:LoTp>Xxx`）に合わせた。`PduR_CanTpStartOfReception`（0x46）・
 `PduR_CanTpCopyRxData`（0x44）・`PduR_CanTpRxIndication`（0x45）・`PduR_CanTpCopyTxData`（0x43）・`PduR_CanTpTxConfirmation`（0x48）と、
 Dcm 向けの `PduR_DcmTransmit`（0x49）を追加し、`PduR_PBConfigType` に TP のルーティングパス（`TpRxPaths`・`TpTxPaths`）を持たせた。
-CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は `PduR_DcmTransmit()` → `CanTp_Transmit()`。CanTp ↔ CanIf 側（独自の `PduR_CanTpTransmit`、
-CanIf → PduR → CanTp の受信）は、次の段で仕様の直結に直す。）
+CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は `PduR_DcmTransmit()` → `CanTp_Transmit()`。）
+（2026-11-03 追記 2: CanTp ↔ CanIf 側も、仕様の直結に直した。CanTp は `CanIf_Transmit()` を直接呼び（`CANTP_CANIF_TX_PDU_ID`）、CanIf は `CanTp_RxIndication()`・
+`CanTp_TxConfirmation()` を直接呼ぶ（`CANTP_RX_NPDU_ID`・`CANTP_TX_NPDU_ID`。CanNm・CanTSyn と同じ形）。独自の `PduR_CanTpTransmit()` と、PduR の IF の経路
+（RX の `DiagReq_Rx`、TX の `DiagResp_Tx`）は廃止した。`PduR.json` の `srcPduId=1` は欠番のまま残した（Com などの既存の ID を変えないため）。
+`CanTp_TxConfirmation()` に、TX N-PDU の ID の検査（`CANTP_E_INVALID_TX_ID`）を追加した。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

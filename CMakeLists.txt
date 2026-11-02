@@ -676,7 +676,6 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     PduR_Init
     PduR_GetVersionInfo
     PduR_ComTransmit
-    PduR_CanTpTransmit
     PduR_SecOCTransmit
     PduR_ComRxIndication
     PduR_CanIfTxConfirmation

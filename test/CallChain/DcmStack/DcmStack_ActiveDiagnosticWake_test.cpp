@@ -82,19 +82,23 @@ namespace
 const CanIf_RxPduConfigType kTestCanIfRxPdu = {
     /* CanId */                0x7E0U,
     /* Hrh */                  0U,
-    /* UpperLayerRxPduId */    0U,
+    /* UpperLayerRxPduId */    CANTP_RX_NPDU_ID,
     /* Dlc */                  8U,
-    /* RxIndicationFct */      PduR_CanIfRxIndication,
+    /* RxIndicationFct */      CanTp_RxIndication,
     /* ReadRxPduDataEnabled */ 0U
 };
 
+// CanTp は、診断応答を CanIf_Transmit(CANTP_CANIF_TX_PDU_ID, …) で直接送る（PduR を経由しない）。
+// そのインデックスに診断応答の PDU を置く（手前の PDU は未使用）。
+static_assert(CANTP_CANIF_TX_PDU_ID == 1U, "診断応答の PDU を、CanIf の TX テーブルの添字 1 に置く前提");
+
 const CanIf_TxPduConfigType kTestCanIfTxPdus[3] = {
-    { /* UpperLayerTxPduId */ 0U,
+    { 0U, 0U, 0U, 0U, NULL },
+    { /* UpperLayerTxPduId */ CANTP_TX_NPDU_ID,
       /* CanId */             0x7E8U,
       /* Dlc */               8U,
       /* Hth */               0U,
-      /* TxConfirmFct */      PduR_CanIfTxConfirmation },
-    { 0U, 0U, 0U, 0U, NULL },
+      /* TxConfirmFct */      CanTp_TxConfirmation },
     { /* UpperLayerTxPduId */ CANNM_CANIF_TX_PDU_ID,
       /* CanId */             0x400U,
       /* Dlc */               CANNM_DLC,
@@ -109,32 +113,13 @@ const CanIf_ConfigType kTestCanIfConfig = {
     /* RxPduCount */  1U
 };
 
-const PduR_RxDestType kTestPduRRxDest = {
-    /* Module */    PDUR_MODULE_CANTP,
-    /* DestPduId */ CANTP_RX_SDU_ID,
-    /* RxIndFct */  CanTp_RxIndication
-};
-
-const PduR_RxRoutingPathType kTestPduRRxPath = {
-    /* SrcPduId */  0U,
-    /* Dests */     &kTestPduRRxDest,
-    /* DestCount */ 1U
-};
-
-const PduR_TxRoutingPathType kTestPduRTxPath = {
-    /* SrcPduId */             CANTP_PDUR_TX_SDU_ID,
-    /* CanIfTxPduId */         0U,
-    /* ConfDestPduId */        0U,
-    /* ConfFct */              CanTp_TxConfirmation,
-    /* TransmitOverrideFct */  NULL,
-    /* TransmitOverrideId */   0U
-};
-
+// 診断の経路（CanTp ↔ Dcm）は、PduR の TP のルーティングで運ぶ。IF のルーティング（RxPaths/TxPaths）は持たない
+// （CanIf と CanTp は、PduR を経由せず直接やり取りする）。
 const PduR_PBConfigType kTestPduRConfig = {
-    /* RxPaths */     &kTestPduRRxPath,
-    /* RxPathCount */ 1U,
-    /* TxPaths */     &kTestPduRTxPath,
-    /* TxPathCount */ 1U,
+    /* RxPaths */     NULL,
+    /* RxPathCount */ 0U,
+    /* TxPaths */     NULL,
+    /* TxPathCount */ 0U,
     /* PBConfigId */ 0U,
     /* RoutingPathGroups */ NULL,
     /* RoutingPathGroupCount */ 0U,

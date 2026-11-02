@@ -3,15 +3,15 @@
 from . import symbols
 from .common import block_comment, doc_comment, struct_fields
 
-RX_FCT = {"COM": "Com_RxIndication", "CANTP": "CanTp_RxIndication", "SECOC": "SecOC_RxIndication"}
-TX_FCT = {"COM": "Com_TxConfirmation", "CANTP": "CanTp_TxConfirmation"}
+RX_FCT = {"COM": "Com_RxIndication", "SECOC": "SecOC_RxIndication"}
+TX_FCT = {"COM": "Com_TxConfirmation"}
 # トリガ送信（下位層が送信データを取りに来る）の転送先。対応するのは Com だけ
 TRIGGER_TRANSMIT_FCT = {"COM": "Com_TriggerTransmit"}
 # SecOC を経由する経路（transmitOverride.fct が SecOC_IfTransmit）のトリガ送信は、SecOC が、組み立てた Secured I-PDU を
 # 自分で複製する（上位層の Com へは転送しない。SWS_SecOC_00068）。上位層の PDU ID は、SecOC の TX PDU の ID（transmitOverride.id）
 SECOC_TRIGGER_TRANSMIT_FCT = "SecOC_TriggerTransmit"
 SECOC_OVERRIDE_FCT = "SecOC_IfTransmit"
-MODULE_HEADER = {"COM": "Com.h", "CANTP": "CanTp.h", "SECOC": "SecOC.h"}
+MODULE_HEADER = {"COM": "Com.h", "SECOC": "SecOC.h"}
 DAVINCI_ROUTING = "/ActiveEcuC/PduR/PduRConfig/PduRRoutingTable/"
 
 
@@ -69,8 +69,6 @@ def dest_pdu_value(d, path, ctx):
     if "secocPdu" in d:
         secoc_index(ctx, d["secocPdu"], "PduR " + path["name"])  # 存在の確認
         return symbols.SECOC_RX + d["secocPdu"]
-    if d["module"] == "CANTP":
-        return cantp_sdu(ctx, "rxSduId", "CANTP_RX_SDU_ID", d["destPduId"], "PduR " + path["name"])
     return "%dU" % dest_pdu_id(d, path, ctx)
 
 
@@ -86,8 +84,6 @@ def conf_dest_value(p, ctx):
     """送信確認の宛先の ID の C 表記。Com の I-PDU ならシンボリック名、それ以外は数値。"""
     if "confIpdu" in p:
         return symbols.com_ipdu_symbol(ctx, "TX", p["confIpdu"], "PduR " + p["name"])
-    if p["confModule"] == "CANTP":
-        return cantp_sdu(ctx, "txSduId", "CANTP_TX_SDU_ID", p["confDestPduId"], "PduR " + p["name"])
     return "%dU" % conf_dest_pdu_id(p, ctx)
 
 

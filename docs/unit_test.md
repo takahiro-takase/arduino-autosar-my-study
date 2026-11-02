@@ -262,9 +262,11 @@ CanIf/CanSM 側の未初期化ガードにより、本テストが
   リンクしないので、`stub/Bsw/PduR/Fake_PduR_PBCfg.c` の `PduR_Config` が、本番と同じ TP のルーティング
   （CanTp ↔ Dcm）を持つ。CanTp・Dcm を実体で結ぶテストは `PduR_Init(&PduR_Config)` を呼ぶ。
   テスト固有の PduR 設定（IF のルーティングを持つもの）には、`Fake_PduR_PBCfg.h` の `Fake_PduR_TpRxPaths` / `Fake_PduR_TpTxPaths` を持たせる。
-  CAN フレームの送信（`PduR_CanTpTransmit`）は `stub/Bsw/PduR/Wrap_PduR.c` の
-  `FailFromCallCount_PduR_CanTpTransmit` / `ForcedReturn_PduR_CanTpTransmit` で成功・失敗を決める
-  （実体の PduR は設定が無いと失敗するため、成功させるには `FailFromCallCount_…= 0` と `ForcedReturn_…= E_OK` を指定する）。
+  CAN フレームの送信（CanTp が直接呼ぶ `CanIf_Transmit`）は `stub/Bsw/CanIf/Wrap_CanIf.c` の
+  `FailFromCallCount_CanIf_Transmit` / `ForcedReturn_CanIf_Transmit` で成功・失敗を決める
+  （実体の CanIf は設定が無いと失敗するため、成功させるには `FailFromCallCount_…= 0` と `ForcedReturn_…= E_OK` を指定する）。
+  診断のコールチェーン（DcmStack）の、テスト固有の CanIf 設定は、診断応答の PDU を TX テーブルの添字 `CANTP_CANIF_TX_PDU_ID`
+  に置き、受信と送信完了は `CanTp_RxIndication` / `CanTp_TxConfirmation` を直接結ぶ（PduR の IF の経路は持たない）。
   CanTp の内部状態を観測・設定するフックは `CANTP_UNIT_TEST` ガード付きで、
   `CanTp_Test_IsTxBusy()`（送信中か）、`CanTp_Test_SetTxWaitFc()`（FC 待ちにする）、
   `CanTp_Test_GetTxStMin()`（FC から取り込んだ STmin）を持つ。TearDown では Dcm を未初期化へ戻し、

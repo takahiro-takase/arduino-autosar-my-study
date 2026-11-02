@@ -2,12 +2,12 @@
  * \file    CanTp.h
  * \brief   CAN トランスポートプロトコル 公開インタフェース
  *          (AUTOSAR SWS_CanTp 準拠, ISO 15765-2)
- * \details CanIf/PduR と DCM の間に位置し、Single Frame (SF) /
+ * \details CanIf と DCM（PduR 経由）の間に位置し、Single Frame (SF) /
  *          First Frame (FF) / Consecutive Frame (CF) /
  *          Flow Control (FC) の送受信を仲介する。
  *
  *          RX フロー:
- *            PduR_CanIfRxIndication → CanTp_RxIndication
+ *            CanIf → CanTp_RxIndication（PduR を経由しない）
  *            CanTp: SF/FF → PduR_CanTpStartOfReception、各フレームのデータ → PduR_CanTpCopyRxData、
  *                   完了 → PduR_CanTpRxIndication（組み立ては、Dcm の受信バッファの上で行う）
  *                   （PduR が、Dcm_StartOfReception / Dcm_CopyRxData / Dcm_TpRxIndication へ転送する）
@@ -15,7 +15,8 @@
  *          TX フロー:
  *            Dcm → PduR_DcmTransmit → CanTp_Transmit (応答の長さだけ)
  *            CanTp: SF/FF/各 CF のデータ → PduR_CanTpCopyTxData（→ Dcm_CopyTxData）、
- *                   フレームを送信 → PduR_CanTpTransmit → CanIf → CAN 0x7E8、
+ *                   フレームを送信 → CanIf_Transmit（PduR を経由しない）→ CAN 0x7E8、
+ *                   送信完了 → CanIf → CanTp_TxConfirmation、
  *                   完了 → PduR_CanTpTxConfirmation（→ Dcm_TpTxConfirmation）
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -96,7 +97,7 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr);
  * \retval  E_OK      送信要求を受け付けた (SF) または FF を送信した (MF)。
  * \retval  E_NOT_OK  NULL ポインタ、長さ超過、TX チャネルがビジー、
  *                    または SF/FF の物理送信が同期的に失敗した
- *                    (PduR/CanIf/Can_Write が拒否した)。
+ *                    (CanIf/Can_Write が拒否した)。
  *
  * \ServiceID      {0x49}
  * \Reentrancy     {Non Reentrant}
@@ -138,14 +139,14 @@ void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * ====================================================================== */
 
 /**
- * \brief   PduR から配信された受信 CAN フレームを処理する。
+ * \brief   CanIf から配信された受信 CAN フレーム（N-PDU）を処理する。
  *
  * \details フレームタイプ (SF/FF/CF/FC) を判定し、
  *          SF/FF/CF のデータを、PduR の TP の API（PduR_CanTpStartOfReception / PduR_CanTpCopyRxData / PduR_CanTpRxIndication）で渡す
  *          (SWS_CanTp_00214)。
  *          FC フレームは TX 側の FC 待ちを解除する。
  *
- * \param[in]  RxPduId     受信 PDU ID (本実装では単一チャネルのため未使用)。
+ * \param[in]  RxPduId     受信 N-PDU の ID（CANTP_RX_NPDU_ID。CanIf の設定が渡す）。
  * \param[in]  PduInfoPtr  受信した 8 バイト CAN フレームへのポインタ。
  *
  * \ServiceID      {0x42}
@@ -155,16 +156,16 @@ void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
 void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
 
 /**
- * \brief   PduR からの送信完了通知を受け取る。
+ * \brief   CanIf からの送信完了通知を受け取る。
  *
- * \details CanIf がフレーム送信を完了すると PduR を経由して呼び出される
- *          (SWS_CanTp_00236)。本実装では現在 no-op（意図的。詳細は CanTp.c の
+ * \details CanIf がフレーム送信を完了すると、直接呼び出される
+ *          (SWS_CanTp_00236)。ID の検査以外は no-op（意図的。詳細は CanTp.c の
  *          実装コメント参照）: 本プロジェクトの非同期 TX 確認経路は真の送信
  *          失敗を表現できず、result は実質的に常に E_OK しか渡ってこない。
  *          実際に到達可能な送信失敗は CanTp_SendFrame() の同期的な戻り値と
  *          CF 送信の N_As 相当タイムアウトで別途検出している。
  *
- * \param[in]  TxPduId  送信完了した PDU の ID。
+ * \param[in]  TxPduId  送信完了した TX N-PDU の ID（CANTP_TX_NPDU_ID。CanIf の設定が渡す）。
  * \param[in]  result   送信結果 (E_OK / E_NOT_OK。上記理由により本経路では
  *                      実質的に常に E_OK)。
  *

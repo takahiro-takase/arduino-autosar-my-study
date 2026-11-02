@@ -197,8 +197,8 @@ UDS の DID（0x22 読み出し・0x2E 書き込み・0x2F 入出力制御）の
 どちらも信号表とは関係なく、`config/data/CanTp.json` と `CanNm.json` が入力です（`modules/cantp.py`、`modules/cannm.py`）。
 定義の説明コメントも json の `doc` に持ち、`CanTp_Cfg.h`・`CanNm_Cfg.h` の目印の間に生成します（DET のエラーコード、API ID、バージョン情報などの手書きの定義は、そのまま残しています）。
 
-- **他のモジュールの PDU は名前で指します。** CanNm の `canifTxPdu` / `canifRxPdu` は CanIf.json の PDU の名前、CanTp の `pdurTxSrcPdu` は PduR.json の `txPaths` の名前です。
-  生成物ではシンボリック名（`CanIfConf_CanIfTxPduCfg_CanNm_Tx`、`PduRConf_PduRSrcPdu_DiagResp_Tx` など）になり、以前の `2U` / `1U` のような添字の手合わせはなくなりました。
+- **他のモジュールの PDU は名前で指します。** CanNm の `canifTxPdu` / `canifRxPdu` は CanIf.json の PDU の名前、CanTp の `canIfTxPdu` は CanIf.json の `txPdus` の名前です。
+  生成物ではシンボリック名（`CanIfConf_CanIfTxPduCfg_CanNm_Tx`、`CanIfConf_CanIfTxPduCfg_DiagResp_Tx` など）になり、以前の `2U` / `1U` のような添字の手合わせはなくなりました。
   名前が無いとき、または PDU の上位層が違うとき（CanNm なら CANNM、CanTp なら CANTP でないとき）は生成エラーです。
 - **周期の検査**: CanNm の `cycleMs` が `Os_PBCfg.c` の `CanNm_MainFunction` の周期と一致するかを検査します。`timeoutMs` は `cycleMs` より長くします。
 - 見出しコメントは `*Section`、MISRA 2.5（未使用マクロ）の抑止コメントは `unused: true` で指定します。

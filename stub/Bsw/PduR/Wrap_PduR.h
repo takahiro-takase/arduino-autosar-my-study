@@ -7,10 +7,10 @@
  *          冒頭コメント参照（「wrap 対象の関数が定義されている元の src ファイル
  *          1 つにつき 1 ファイル」）。既定動作は `__real_...` へのパススルー。
  *
- *          PduR.c の実際に実体化された IF 全8関数を wrap 対象とする
+ *          PduR.c の実際に実体化された API（IF と TP）を、すべて wrap 対象とする
  *          （`PduR_<User:Xxx>` テンプレート名の未実装分は対象外）。
  *
- *          戻り値を持つ3関数（ComTransmit/CanTpTransmit/SecOCTransmit）には
+ *          戻り値を持つ関数（ComTransmit/SecOCTransmit/DcmTransmit/CanTpStartOfReception/CanTpCopyRxData/CanTpCopyTxData）には
  *          「指定した呼び出し回数以降は常に失敗を返す」という回数閾値方式の
  *          故障注入を実装する。`FailFromCallCount_PduR_Xxx`
  *          （既定 `Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED`）に N を設定すると、
@@ -24,7 +24,7 @@
  *          呼び出し側の判定を `CallCount >= FailFromCallCount` の1条件だけに
  *          単純化できる（2026-09-20、ユーザー提案により `!= 0` ガードを撤去）。
  *
- *          戻り値を持たない5関数（Init/GetVersionInfo/ComRxIndication/
+ *          戻り値を持たない関数（Init/GetVersionInfo/ComRxIndication/
  *          CanIfTxConfirmation/SecOCTxConfirmation）は故障注入する戻り値が
  *          無いため、呼び出し回数のみを記録する。
  *
@@ -40,7 +40,7 @@
  *          接頭辞は冗長なため付けない。今後新規追加する `Wrap_XXX.c` は
  *          本ファイルと同じ命名規則へ統一する）。
  *
- *          8関数すべて本ファイル1つが対象で、実際に使うテスト（想定:
+ *          全関数とも本ファイル1つが対象で、実際に使うテスト（想定:
  *          `test/Bsw/PduR/`）も1つに閉じるため、他 wrap ファイルのような
  *          関数ごとの個別 `Reset()` ではなく、全状態を一括で初期状態へ戻す
  *          `WrapPduR_Reset()` を1つだけ持つ（2026-09-20、ユーザー提案により
@@ -80,12 +80,11 @@ extern "C" {
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * 呼び出し回数（実体化済みIF全8関数共通）
+ * 呼び出し回数（wrap した全関数共通）
  * ---------------------------------------------------------------------- */
 extern uint32 CallCount_PduR_Init;
 extern uint32 CallCount_PduR_GetVersionInfo;
 extern uint32 CallCount_PduR_ComTransmit;
-extern uint32 CallCount_PduR_CanTpTransmit;
 extern uint32 CallCount_PduR_SecOCTransmit;
 extern uint32 CallCount_PduR_ComRxIndication;
 extern uint32 CallCount_PduR_CanIfTxConfirmation;
@@ -98,14 +97,13 @@ extern uint32 CallCount_PduR_CanTpCopyTxData;
 extern uint32 CallCount_PduR_CanTpTxConfirmation;
 
 /* ----------------------------------------------------------------------
- * 回数閾値故障注入（戻り値を持つ3関数のみ）
+ * 回数閾値故障注入（戻り値を持つ関数のみ）
  * ---------------------------------------------------------------------- */
 /** `Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED`（既定）: 常に対応する
  *  `__real_PduR_Xxx()` へパススルー。それ以外の値を設定すると、対応する
  *  `CallCount_PduR_Xxx` がこの値に達した回から（以降ずっと）
  *  対応する `ForcedReturn_PduR_Xxx` を返す。 */
 extern uint32 FailFromCallCount_PduR_ComTransmit;
-extern uint32 FailFromCallCount_PduR_CanTpTransmit;
 extern uint32 FailFromCallCount_PduR_SecOCTransmit;
 extern uint32 FailFromCallCount_PduR_DcmTransmit;
 extern uint32 FailFromCallCount_PduR_CanTpStartOfReception;
@@ -113,10 +111,9 @@ extern uint32 FailFromCallCount_PduR_CanTpCopyRxData;
 extern uint32 FailFromCallCount_PduR_CanTpCopyTxData;
 
 /* ----------------------------------------------------------------------
- * 閾値到達後の強制戻り値（戻り値を持つ3関数のみ）
+ * 閾値到達後の強制戻り値（戻り値を持つ関数のみ）
  * ---------------------------------------------------------------------- */
 extern Std_ReturnType ForcedReturn_PduR_ComTransmit;
-extern Std_ReturnType ForcedReturn_PduR_CanTpTransmit;
 extern Std_ReturnType ForcedReturn_PduR_SecOCTransmit;
 extern Std_ReturnType ForcedReturn_PduR_DcmTransmit;
 extern BufReq_ReturnType ForcedReturn_PduR_CanTpStartOfReception;

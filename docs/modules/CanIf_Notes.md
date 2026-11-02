@@ -11,13 +11,13 @@ CAN ID ↔ 論理 PDU のマッピングを担う。上位層は CAN ID を知�
 | 方向 | CanIf の PDU ID | CAN ID | DLC | 上位層 |
 |------|----------------|--------|-----|--------|
 | TX | 0 | 0x200 | 6 | MeterStatus（Com、PduR 経由） |
-| TX | 1 | 0x7E8 | 8 | UDS 診断応答（CanTp、PduR 経由） |
+| TX | 1 | 0x7E8 | 8 | UDS 診断応答（CanTp が `CanIf_Transmit()` を直接呼ぶ。PduR を経由しない） |
 | TX | 2 | 0x400 | 2 | NM フレーム（CanNm が `CanIf_Transmit()` を直接呼ぶ。PduR/Com を経由しない） |
 | TX | 3 | 0x210 | 1 | WarningStatus（Com） |
 | TX | 4 | 0x220 | 5 | E2EHealthStatus（Com、E2E Profile05 保護） |
 | TX | 5 | 0x230 | 1 | ImmobilizerStatus（Com、Signal Gateway の転送先） |
 | RX | 0 | 0x100 | 7 | EngineInfo → PduR → Com |
-| RX | 1 | 0x7E0 | 8 | UDS 診断要求 → PduR → CanTp |
+| RX | 1 | 0x7E0 | 8 | UDS 診断要求 → `CanTp_RxIndication()`（PduR を経由しない） |
 | RX | 2 | 0x110 | 6 | AbsInfo → PduR → Com |
 | RX | 3 | 0x120 | 6 | ImmobilizerCmd（SecOC 保護）→ PduR → SecOC → Com |
 | RX | 4 | 0x400 | 2 | NM フレーム → `CanNm_RxIndication()`（PduR/Com を経由しない） |

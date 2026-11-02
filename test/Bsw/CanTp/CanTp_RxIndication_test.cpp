@@ -62,8 +62,8 @@ protected:
         WrapCanIf_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         WrapPduR_Reset();
-        FailFromCallCount_PduR_CanTpTransmit = 0U;   // 既定: CAN フレームの送信（PduR 経由）は成功する
-        ForcedReturn_PduR_CanTpTransmit      = E_OK;
+        FailFromCallCount_CanIf_Transmit = 0U;   // 既定: CAN フレームの送信（CanIf_Transmit）は成功する
+        ForcedReturn_CanIf_Transmit           = E_OK;
         Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
         PduR_Init(&PduR_Config);
@@ -80,7 +80,7 @@ protected:
         CanTp_Test_SetTxWaitFc();
         uint8 frame[8] = { 0x30U, 0x00U, raw, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
         return CanTp_Test_GetTxStMin();
     }
 
@@ -97,7 +97,7 @@ protected:
     {
         uint8 frame[8] = { 0x10U, 0x0AU, 0x3EU, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // CF（シーケンス番号 sn、データ部は 0）を、長さ len で受け取ったことにする。
@@ -105,7 +105,7 @@ protected:
     {
         uint8 frame[8] = { (uint8)(0x20U | sn), 0U, 0U, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, len };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // FC（フロー状態 fs、STmin 5）を受け取ったことにする。
@@ -113,7 +113,7 @@ protected:
     {
         uint8 frame[8] = { (uint8)(0x30U | fs), 0U, 5U, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // CanTp に DeInit() は無いため、未初期化状態が必要なテストは各自
@@ -136,7 +136,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -155,7 +155,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_InvalidRxPduId)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID + 1U, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID + 1U, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -173,7 +173,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_NullPduInfoPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, NULL);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -191,7 +191,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_NullSduDataPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -210,7 +210,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfPayloadLengthZero)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -231,7 +231,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfPayloadLengthAboveMax)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -250,7 +250,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfFrameShorterThanDeclared
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -269,7 +269,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfShorterThanEightBytesIsR
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -290,7 +290,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfMessageLengthFitsSingleF
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -309,7 +309,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfFrameShorterThanEightByt
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -455,7 +455,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcShorterThanEightBytesAbo
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -499,7 +499,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_UnknownFrameTypeIsIgnored)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -520,7 +520,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_EmptyFrameIsIgnored)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -561,7 +561,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_SfValidFrameStartsReceptio
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -584,7 +584,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FfValidFrameStartsReceptio
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

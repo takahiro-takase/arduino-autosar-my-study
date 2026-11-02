@@ -20,7 +20,6 @@
 uint32 CallCount_PduR_Init                = 0U;
 uint32 CallCount_PduR_GetVersionInfo      = 0U;
 uint32 CallCount_PduR_ComTransmit         = 0U;
-uint32 CallCount_PduR_CanTpTransmit       = 0U;
 uint32 CallCount_PduR_SecOCTransmit       = 0U;
 uint32 CallCount_PduR_ComRxIndication     = 0U;
 uint32 CallCount_PduR_CanIfTxConfirmation = 0U;
@@ -33,7 +32,6 @@ uint32 CallCount_PduR_CanTpCopyTxData        = 0U;
 uint32 CallCount_PduR_CanTpTxConfirmation    = 0U;
 
 uint32 FailFromCallCount_PduR_ComTransmit   = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_PduR_CanTpTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_PduR_SecOCTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_PduR_DcmTransmit           = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_PduR_CanTpStartOfReception = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -41,7 +39,6 @@ uint32 FailFromCallCount_PduR_CanTpCopyRxData       = Wrap_PduR_FAIL_FROM_CALL_C
 uint32 FailFromCallCount_PduR_CanTpCopyTxData       = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 
 Std_ReturnType ForcedReturn_PduR_ComTransmit   = E_NOT_OK;
-Std_ReturnType ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;
 Std_ReturnType ForcedReturn_PduR_SecOCTransmit = E_NOT_OK;
 Std_ReturnType   ForcedReturn_PduR_DcmTransmit           = E_NOT_OK;
 BufReq_ReturnType ForcedReturn_PduR_CanTpStartOfReception = BUFREQ_E_NOT_OK;
@@ -57,7 +54,6 @@ void WrapPduR_Reset(void)
     CallCount_PduR_Init                = 0U;
     CallCount_PduR_GetVersionInfo      = 0U;
     CallCount_PduR_ComTransmit         = 0U;
-    CallCount_PduR_CanTpTransmit       = 0U;
     CallCount_PduR_SecOCTransmit       = 0U;
     CallCount_PduR_ComRxIndication     = 0U;
     CallCount_PduR_CanIfTxConfirmation = 0U;
@@ -79,11 +75,9 @@ void WrapPduR_Reset(void)
     ForcedReturn_PduR_CanTpCopyTxData       = BUFREQ_E_NOT_OK;
 
     FailFromCallCount_PduR_ComTransmit   = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_PduR_CanTpTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_PduR_SecOCTransmit = Wrap_PduR_FAIL_FROM_CALL_COUNT_DISABLED;
 
     ForcedReturn_PduR_ComTransmit   = E_NOT_OK;
-    ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;
     ForcedReturn_PduR_SecOCTransmit = E_NOT_OK;
 }
 
@@ -149,23 +143,6 @@ Std_ReturnType __wrap_PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* Pd
         return ForcedReturn_PduR_ComTransmit;
     }
     return __real_PduR_ComTransmit(SrcPduId, PduInfoPtr);
-}
-
-/* ----------------------------------------------------------------------
- * PduR_CanTpTransmit
- * ---------------------------------------------------------------------- */
-extern 
-Std_ReturnType __real_PduR_CanTpTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr);
-Std_ReturnType __wrap_PduR_CanTpTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
-{
-    CallCount_PduR_CanTpTransmit++;
-    Log_Write(LOG_T, TAG, "PduR_CanTpTransmit", "called %u times", CallCount_PduR_CanTpTransmit);
-
-    if (CallCount_PduR_CanTpTransmit >= FailFromCallCount_PduR_CanTpTransmit)
-    {
-        return ForcedReturn_PduR_CanTpTransmit;
-    }
-    return __real_PduR_CanTpTransmit(SrcPduId, PduInfoPtr);
 }
 
 /* ----------------------------------------------------------------------

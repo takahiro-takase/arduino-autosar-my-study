@@ -8,8 +8,8 @@
  *          バイト列を直接渡し `Wrap_CanTp.h` で応答をキャプチャする
  *          「入口と出口だけを見る」ブラックボックステストだが、本ファイルは
  *          その外側 — CAN物理フレームの受信（`Can_Hw`）から
- *          Can → CanIf → PduR → CanTp → Dcm という実装経路と、応答の
- *          Dcm → CanTp → PduR → CanIf → Can → `Can_Hw` という復路を、
+ *          Can → CanIf → CanTp → PduR → Dcm という実装経路と、応答の
+ *          Dcm → PduR → CanTp → CanIf → Can → `Can_Hw` という復路を、
  *          全モジュール実体リンク（すべて `-Wl,--wrap` 経由で既定パス
  *          スルー）で 1本のコールチェーンとして検証する「DcmStack」系列の
  *          最初のテスト（2026-09、ユーザーとの相談の上、まず本シナリオで
@@ -28,7 +28,7 @@
  *
  *          診断 PDU の CAN ID・PDU ID 番号は本番の `Can_PBCfg.c`/
  *          `CanIf_PBCfg.c`/`PduR_PBCfg.c`（CanId=0x7E0 request / 0x7E8
- *          response、CanTp_Cfg.h の CANTP_RX_SDU_ID=0/CANTP_PDUR_TX_SDU_ID=1）
+ *          response、CanTp_Cfg.h の CANTP_RX_NPDU_ID/CANTP_TX_NPDU_ID）
  *          と同じ値を使うが、他の native_chain フルチェーンテスト
  *          （ComStack_Signal_Rx_test.cpp 等）と同じ流儀で、本番の
  *          `Can_Config`/`CanIf_Config`/`PduR_Config` は使わず対象PDUのみに
@@ -88,53 +88,39 @@ namespace
 const CanIf_RxPduConfigType kTestCanIfRxPdu = {
     /* CanId */                0x7E0U,
     /* Hrh */                  0U,  /* Can_MainFunction_Read() が構築する Mailbox は常に Hoh=0 */
-    /* UpperLayerRxPduId */    0U,
+    /* UpperLayerRxPduId */    CANTP_RX_NPDU_ID,
     /* Dlc */                  8U,
-    /* RxIndicationFct */      PduR_CanIfRxIndication,
+    /* RxIndicationFct */      CanTp_RxIndication,
     /* ReadRxPduDataEnabled */ 0U
 };
 
-const CanIf_TxPduConfigType kTestCanIfTxPdu = {
-    /* UpperLayerTxPduId */ 0U,
-    /* CanId */             0x7E8U,
-    /* Dlc */               8U,
-    /* Hth */               0U,
-    /* TxConfirmFct */      PduR_CanIfTxConfirmation
+// CanTp は、診断応答を CanIf_Transmit(CANTP_CANIF_TX_PDU_ID, …) で直接送る（PduR を経由しない）。
+// そのインデックスに診断応答の PDU を置く（手前の PDU は未使用）。
+static_assert(CANTP_CANIF_TX_PDU_ID == 1U, "診断応答の PDU を、CanIf の TX テーブルの添字 1 に置く前提");
+
+const CanIf_TxPduConfigType kTestCanIfTxPdus[2] = {
+    { 0U, 0U, 0U, 0U, NULL },
+    { /* UpperLayerTxPduId */ CANTP_TX_NPDU_ID,
+      /* CanId */             0x7E8U,
+      /* Dlc */               8U,
+      /* Hth */               0U,
+      /* TxConfirmFct */      CanTp_TxConfirmation }
 };
 
 const CanIf_ConfigType kTestCanIfConfig = {
-    /* TxPduConfig */ &kTestCanIfTxPdu,
-    /* TxPduCount */  1U,
+    /* TxPduConfig */ kTestCanIfTxPdus,
+    /* TxPduCount */  2U,
     /* RxPduConfig */ &kTestCanIfRxPdu,
     /* RxPduCount */  1U
 };
 
-const PduR_RxDestType kTestPduRRxDest = {
-    /* Module */    PDUR_MODULE_CANTP,
-    /* DestPduId */ CANTP_RX_SDU_ID,
-    /* RxIndFct */  CanTp_RxIndication
-};
-
-const PduR_RxRoutingPathType kTestPduRRxPath = {
-    /* SrcPduId */  0U,  /* = kTestCanIfRxPdu.UpperLayerRxPduId */
-    /* Dests */     &kTestPduRRxDest,
-    /* DestCount */ 1U
-};
-
-const PduR_TxRoutingPathType kTestPduRTxPath = {
-    /* SrcPduId */             CANTP_PDUR_TX_SDU_ID,
-    /* CanIfTxPduId */         0U,  /* = kTestCanIfTxPdu の登録順インデックス */
-    /* ConfDestPduId */        0U,
-    /* ConfFct */              CanTp_TxConfirmation,
-    /* TransmitOverrideFct */  NULL,
-    /* TransmitOverrideId */   0U
-};
-
+// 診断の経路（CanTp ↔ Dcm）は、PduR の TP のルーティングで運ぶ。IF のルーティング（RxPaths/TxPaths）は持たない
+// （CanIf と CanTp は、PduR を経由せず直接やり取りする）。
 const PduR_PBConfigType kTestPduRConfig = {
-    /* RxPaths */     &kTestPduRRxPath,
-    /* RxPathCount */ 1U,
-    /* TxPaths */     &kTestPduRTxPath,
-    /* TxPathCount */ 1U,
+    /* RxPaths */     NULL,
+    /* RxPathCount */ 0U,
+    /* TxPaths */     NULL,
+    /* TxPathCount */ 0U,
     /* PBConfigId */ 0U,
     /* RoutingPathGroups */ NULL,
     /* RoutingPathGroupCount */ 0U,
@@ -231,8 +217,8 @@ TEST_F(DcmStack_SID19_SF01_ReadDtcCount_Test,
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
     // Os から周期的に呼ばれる Can_MainFunction_Read() を1回
-    // 駆動する。Can_Hw 受信 → Can → CanIf → PduR → CanTp → Dcm →
-    // （復路）CanTp → PduR → CanIf → Can → Can_Hw 送信、まで同期的に進む。
+    // 駆動する。Can_Hw 受信 → Can → CanIf → CanTp → PduR → Dcm →
+    // （復路）Dcm → PduR → CanTp → CanIf → Can → Can_Hw 送信、まで同期的に進む。
     Can_MainFunction_Read();
 
     /* ----------------------- */

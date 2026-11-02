@@ -92,36 +92,35 @@
  *  DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable 内の
  *           RECEIVE 方向 PduRRoutingPath ノード数
  *  パス 0: CAN 0x100 → COM   (EngineInfo,  エンジン ECU)
- *  パス 1: CAN 0x7E0 → CanTp (UDS 診断要求, 診断ツール)
- *  パス 2: CAN 0x110 → COM   (AbsInfo,     ABS ECU)
- *  パス 3: CAN 0x120 → SecOC (ImmobilizerCmd, KeyFobEcu 想定。検証成功後
+ *  パス 1: CAN 0x110 → COM   (AbsInfo,     ABS ECU)
+ *  パス 2: CAN 0x120 → SecOC (ImmobilizerCmd, KeyFobEcu 想定。検証成功後
  *           SecOC 自身が Com_RxIndication() を直接呼ぶため、COM への
- *           配信先はここには現れない） */
-#define PDUR_RX_PATH_COUNT   4U
+ *           配信先はここには現れない）
+ *  UDS 診断要求（CAN 0x7E0）は、CanIf が CanTp_RxIndication() を直接呼ぶ（IF の経路ではない）。
+ *  CanTp が上位層（Dcm）へ渡す N-SDU は、tpRxPaths で運ぶ。 */
+#define PDUR_RX_PATH_COUNT   3U
 
 /** RX パス 0 の配信先数（COM のみ） */
 #define PDUR_RX_DEST_COUNT_PATH0  1U
 
-/** RX パス 1 の配信先数（CanTp のみ） */
+/** RX パス 1 の配信先数（COM のみ: AbsInfo は ABS ECU からの受信専用） */
 #define PDUR_RX_DEST_COUNT_PATH1  1U
 
-/** RX パス 2 の配信先数（COM のみ: AbsInfo は ABS ECU からの受信専用） */
+/** RX パス 2 の配信先数（SecOC のみ） */
 #define PDUR_RX_DEST_COUNT_PATH2  1U
-
-/** RX パス 3 の配信先数（SecOC のみ） */
-#define PDUR_RX_DEST_COUNT_PATH3  1U
 
 /** TX ルーティングパス数
  *  パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)
- *  パス 1: CanTp → CanIf TxPduId=1 (CAN 0x7E8, UDS 診断応答)
- *  パス 2: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)
- *  パス 3: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC。
+ *  パス 1: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)
+ *  パス 2: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC。
  *          E2E Profile05 保護のみ。以前は SecOC を経由していたが撤去済み)
- *  パス 4: COM   → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus。
+ *  パス 3: COM   → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus。
  *          Signal Gateway の転送先。DIRECT)
- *  SrcPduId は COM が PduR_ComTransmit() へ、CanTp が PduR_CanTpTransmit() へ
- *  渡す共通の名前空間のため、各パスで重複しない値を割り当てること。 */
-#define PDUR_TX_PATH_COUNT   6U
+ *  パス 4: COM   → CanIf TxPduId=6 (CAN 0x300, TestMsg)
+ *  UDS 診断応答（CAN 0x7E8）は、CanTp が CanIf_Transmit() を直接呼ぶ（IF の経路ではない）。
+ *  SrcPduId は COM が PduR_ComTransmit() へ渡す名前空間。各パスで重複しない値を割り当てること。
+ *  SrcPduId=1 は、かつて CanTp の診断応答に使っていた欠番（既存の ID を変えないため、詰めない）。 */
+#define PDUR_TX_PATH_COUNT   5U
 
 /** TP の RX ルーティングパス数（CanTp → Dcm） */
 #define PDUR_TP_RX_PATH_COUNT   1U
@@ -133,12 +132,10 @@
 /* @@GEN-BEGIN pdur-symbols  生成元: config/data/PduR.json  （自動生成: 手編集禁止） */
 /* シンボリック名: PduRConf_PduRSrcPdu_<name>（値は経路の srcPduId）。CanIf などの下位層が参照する。 */
 #define PduRConf_PduRSrcPdu_EngineInfo_Rx         0U
-#define PduRConf_PduRSrcPdu_DiagReq_Rx            1U
 #define PduRConf_PduRSrcPdu_AbsInfo_Rx            2U
 #define PduRConf_PduRSrcPdu_ImmobilizerCmd_Rx     3U
 
 #define PduRConf_PduRSrcPdu_MeterStatus_Tx        0U
-#define PduRConf_PduRSrcPdu_DiagResp_Tx           1U
 #define PduRConf_PduRSrcPdu_WarningStatus_Tx      2U
 #define PduRConf_PduRSrcPdu_E2EHealthStatus_Tx    3U
 #define PduRConf_PduRSrcPdu_ImmobilizerStatus_Tx  4U

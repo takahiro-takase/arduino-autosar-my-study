@@ -111,7 +111,7 @@
 /* @@GEN-BEGIN canif-counts  生成元: config/data/CanIf.json  （自動生成: 手編集禁止） */
 /** TX PDU テーブルのエントリ数（送信 CAN フレーム種別数）
  *  TxPduId=0: EngineState    (CAN 0x200, COM)
- *  TxPduId=1: UDS 診断応答   (CAN 0x7E8, DCM)
+ *  TxPduId=1: UDS 診断応答   (CAN 0x7E8, CanTp。PduR を経由せず直接呼び出す)
  *  TxPduId=2: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)
  *  TxPduId=3: WarningStatus  (CAN 0x210, COM Signal Group)
  *  TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)
@@ -123,7 +123,7 @@
 /** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）
  *  DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg ノード数
  *  RxPduId=0: EngineInfo     (CAN 0x100, COM)   エンジン ECU
- *  RxPduId=1: UDS 診断要求   (CAN 0x7E0, DCM)   診断ツール
+ *  RxPduId=1: UDS 診断要求   (CAN 0x7E0, CanTp。PduR を経由せず直接呼び出す)   診断ツール
  *  RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU
  *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
  *  RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)

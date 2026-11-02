@@ -385,8 +385,8 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .DLC               = 1U,                                   /* DaVinci: ComIPduLength    - I-PDU バイト長
                                                                     *          （bit0-2=RunLamp/FaultLamp/AbsLamp、bit3=update-bit、残り4bitは予約） */
         .PduRId            = PduRConf_PduRSrcPdu_WarningStatus_Tx, /* DaVinci: ComIPduPduRef    - PduR TX パス 2 へのリンク
-                                                                    *          (PduR_ComTransmit/PduR_CanTpTransmit の SrcPduId は COM/CanTp で共通の名前空間のため、
-                                                                    *          CanTp が使用する 1U と衝突しないよう 2U を割り当てる) */
+                                                                    *          (PduR_ComTransmit の SrcPduId は PduR.json の txPaths の srcPduId。
+                                                                    *          1U は、かつて CanTp の診断応答に使っていた欠番のため、2U を割り当てる) */
         .TimeoutMs         = 0U,                                   /* TX I-PDU のため監視無効 */
         .IsSignalGroup     = 1U,                                   /* Signal Group（Com_SendSignalGroup で確定コミット） */
         .TxModeMode        = COM_TX_MODE_DIRECT,                   /* DaVinci: ComTxModeMode = ComTxModeFalse

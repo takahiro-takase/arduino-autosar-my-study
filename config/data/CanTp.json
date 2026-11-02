@@ -48,23 +48,35 @@
   "idSection": [
     "PDU / N-SDU ID"
   ],
-  "pdurTxSrcPdu": {
+  "canIfTxPdu": {
     "pdu": "DiagResp_Tx",
     "doc": [
-      "CanTp が診断応答フレームを送信する際に使用する PduR TX SrcPduId",
-      "（PduR.json の txPaths の name から求めたシンボリック名。CAN 0x7E8 の経路）。"
+      "CanTp が診断応答のフレーム（N-PDU）を送信する際に、CanIf_Transmit() へ渡す CanIf の TX PDU",
+      "（CanIf.json の txPdus の name から求めたシンボリック名。CAN 0x7E8 の PDU。txConfirm は CANTP）。"
+    ]
+  },
+  "txNPduId": {
+    "value": 2,
+    "doc": [
+      "CanIf が CanTp_TxConfirmation() に渡す、TX N-PDU の ID（CanIf.json の DiagResp_Tx の上位層へ返す ID）。"
+    ]
+  },
+  "rxNPduId": {
+    "value": 1,
+    "doc": [
+      "CanIf が CanTp_RxIndication() に渡す、RX N-PDU の ID（CanIf.json の DiagReq_Rx の上位層へ渡す ID）。"
     ]
   },
   "txSduId": {
     "value": 0,
     "doc": [
-      "PduR の TP のルーティングパス（PduR.json の tpTxPaths）が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル)"
+      "PduR の TP のルーティングパス（PduR.json の tpTxPaths）が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル)。N-PDU の ID（txNPduId）とは別の名前空間"
     ]
   },
   "rxSduId": {
     "value": 0,
     "doc": [
-      "CanTp_RxIndication() が受け取る RX N-SDU ID (診断要求チャネル)"
+      "PduR の TP のルーティングパス（PduR.json の tpRxPaths）が、PduR_CanTpStartOfReception() などで受け取る RX N-SDU ID (診断要求チャネル)。N-PDU の ID（rxNPduId）とは別の名前空間"
     ]
   },
   "dcmRxPduId": {

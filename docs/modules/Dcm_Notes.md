@@ -16,9 +16,7 @@ RoutineControl・RequestDownload 等のシーケンス・S3 タイマ・Security
   ↓
 MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
                   ↓
-                PduR（パス 1: CanTp 専用ルート）
-                  ↓
-                CanTp_RxIndication()
+                CanTp_RxIndication()（CanIf が直接呼ぶ。PduR を経由しない）
                   SF → PduR_CanTpStartOfReception → PduR_CanTpCopyRxData → PduR_CanTpRxIndication
                   FF → PduR_CanTpStartOfReception、FC 送信、CF 待ち
                   CF → PduR_CanTpCopyRxData（Dcm の受信バッファへ直接）、完成後に PduR_CanTpRxIndication
@@ -32,7 +30,7 @@ MCP2515 → Can → CanIf（CanId=0x7E0 → RxPduId=1）
                   ≥8B → PduR_CanTpCopyTxData → FF 送信 → FC 待ち → CF ごとに PduR_CanTpCopyTxData → 送信 → PduR_CanTpTxConfirmation
                   （PduR が、Dcm_CopyTxData / Dcm_TpTxConfirmation へ転送する）
                   ↓
-                PduR_CanTpTransmit(SrcPduId=1) → CanIf → Can
+                CanIf_Transmit()（CanTp が直接呼ぶ。PduR を経由しない）→ Can
   │  CAN 0x7E8  [UDS 応答 / FC]
   ↓
 外部テスター
@@ -694,7 +692,7 @@ Dcm は、CanTp との間で、仕様の TP の関数（`Dcm_Cbk.h` で宣言）
 
 - 応答の送信（`Dcm_Transmit()`）は、`PduR_DcmTransmit()`（→ `CanTp_Transmit()`）に応答の長さだけを渡します。「送信が進行中」の印は、`CanTp_Transmit()` の中で `Dcm_TpTxConfirmation()` が呼ばれる場合（SF）に備えて、呼ぶ前に立てます。受け付けられなければ、すぐ解除します。
 - 要求の受信バッファ `DCM_RX_BUF_SIZE` は `Dcm_Cfg.h` に手書きしています（現在の最大の要求は 0x2E の鍵更新の 20 バイト）。
-- 仕様では PduR を経由します（`PduR_CanTpStartOfReception` など）が、本プロジェクトは PduR に TP の経路を持たないので、CanTp が Dcm を直接呼びます。
+- CanTp と Dcm の受け渡しは、仕様どおり PduR を経由します（`PduR_CanTpStartOfReception` など。PduR の TP のルーティングが、Dcm の PDU ID へ変換して転送する）。
 - 応答の送信の確認（`Dcm_TpTxConfirmation`）が届くまで ComM の `InactiveDiagnostic` を待つのが仕様の趣旨ですが、既存の動作を変えないため、通知は、従来どおり応答の送信を始めた時点で行っています。
 - 未実装: `Dcm_TxConfirmation`（TP でない I-PDU の送信確認）。
 

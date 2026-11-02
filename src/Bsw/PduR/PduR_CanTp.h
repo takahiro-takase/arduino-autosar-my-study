@@ -38,10 +38,6 @@ extern "C" {
  * Functions
  * ====================================================================== */
 
-/* SWS_PduR_00406: generic な PduR_<User:Up>Transmit テンプレート（Service ID
- * 0x49）の CanTp 向け実体化。CanTp が PDU 送信を要求する際に呼ぶ。 */
-Std_ReturnType PduR_CanTpTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr);
-
 /* SWS 8.3.4 章: 下位層の TP（CanTp）が上位層（Dcm）を呼ぶ API。PduR が、TP のルーティングパス
  * （PduR_TpRxRoutingPathType / PduR_TpTxRoutingPathType）で上位層の PDU ID へ変換して転送する。 */
 BufReq_ReturnType PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,

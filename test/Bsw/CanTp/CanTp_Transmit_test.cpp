@@ -66,8 +66,8 @@ protected:
         WrapCanIf_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         WrapPduR_Reset();
-        FailFromCallCount_PduR_CanTpTransmit = 0U;   // 既定: CAN フレームの送信（PduR 経由）は成功する
-        ForcedReturn_PduR_CanTpTransmit      = E_OK;
+        FailFromCallCount_CanIf_Transmit = 0U;   // 既定: CAN フレームの送信（CanIf_Transmit）は成功する
+        ForcedReturn_CanIf_Transmit           = E_OK;
         Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
         PduR_Init(&PduR_Config);
@@ -236,7 +236,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_ChannelBusyWhileMultiFrameInProgre
     /* ----------------------- */
     MakeDcmSendingVinResponse();
     ASSERT_EQ(Transmit(20U), E_OK);   // マルチフレーム送信を始める（FC 待ち）
-    ASSERT_EQ(CallCount_PduR_CanTpTransmit, 1U);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -247,7 +247,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_ChannelBusyWhileMultiFrameInProgre
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 1U);   // 2 つ目のフレームは送らない
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // 2 つ目のフレームは送らない
 }
 
 TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_SfCopyTxDataFailsSendsNothing)
@@ -266,7 +266,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_SfCopyTxDataFailsSendsNothing)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 0U);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 0U);
 }
 
 TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_FfCopyTxDataFailsSendsNothing)
@@ -286,7 +286,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_FfCopyTxDataFailsSendsNothing)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_FALSE(CanTp_Test_IsTxBusy());
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 0U);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 0U);
 }
 
 TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_SfFrameSendFailureIsNotConfirmedToUpperLayer)
@@ -295,7 +295,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_SfFrameSendFailureIsNotConfirmedTo
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     MakeDcmSendingSessionResponse();
-    ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;   // CAN フレームの送信が失敗する
+    ForcedReturn_CanIf_Transmit = E_NOT_OK;   // CAN フレームの送信が失敗する
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -315,7 +315,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_NG_FfFrameSendFailureReleasesChannel)
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     MakeDcmSendingVinResponse();
-    ForcedReturn_PduR_CanTpTransmit = E_NOT_OK;   // CAN フレームの送信が失敗する
+    ForcedReturn_CanIf_Transmit = E_NOT_OK;   // CAN フレームの送信が失敗する
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -345,7 +345,8 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_SfIsSentAndConfirmedImmediately)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 1U);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);
+    EXPECT_EQ(LastPduId_CanIf_Transmit, CANTP_CANIF_TX_PDU_ID);   // PduR を経由せず、CanIf の診断応答の PDU へ送る
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);   // SF は、送ったら終わり
     EXPECT_EQ(CallCount_PduR_CanTpCopyTxData, 1U);   // 上位層（Dcm）とは、PduR を経由してやり取りする
     EXPECT_EQ(CallCount_PduR_CanTpTxConfirmation, 1U);
@@ -369,7 +370,7 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_FfIsSentAndWaitsForFlowControl)
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
-    EXPECT_EQ(CallCount_PduR_CanTpTransmit, 1U);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);
     EXPECT_TRUE(CanTp_Test_IsTxBusy());              // FC を待つ
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 0U);   // まだ送信は終わっていない
 }
