@@ -277,7 +277,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
 }
 
 // ------------------------------------------------------------
-// recordNumber=0xFF（DCM_RECORD_NUMBER_ALL、[SWS_Dcm_00441]の「全レコード
+// recordNumber=0xFF（DEM_RECORD_NUMBER_ALL、[SWS_Dcm_00441]の「全レコード
 // 要求」エイリアス）を送っても、実レコード番号0x01を指定した場合と同じ応答
 // になる（応答のrecordNumberフィールドは実レコード番号であり、要求の0xFFを
 // そのままechoしない）ことを確認する。UDS要求データ（recordNumber）と
@@ -304,7 +304,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
     FakeCanHw_RxData[3] = 0x00U;
     FakeCanHw_RxData[4] = 0x01U;
     FakeCanHw_RxData[5] = 0x01U;
-    FakeCanHw_RxData[6] = DCM_RECORD_NUMBER_ALL;
+    FakeCanHw_RxData[6] = DEM_RECORD_NUMBER_ALL;
     FakeCanHw_RxPendingCount = 1U;
 
     /* ------------------------- */

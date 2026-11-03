@@ -266,4 +266,38 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_OK_SelectionRemainsAfterClear)
     EXPECT_EQ(ret, E_OK);   // [SWS_Dem_01253]: 選択は、次に Dem_SelectDTC() を呼ぶまで残る
 }
 
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_OK_DiscardsTheFreezeFrameAndTheExtendedData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < 20U; i++)
+    {
+        (void)Dem_SetEventStatus(0U, DEM_EVENT_STATUS_FAILED);   // 確定させる（FreezeFrame と ExtendedData が記録される）
+    }
+    ASSERT_EQ(Dem_SelectDTC(0U, ValidDtc(), DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+    ASSERT_EQ(Dem_SelectFreezeFrameData(0U, DEM_RECORD_NUMBER_ALL), E_OK);
+    uint16 before = 0U;
+    ASSERT_EQ(Dem_GetSizeOfFreezeFrameSelection(0U, &before), E_OK);
+    ASSERT_EQ(before, DEM_FREEZE_FRAME_RECORD_SIZE);   // 記録されている
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_ClearDTC(0U);   // 選択（イベント 0 の DTC）のまま、消去する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    uint16 afterFreezeFrame = 0xAAU;
+    uint16 afterExtendedData = 0xAAU;
+    ASSERT_EQ(Dem_SelectFreezeFrameData(0U, DEM_RECORD_NUMBER_ALL), E_OK);
+    ASSERT_EQ(Dem_GetSizeOfFreezeFrameSelection(0U, &afterFreezeFrame), E_OK);
+    ASSERT_EQ(Dem_SelectExtendedDataRecord(0U, DEM_RECORD_NUMBER_ALL), E_OK);
+    ASSERT_EQ(Dem_GetSizeOfExtendedDataRecordSelection(0U, &afterExtendedData), E_OK);
+    EXPECT_EQ(afterFreezeFrame, 0U);    // 記録は無くなる
+    EXPECT_EQ(afterExtendedData, 0U);
+}
+
 }  // namespace

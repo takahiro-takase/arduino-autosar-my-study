@@ -373,7 +373,7 @@ TEST_F(Dem_GetNextExtendedDataRecord_Test, Dem_GetNextExtendedDataRecord_OK_AllR
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     ConfirmEvent0();
-    SelectRecord(DEM_EXTENDED_DATA_NUMBER_ALL);
+    SelectRecord(DEM_RECORD_NUMBER_ALL);
     uint8  buf[4] = { 0xAAU, 0xAAU, 0xAAU, 0xAAU };
     uint16 bufSize = sizeof(buf);
 

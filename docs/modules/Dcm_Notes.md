@@ -57,7 +57,7 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 | 0x14<br>ClearDiagnosticInformation | × | ○ | — | `04 14 FF FF FF 00 00 00` | byte2-4=groupOfDTC<br>・0xFFFFFF=全クリア<br>・DTCコード指定=1件クリア<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
 | 0x19<br>ReadDTCInformation | ○ | ○ | 0x01<br>(件数取得) | `03 19 01 MM 00 00 00 00` | byte3=statusMask |
 |  |  |  | 0x02<br>(DTC一覧取得) | `03 19 02 MM 00 00 00 00` | byte3=statusMask |
-|  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
+|  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（0x01 または全レコードの 0xFF。判定は Dem が行う。応答の recordNumber は、実際のレコード番号 0x01） |
 |  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（0x01 または全レコードの 0xFF。判定は Dem が行う。応答の recordNumber は、実際のレコード番号 0x01） |
 |  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
 |  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。DTC 候補一覧は 0x0A と同じ取得元だが「prefailed」(FDC値1〜0x7E)のみへ絞り込む点、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |

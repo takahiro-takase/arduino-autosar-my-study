@@ -199,9 +199,6 @@ void App_EngineManager_Run(void)
     const Rte_IStatusType tempRet  = Rte_Read_TempSensor_CoolantTemp(&temp);
     const Rte_IStatusType flagRet  = Rte_Read_EngineStatus_EngineOnFlag(&flag);
 
-    /* FreezeFrame 用の現在値を更新（Dem_SetEventStatus の FAILED 遷移時にスナップショットされる） */
-    Dem_SetFreezeFrameContext(speed, temp, (uint8)s_state);
-
     /* E2E ハードエラー時の観測ログ（AUTOSAR Rte_IStatusType の
      * RTE_E_HARD_TRANSFORMER_ERROR に相当）。DTC 報告自体は E2EXf/
      * Rte_COMRxInd_EngineInfo が DemConf_DemEventParameter_E2E_ENGINEINFO へ直接行うため
@@ -312,8 +309,7 @@ void App_EngineManager_Run(void)
     /* MeterStatus(CAN 0x200) へ EngineSpeed/CoolantTemp をミラー送信する
      * （uds_tester の仮想メータ表示タブ向け、本プロジェクト独自拡張）。
      * EngineInfo タイムアウト中でも speed/temp は最後に検証できた値を
-     * 保持したままなので、そのまま送信してよい（Dem_SetFreezeFrameContext()
-     * と同じ考え方）。 */
+     * 保持したままなので、そのまま送信してよい。 */
     (void)Rte_Write_MeterStatus_EngineSpeed(speed);
     (void)Rte_Write_MeterStatus_CoolantTemp(temp);
 

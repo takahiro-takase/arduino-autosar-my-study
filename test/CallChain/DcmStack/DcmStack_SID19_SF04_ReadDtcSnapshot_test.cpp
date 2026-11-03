@@ -202,7 +202,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[3] = 0x00U;  // DTC_H
     FakeCanHw_RxData[4] = 0x01U;  // DTC_M
     FakeCanHw_RxData[5] = 0x01U;  // DTC_L
-    FakeCanHw_RxData[6] = DCM_FREEZEFRAME_RECORD_NUMBER;
+    FakeCanHw_RxData[6] = DEM_FREEZE_FRAME_RECORD_NUMBER;
     FakeCanHw_RxPendingCount = 1U;
 
     /* ------------------------- */
@@ -216,7 +216,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SNAPSHOT);
-    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_FREEZEFRAME_RECORD_NUMBER);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_FREEZE_FRAME_RECORD_NUMBER);
 
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
@@ -285,7 +285,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
 }
 
 // ------------------------------------------------------------
-// recordNumber=0xFF（DCM_RECORD_NUMBER_ALL、[SWS_Dcm_00441]の「全レコード
+// recordNumber=0xFF（DEM_RECORD_NUMBER_ALL、[SWS_Dcm_00441]の「全レコード
 // 要求」エイリアス）を送っても、実レコード番号0x01を指定した場合と同じ応答
 // になる（応答のrecordNumberフィールドは実レコード番号であり、要求の0xFFを
 // そのままechoしない）ことを確認する。UDS要求データ（recordNumber）と
@@ -312,7 +312,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[3] = 0x00U;
     FakeCanHw_RxData[4] = 0x01U;
     FakeCanHw_RxData[5] = 0x01U;
-    FakeCanHw_RxData[6] = DCM_RECORD_NUMBER_ALL;
+    FakeCanHw_RxData[6] = DEM_RECORD_NUMBER_ALL;
     FakeCanHw_RxPendingCount = 1U;
 
     /* ------------------------- */
@@ -329,7 +329,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_SNAPSHOT);
-    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_FREEZEFRAME_RECORD_NUMBER);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_FREEZE_FRAME_RECORD_NUMBER);
 
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
@@ -393,7 +393,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     {
         EXPECT_EQ(reassembled[i], LastData_CanTp_Transmit[i]) << "byte " << (unsigned)i;
     }
-    EXPECT_EQ(reassembled[6], DCM_FREEZEFRAME_RECORD_NUMBER);  // 要求0xFFをechoしない
+    EXPECT_EQ(reassembled[6], DEM_FREEZE_FRAME_RECORD_NUMBER);  // 要求0xFFをechoしない
 }
 
 // ------------------------------------------------------------
@@ -458,7 +458,7 @@ TEST_F(DcmStack_SID19_SF04_ReadDtcSnapshot_Test,
     FakeCanHw_RxData[3] = 0x00U;
     FakeCanHw_RxData[4] = 0x01U;
     FakeCanHw_RxData[5] = 0x01U;
-    FakeCanHw_RxData[6] = DCM_FREEZEFRAME_RECORD_NUMBER;
+    FakeCanHw_RxData[6] = DEM_FREEZE_FRAME_RECORD_NUMBER;
     FakeCanHw_RxPendingCount = 1U;
 
     /* ----------------------- */

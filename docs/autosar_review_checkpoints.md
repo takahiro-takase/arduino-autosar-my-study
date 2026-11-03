@@ -464,6 +464,11 @@ CanTp_Notes と CanTp.c に理由を記録した。仕様の形にするには�
 GetStatusOfDTC → SelectExtendedDataRecord → GetSizeOf… → GetNext… の順で呼び、レコード番号の判定は Dem が行う（`DCM_EXTENDED_DATA_RECORD_NUMBER` は `DEM_EXTENDED_DATA_RECORD_NUMBER` へ移した）。
 `DEM_BUFFER_TOO_SMALL` は、4.3.1 に数値の記載が無いため、独自の値（21）を割り当てた。残り: 凍結フレーム（第 3 段）、`Dem_Disable/EnableDTCRecordUpdate`（第 4 段）、
 独自関数 `Dem_GetEventIdOfDTC`・`Dem_GetFreezeFrameOfEvent`・`Dem_SetFreezeFrameContext` の廃止。）
+（2026-11-03 追記 10: Dem の第 3 段（凍結フレーム）。`Dem_SelectFreezeFrameData`（0xb9）・`Dem_GetSizeOfFreezeFrameSelection`（0x1f）・`Dem_GetNextFreezeFrameData`（0x1d）を実装し、
+独自関数 `Dem_GetFreezeFrameOfEvent`・`Dem_SetFreezeFrameContext`・`Dem_GetEventIdOfDTC` を廃止した。DID の構成は `Dem_DidClassTable[]`（Dem_PBCfg.c）、データ要素の読み出しは
+`Rte_Call_DataServices_*_ReadData`（Rte.c。DemDataElementReadFnc に相当）で、確定 FAILED の瞬間に Dem が読む（以前は、App が毎周期、値を渡していた）。
+Dcm の 0x19/04 と 0x19/06 は、共通の `Dcm_ReadDtcRecord()` で、Dem の選択 API を呼ぶ。`DCM_FREEZEFRAME_*`・`DCM_RECORD_NUMBER_ALL` は、Dem_Cfg.h の定数へ移した。
+残り: `Dem_Disable/EnableDTCRecordUpdate`（第 4 段）。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

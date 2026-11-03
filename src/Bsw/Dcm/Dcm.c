@@ -319,9 +319,9 @@ static uint8 Dcm_TransferChecksum;
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
 static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 
-/** 0x19/06 の応答で、ExtendedData のレコード（{レコード番号, データ...}）を書き出す位置
- *  （[0x59, 0x06, DTC_H, DTC_M, DTC_L, status] の後ろ） */
-#define DCM_EXTDATA_RECORD_OFFSET  6U
+/** 0x19/04・0x19/06 の応答で、Dem のレコード（FreezeFrame / ExtendedData）を書き出す位置
+ *  （[0x59, subFunc, DTC_H, DTC_M, DTC_L, status] の後ろ） */
+#define DCM_DTC_RECORD_OFFSET  6U
 
 /** 応答の送信位置（Dcm_CopyTxData() が次にコピーするバイトの位置）。CanTp は、応答の送信バッファを持たず、
  *  フレームごとに Dcm_CopyTxData() で、この Dcm_TxBuf から取り出す。 */
@@ -2084,111 +2084,44 @@ static void Dcm_HandleReadDtcFaultDetectionCounter(const uint8* uds, uint8 udsLe
     Dcm_SendDtcList(DCM_DTC_SUBFUNC_REPORT_FDC, 2U, dtcBuf, fdcBuf, count);
 }
 
+/** Dem の「レコードを選ぶ」API（Dem_SelectFreezeFrameData() / Dem_SelectExtendedDataRecord()）の型。 */
+typedef Std_ReturnType (*Dcm_DemSelectRecordFncType)(uint8 ClientId, uint8 RecordNumber);
+/** Dem の「選んだレコードの大きさを取る」API（Dem_GetSizeOf*Selection()）の型。 */
+typedef Std_ReturnType (*Dcm_DemGetSizeFncType)(uint8 ClientId, uint16* Size);
+/** Dem の「選んだレコードを書き出す」API（Dem_GetNext*()）の型。 */
+typedef Std_ReturnType (*Dcm_DemGetNextFncType)(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
+
 /**
- * \brief   SID 0x19 subFunc 0x04 reportDTCSnapshotRecordByDTCNumber を処理する。
+ * \brief   SID 0x19 subFunc 0x04 / 0x06 の共通の処理。DTC のレコード（FreezeFrame / ExtendedData）を、Dem から取得して返す。
  *
- * \details 要求された DTC に一致する FreezeFrame を Dem から取得し、
- *          EngineSpeed (DID 0x0101) / CoolantTemp (0x0102) / EngineState (0x0103)
- *          の 3 DID 固定フォーマットで返す。
- *          本実装はレコード番号 0x01 のみ保持する（イベントごとに 1 スナップショット）。
- *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF
- *          (DCM_RECORD_NUMBER_ALL) も、この唯一のレコードへの
- *          エイリアスとして受理する（[SWS_Dcm_00441]。2026-09 追加）。
- *          応答は 18 バイトで SF の 7 バイト制限を超えるため、CanTp が FF+CF に分割する。
+ * \details 要求された DTC とレコードを、Dem の選択 API で取得する
+ *          （Dem_SelectDTC() → Dem_GetDTCSelectionResult() → Dem_GetStatusOfDTC() → select → getSize → getNext）。
+ *          レコード番号の判定と、レコードの形式（FreezeFrame は {レコード番号, DID 数, DID, データ...}、
+ *          ExtendedData は {レコード番号, データ...}）は、Dem が決める。Dcm は、要求の recordNumber を
+ *          そのまま Dem へ渡し、Dem が書き出したレコードを、DTC とステータスの後ろへ、そのまま付ける。
+ *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF（Dem の DEM_RECORD_NUMBER_ALL）も、そのまま Dem へ渡す
+ *          （7.5.2.5.5節）。応答のレコード番号は、Dem が書き出した値で、要求が 0xFF でも、要求値を echo しない
+ *          （[SWS_Dcm_00295]/[SWS_Dcm_00302]系）。
  *
- *          要求: [0x19, 0x04, DTC_H, DTC_M, DTC_L, recordNumber]
- *          応答: [0x59, 0x04, DTC_H, DTC_M, DTC_L, status, recordNumber, numDID,
- *                 DID1_H, DID1_L, EngineSpeed_H, EngineSpeed_L,
- *                 DID2_H, DID2_L, CoolantTemp,
- *                 DID3_H, DID3_L, EngineState]
- *          (recordNumberは要求が0xFFでも実際のレコード番号0x01を返す。
- *          [SWS_Dcm_00302]/Table 7.18参照)
+ *          要求: [0x19, subFunc, DTC_H, DTC_M, DTC_L, recordNumber]
+ *          応答: [0x59, subFunc, DTC_H, DTC_M, DTC_L, status, レコード...]
  *
- * \param[in]  uds     UDS ペイロード先頭ポインタ。
- * \param[in]  udsLen  UDS ペイロード長。
+ *          DTC 不明、レコード番号不一致、記録なし（一度も確定 FAILED していない DTC。Dem が BufSize 0 を返す）、
+ *          または Dem の呼び出しの失敗は、NRC 0x31（[SWS_Dcm_01242]相当）。
+ *
+ * \param[in]  uds       UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen    UDS ペイロード長。
+ * \param[in]  subFunc   サブ機能（応答と、ログに使う）。
+ * \param[in]  select    Dem のレコードを選ぶ API。
+ * \param[in]  getSize   Dem の選んだレコードの大きさを取る API。
+ * \param[in]  getNext   Dem の選んだレコードを書き出す API。
  */
-static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
+static void Dcm_ReadDtcRecord(const uint8* uds, uint8 udsLen, uint8 subFunc,
+                              Dcm_DemSelectRecordFncType select, Dcm_DemGetSizeFncType getSize, Dcm_DemGetNextFncType getNext)
 {
     if (udsLen != 6U)
     {
-        /* [SWS_Dcm_00696]: DTC(3byte)+recordNumber(1byte)固定のため常に
-         * 6バイト厳密一致（2026-09 是正: 以前は下限のみ判定していた）。 */
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
-        return;
-    }
-
-    uint32 dtc          = ((uint32)uds[2] << 16U) | ((uint32)uds[3] << 8U) | (uint32)uds[4];
-    uint8  recordNumber = uds[5];
-
-    Dem_EventIdType     eventId = 0U;
-    Dem_FreezeFrameType frame;
-
-    if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
-        || ((recordNumber != DCM_FREEZEFRAME_RECORD_NUMBER)
-            && (recordNumber != DCM_RECORD_NUMBER_ALL))
-        || Dem_GetFreezeFrameOfEvent(eventId, &frame) != E_OK)
-    {
-        /* DTC 不明・レコード番号不一致・FreezeFrame 未記録 (一度も FAILED していない) */
-        Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
-        return;
-    }
-
-    DET_LOGI(TAG, "19/04 dtc=0x%06lX rec=%u", (unsigned long)dtc, (unsigned)recordNumber);
-
-    Dcm_TxBuf[0]  = 0x59U;                              /* SID 0x19 + 0x40 */
-    Dcm_TxBuf[1]  = DCM_DTC_SUBFUNC_REPORT_SNAPSHOT;
-    Dcm_TxBuf[2]  = (uint8)(dtc >> 16U);
-    Dcm_TxBuf[3]  = (uint8)(dtc >>  8U);
-    Dcm_TxBuf[4]  = (uint8)(dtc);
-    Dem_UdsStatusByteType statusByte = 0U;
-    (void)Dem_GetEventUdsStatus(eventId, &statusByte);
-    Dcm_TxBuf[5]  = statusByte;
-    /* [SWS_Dcm_00302]: 応答のrecordNumberはDemが実際に保持するレコード番号
-     * （要求が0xFFの場合も実レコード番号0x01を返す。要求値をそのまま
-     * echoしない）。 */
-    Dcm_TxBuf[6]  = DCM_FREEZEFRAME_RECORD_NUMBER;
-    Dcm_TxBuf[7]  = DCM_FREEZEFRAME_DID_COUNT;
-    Dcm_TxBuf[8]  = (uint8)(DCM_DID_ENGINE_SPEED >> 8U);
-    Dcm_TxBuf[9]  = (uint8)(DCM_DID_ENGINE_SPEED & 0xFFU);
-    Dcm_TxBuf[10] = (uint8)(frame.EngineSpeed >> 8U);
-    Dcm_TxBuf[11] = (uint8)(frame.EngineSpeed & 0xFFU);
-    Dcm_TxBuf[12] = (uint8)(DCM_DID_COOLANT_TEMP >> 8U);
-    Dcm_TxBuf[13] = (uint8)(DCM_DID_COOLANT_TEMP & 0xFFU);
-    Dcm_TxBuf[14] = frame.CoolantTemp;
-    Dcm_TxBuf[15] = (uint8)(DCM_DID_ENGINE_STATE >> 8U);
-    Dcm_TxBuf[16] = (uint8)(DCM_DID_ENGINE_STATE & 0xFFU);
-    Dcm_TxBuf[17] = frame.EngineState;
-    Dcm_TxPdu.SduLength = 18U;
-
-    Dcm_TransmitPositiveResponse();
-}
-
-/**
- * \brief   SID 0x19 subFunc 0x06 reportExtendedDataRecordByDTCNumber を処理する。
- *
- * \details 要求された DTC の ExtendedData（確定 FAILED の累積回数）を、Dem の選択 API で取得して返す
- *          （Dem_SelectDTC() → Dem_GetDTCSelectionResult() → Dem_GetStatusOfDTC() →
- *          Dem_SelectExtendedDataRecord() → Dem_GetSizeOfExtendedDataRecordSelection() →
- *          Dem_GetNextExtendedDataRecord()。2026-11 是正: 以前は、独自の Dem_GetEventIdOfDTC() と
- *          Dem_GetOccurrenceCounterOfEvent() で取得し、レコード番号の判定も Dcm が行っていた）。
- *          レコード番号の判定は Dem が行い、要求の recordNumber をそのまま渡す。FreezeFrame（故障時点の
- *          スナップショット、18 バイトで CanTp の FF+CF が必要）とは異なり、応答は 8 バイトで SF に収まる。
- *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF (DCM_RECORD_NUMBER_ALL) も、
- *          そのまま Dem へ渡す（7.5.2.5.5節）。
- *
- *          要求: [0x19, 0x06, DTC_H, DTC_M, DTC_L, recordNumber]
- *          応答: [0x59, 0x06, DTC_H, DTC_M, DTC_L, status, recordNumber, occurrenceCounter]
- *          (応答の recordNumber は、Dem が書き出したレコードの先頭の 1 バイト = 実際のレコード番号。
- *          要求が 0xFF でも、要求値を echo しない)
- *
- * \param[in]  uds     UDS ペイロード先頭ポインタ。
- * \param[in]  udsLen  UDS ペイロード長。
- */
-static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
-{
-    if (udsLen != 6U)
-    {
-        /* [SWS_Dcm_00696]（0x19/04 と同じ理由。2026-09 是正） */
+        /* [SWS_Dcm_00696]: DTC(3byte)+recordNumber(1byte)固定のため常に 6 バイト厳密一致（2026-09 是正） */
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_INCORRECT_MESSAGE_LENGTH);
         return;
     }
@@ -2198,10 +2131,8 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
 
     Dem_UdsStatusByteType statusByte = 0U;
     uint16                recordSize = 0U;
-    uint16                bufSize    = (uint16)((uint16)DCM_TX_BUF_SIZE - (uint16)DCM_EXTDATA_RECORD_OFFSET);
+    uint16                bufSize    = (uint16)((uint16)DCM_TX_BUF_SIZE - (uint16)DCM_DTC_RECORD_OFFSET);
 
-    /* DTC・レコードを選び、選択の結果を確かめてから読む。どれかが失敗したとき、または、レコードが記録されていない
-     * （一度も確定 FAILED していない DTC。Dem が BufSize 0 を返す。[SWS_Dcm_01242]相当）ときは、NRC 0x31。 */
     Std_ReturnType ret = Dem_SelectDTC(DCM_DEM_CLIENT_ID, dtc, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
     if (ret == E_OK)
     {
@@ -2213,15 +2144,15 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     }
     if (ret == E_OK)
     {
-        ret = Dem_SelectExtendedDataRecord(DCM_DEM_CLIENT_ID, recordNumber);
+        ret = select(DCM_DEM_CLIENT_ID, recordNumber);
     }
     if (ret == E_OK)
     {
-        ret = Dem_GetSizeOfExtendedDataRecordSelection(DCM_DEM_CLIENT_ID, &recordSize);
+        ret = getSize(DCM_DEM_CLIENT_ID, &recordSize);
     }
     if ((ret == E_OK) && (recordSize <= bufSize))
     {
-        ret = Dem_GetNextExtendedDataRecord(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[DCM_EXTDATA_RECORD_OFFSET], &bufSize);
+        ret = getNext(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[DCM_DTC_RECORD_OFFSET], &bufSize);
     }
     else
     {
@@ -2234,20 +2165,58 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
         return;
     }
 
-    DET_LOGI(TAG, "19/06 dtc=0x%06lX rec=%u size=%u",
-             (unsigned long)dtc, (unsigned)recordNumber, (unsigned)bufSize);
+    DET_LOGI(TAG, "19/%02X dtc=0x%06lX rec=%u size=%u",
+             (unsigned)subFunc, (unsigned long)dtc, (unsigned)recordNumber, (unsigned)bufSize);
 
     Dcm_TxBuf[0] = 0x59U;                              /* SID 0x19 + 0x40 */
-    Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_EXTDATA;
+    Dcm_TxBuf[1] = subFunc;
     Dcm_TxBuf[2] = (uint8)(dtc >> 16U);
     Dcm_TxBuf[3] = (uint8)(dtc >>  8U);
     Dcm_TxBuf[4] = (uint8)(dtc);
     Dcm_TxBuf[5] = statusByte;
-    /* Dcm_TxBuf[6..] は、Dem_GetNextExtendedDataRecord() が {レコード番号, データ...} を書き出し済み
-     * （[SWS_Dcm_00295]系と同様、応答のレコード番号は実レコード番号で、要求値の 0xFF を echo しない）。 */
-    Dcm_TxPdu.SduLength = (PduLengthType)(DCM_EXTDATA_RECORD_OFFSET + bufSize);
+    /* Dcm_TxBuf[6..] は、getNext が書き出し済みのレコード */
+    Dcm_TxPdu.SduLength = (PduLengthType)(DCM_DTC_RECORD_OFFSET + bufSize);
 
     Dcm_TransmitPositiveResponse();
+}
+
+/**
+ * \brief   SID 0x19 subFunc 0x04 reportDTCSnapshotRecordByDTCNumber を処理する。
+ *
+ * \details FreezeFrame（故障時点のスナップショット）を、Dem_SelectFreezeFrameData() 系で取得して返す
+ *          （2026-11 是正: 以前は、独自の Dem_GetFreezeFrameOfEvent() で取得し、EngineSpeed (DID 0x0101) /
+ *          CoolantTemp (0x0102) / EngineState (0x0103) の並びを Dcm が組み立てていた。DID の構成は Dem が持つ）。
+ *          応答は 18 バイトで、CanTp の FF+CF が必要。処理は Dcm_ReadDtcRecord() を参照。
+ *
+ *          応答: [0x59, 0x04, DTC_H, DTC_M, DTC_L, status, recordNumber, NumOfDIDs,
+ *                 DID1_H, DID1_L, data..., DID2_H, DID2_L, data..., DID3_H, DID3_L, data...]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
+{
+    Dcm_ReadDtcRecord(uds, udsLen, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
+                      Dem_SelectFreezeFrameData, Dem_GetSizeOfFreezeFrameSelection, Dem_GetNextFreezeFrameData);
+}
+
+/**
+ * \brief   SID 0x19 subFunc 0x06 reportExtendedDataRecordByDTCNumber を処理する。
+ *
+ * \details ExtendedData（確定 FAILED の累積回数）を、Dem_SelectExtendedDataRecord() 系で取得して返す
+ *          （2026-11 是正: 以前は、独自の Dem_GetEventIdOfDTC() と Dem_GetOccurrenceCounterOfEvent() で取得し、
+ *          レコード番号の判定も Dcm が行っていた）。FreezeFrame と異なり、応答は 8 バイトで SF に収まる。
+ *          処理は Dcm_ReadDtcRecord() を参照。
+ *
+ *          応答: [0x59, 0x06, DTC_H, DTC_M, DTC_L, status, recordNumber, occurrenceCounter]
+ *
+ * \param[in]  uds     UDS ペイロード先頭ポインタ。
+ * \param[in]  udsLen  UDS ペイロード長。
+ */
+static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
+{
+    Dcm_ReadDtcRecord(uds, udsLen, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      Dem_SelectExtendedDataRecord, Dem_GetSizeOfExtendedDataRecordSelection, Dem_GetNextExtendedDataRecord);
 }
 
 /**
@@ -2379,11 +2348,7 @@ static const Dcm_DidConfigType* Dcm_FindReadableDid(uint16 did, uint8 sessionMas
  */
 Std_ReturnType Dcm_ReadDidEngineSpeed(uint8* Data)
 {
-    EngineSpeed_t speed = 0U;
-    (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
-    Data[0] = (uint8)(speed >> 8U);   /* MSB first (big-endian) */
-    Data[1] = (uint8)(speed & 0xFFU);
-    return E_OK;
+    return Rte_Call_DataServices_EngineSpeed_ReadData(Data);   /* Dem の FreezeFrame と同じ読み出し（Rte.c） */
 }
 
 /**
@@ -2395,10 +2360,7 @@ Std_ReturnType Dcm_ReadDidEngineSpeed(uint8* Data)
  */
 Std_ReturnType Dcm_ReadDidCoolantTemp(uint8* Data)
 {
-    CoolantTemp_t temp = 0U;
-    (void)Rte_Read_TempSensor_CoolantTemp(&temp);
-    Data[0] = temp;
-    return E_OK;
+    return Rte_Call_DataServices_CoolantTemp_ReadData(Data);
 }
 
 /**
@@ -2410,10 +2372,7 @@ Std_ReturnType Dcm_ReadDidCoolantTemp(uint8* Data)
  */
 Std_ReturnType Dcm_ReadDidEngineState(uint8* Data)
 {
-    EngineState_t state = ENGINE_STATE_OFF;
-    (void)Rte_Read_EngineStatus_EngineState(&state);
-    Data[0] = (uint8)state;
-    return E_OK;
+    return Rte_Call_DataServices_EngineState_ReadData(Data);
 }
 
 /**

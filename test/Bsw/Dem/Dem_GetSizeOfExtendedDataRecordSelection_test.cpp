@@ -313,7 +313,7 @@ TEST_F(Dem_GetSizeOfExtendedDataRecordSelection_Test, Dem_GetSizeOfExtendedDataR
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     ConfirmEvent0();
-    SelectRecord(DEM_EXTENDED_DATA_NUMBER_ALL);
+    SelectRecord(DEM_RECORD_NUMBER_ALL);
     uint16 size = 0U;
 
     /* ----------------------- */

@@ -136,6 +136,13 @@ Std_ReturnType Rte_Call_LedFault_SetLevel(uint8 level);
 /* Client/Server ポート — IoHwAb_Button_GetLevel へ委譲 */
 Std_ReturnType Rte_Call_Button_GetLevel(uint8* level);
 
+/* Dem の FreezeFrame のデータ要素の読み出し（DemDataElementReadFnc、[SWS_Dem_00464]）。
+ * Rte_Call_<p>_<o> の形（p = DataServices_<データ要素>、o = ReadData）。
+ * Data へ、データ要素を MSB first で書く（EngineSpeed は 2 バイト、他は 1 バイト）。常に E_OK。 */
+Std_ReturnType Rte_Call_DataServices_EngineSpeed_ReadData(uint8* Data);
+Std_ReturnType Rte_Call_DataServices_CoolantTemp_ReadData(uint8* Data);
+Std_ReturnType Rte_Call_DataServices_EngineState_ReadData(uint8* Data);
+
 /* Client/Server ポート — IoHwAb_Adc_GetValue_mV へ委譲 */
 Std_ReturnType Rte_Call_Adc_GetValue_mV(uint16* mv);
 

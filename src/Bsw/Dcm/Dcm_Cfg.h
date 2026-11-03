@@ -223,25 +223,6 @@
                                                   *   ではこの値。0x0B は reportFirstTestFailedDTC
                                                   *   という別サービスのため混同しないこと） */
 
-/** ISO 14229-1 の慣行で「当該DTCの全レコードを要求」を意味する予約値。
- *  [SWS_Dcm_00441]は、DcmがDem_SelectFreezeFrameData()へRecordNumber=0xFF
- *  を渡す（全レコードのサイズ取得の）用途で明記しており、要求元のテスタが
- *  この値を使うことも前提にしている。7.5.2.5.5節のDTCExtendedDataRecordNumber
- *  も要求からそのままDem_SelectExtendedDataRecord()へ渡される値のため同じ
- *  慣行が適用される。本実装はFreezeFrame/ExtendedDataともイベントごとに
- *  1レコードのみ保持する学習用簡略化のため、0xFFを唯一のレコード番号への
- *  エイリアスとして受理する（SID 0x19 サブ機能0x04/0x06で共用、2026-09 追加）。 */
-#define DCM_RECORD_NUMBER_ALL  0xFFU
-
-/* -----------------------------------------------------------------------
- * FreezeFrame (SID 0x19/04) 関連定数
- * 本実装はイベントごとに 1 レコードのみ保持する学習用簡略化を行う。
- * ----------------------------------------------------------------------- */
-/** 本実装で対応する唯一のスナップショットレコード番号 */
-#define DCM_FREEZEFRAME_RECORD_NUMBER  0x01U
-/** FreezeFrame に含む DID 数（EngineSpeed / CoolantTemp / EngineState 固定） */
-#define DCM_FREEZEFRAME_DID_COUNT      0x03U
-
 /* -----------------------------------------------------------------------
  * UDS 否定応答コード (ISO 14229-1 Table A.1)
  * ----------------------------------------------------------------------- */

@@ -756,7 +756,7 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_UnknownDtcReturnsRequestOutOfRan
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
-                      0x12U, 0x34U, 0x56U, DCM_RECORD_NUMBER_ALL };   // 設定に無い DTC
+                      0x12U, 0x34U, 0x56U, DEM_RECORD_NUMBER_ALL };   // 設定に無い DTC
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -778,7 +778,7 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_UnknownDtcReturnsRequestOutO
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
-                      0x12U, 0x34U, 0x56U, DCM_RECORD_NUMBER_ALL };   // 設定に無い DTC
+                      0x12U, 0x34U, 0x56U, DEM_RECORD_NUMBER_ALL };   // 設定に無い DTC
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -828,7 +828,7 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_ReadsThroughTheDemSelectionA
     }
     WrapDem_Reset();
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
-                      0x00U, 0x01U, 0x01U, DCM_RECORD_NUMBER_ALL };
+                      0x00U, 0x01U, 0x01U, DEM_RECORD_NUMBER_ALL };
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
@@ -863,7 +863,70 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_DemSelectionFailureReturnsRe
     FailFromCallCount_Dem_GetNextExtendedDataRecord = 1U;
     ForcedReturn_Dem_GetNextExtendedDataRecord      = DEM_NO_SUCH_ELEMENT;   // 読み出しが失敗する
     uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
-                      0x00U, 0x01U, 0x01U, DCM_RECORD_NUMBER_ALL };
+                      0x00U, 0x01U, 0x01U, DEM_RECORD_NUMBER_ALL };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_OK_ReadsThroughTheDemSelectionApis)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < 20U; i++)
+    {
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);   // 確定させる
+    }
+    WrapDem_Reset();
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
+                      0x00U, 0x01U, 0x01U, DEM_RECORD_NUMBER_ALL };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SelectDTC, 1U);
+    EXPECT_EQ(CallCount_Dem_GetDTCSelectionResult, 1U);
+    EXPECT_EQ(CallCount_Dem_GetStatusOfDTC, 1U);
+    EXPECT_EQ(CallCount_Dem_SelectFreezeFrameData, 1U);
+    EXPECT_EQ(CallCount_Dem_GetSizeOfFreezeFrameSelection, 1U);
+    EXPECT_EQ(CallCount_Dem_GetNextFreezeFrameData, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_FREEZE_FRAME_RECORD_NUMBER);   // 要求の 0xFF ではなく、実際のレコード番号
+    EXPECT_EQ(LastData_CanTp_Transmit[7], DEM_FREEZE_FRAME_DID_COUNT);
+    EXPECT_EQ(LastData_CanTp_Transmit[8], 0x01U);   // DID 0x0101（EngineSpeed）
+    EXPECT_EQ(LastData_CanTp_Transmit[9], 0x01U);
+}
+
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_DemSelectionFailureReturnsRequestOutOfRange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < 20U; i++)
+    {
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    }
+    WrapDem_Reset();
+    FailFromCallCount_Dem_GetNextFreezeFrameData = 1U;
+    ForcedReturn_Dem_GetNextFreezeFrameData      = DEM_NO_SUCH_ELEMENT;   // 読み出しが失敗する
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_SNAPSHOT,
+                      0x00U, 0x01U, 0x01U, DEM_RECORD_NUMBER_ALL };
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

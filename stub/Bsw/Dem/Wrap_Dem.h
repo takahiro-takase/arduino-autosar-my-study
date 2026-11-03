@@ -27,8 +27,8 @@
  *
  * \par 2026-09、残り18関数を追加
  * 戻り値を持つ10関数（GetDTCStatusAvailabilityMask/GetEventUdsStatus/
- * GetDTCOfEvent/ClearDTC/GetFreezeFrameOfEvent/
- * GetEventIdOfDTC/GetFaultDetectionCounter/
+ * GetDTCOfEvent/ClearDTC/
+ * GetFaultDetectionCounter/
  * EnableDTCSetting/DisableDTCSetting）には他モジュールの Wrap_XXX.c と同じ
  * 「指定した呼び出し回数以降は常に失敗を返す」回数閾値方式の故障注入を
  * 実装する。`FailFromCallCount_Dem_Xxx`（既定
@@ -39,7 +39,7 @@
  * を表さない列挙型。本プロジェクトは常に `DEM_DTC_TRANSLATION_ISO14229_1` の
  * みを構成し、呼び出し元もエラー値を想定していない）のため、故障注入は
  * 実装せず呼び出し回数のみ記録する（`Init`/`GetAllDTCs`/`GetSupportedDTCs`/
- * `GetPrefailedDTCs`/`SetFreezeFrameContext`/`GetVersionInfo` の6つの
+ * `GetPrefailedDTCs`/`GetVersionInfo` の5つの
  * void 関数と同じ扱い）。
  *
  * \par 2026-09-27、ClearAllDTCs/ClearOneDtc を ClearDTC へ統合
@@ -115,12 +115,12 @@ extern uint32 CallCount_Dem_SetDTCFilter;
 extern uint32 CallCount_Dem_GetNumberOfFilteredDTC;
 extern uint32 CallCount_Dem_GetNextFilteredDTC;
 extern uint32 CallCount_Dem_GetNextFilteredDTCAndFDC;
-extern uint32 CallCount_Dem_SetFreezeFrameContext;
-extern uint32 CallCount_Dem_GetFreezeFrameOfEvent;
-extern uint32 CallCount_Dem_GetEventIdOfDTC;
 extern uint32 CallCount_Dem_SelectExtendedDataRecord;
 extern uint32 CallCount_Dem_GetSizeOfExtendedDataRecordSelection;
 extern uint32 CallCount_Dem_GetNextExtendedDataRecord;
+extern uint32 CallCount_Dem_SelectFreezeFrameData;
+extern uint32 CallCount_Dem_GetSizeOfFreezeFrameSelection;
+extern uint32 CallCount_Dem_GetNextFreezeFrameData;
 
 /** `Dem_SetEventStatus` のみの直近呼び出し引数（既存の特別扱い、上記コメント参照）。 */
 extern Dem_EventIdType     LastEventId_Dem_SetEventStatus;
@@ -156,11 +156,12 @@ extern uint32 FailFromCallCount_Dem_GetDTCSelectionResult;
 extern uint32 FailFromCallCount_Dem_GetDTCSelectionResultForClearDTC;
 extern uint32 FailFromCallCount_Dem_SelectDTC;
 extern uint32 FailFromCallCount_Dem_GetStatusOfDTC;
-extern uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent;
-extern uint32 FailFromCallCount_Dem_GetEventIdOfDTC;
 extern uint32 FailFromCallCount_Dem_SelectExtendedDataRecord;
 extern uint32 FailFromCallCount_Dem_GetSizeOfExtendedDataRecordSelection;
 extern uint32 FailFromCallCount_Dem_GetNextExtendedDataRecord;
+extern uint32 FailFromCallCount_Dem_SelectFreezeFrameData;
+extern uint32 FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection;
+extern uint32 FailFromCallCount_Dem_GetNextFreezeFrameData;
 extern uint32 FailFromCallCount_Dem_SetDTCFilter;
 extern uint32 FailFromCallCount_Dem_GetNumberOfFilteredDTC;
 extern uint32 FailFromCallCount_Dem_GetNextFilteredDTC;
@@ -186,11 +187,12 @@ extern Std_ReturnType ForcedReturn_Dem_GetDTCSelectionResult; /**< 既定 E_NOT_
 extern Std_ReturnType ForcedReturn_Dem_GetDTCSelectionResultForClearDTC; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_SelectDTC;      /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetStatusOfDTC; /**< 既定 E_NOT_OK */
-extern Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent;          /**< 既定 E_NOT_OK */
-extern Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC;                /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_SelectExtendedDataRecord; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetSizeOfExtendedDataRecordSelection; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetNextExtendedDataRecord; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_SelectFreezeFrameData; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetSizeOfFreezeFrameSelection; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetNextFreezeFrameData; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_SetDTCFilter;    /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetNumberOfFilteredDTC;    /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC;    /**< 既定 E_NOT_OK */

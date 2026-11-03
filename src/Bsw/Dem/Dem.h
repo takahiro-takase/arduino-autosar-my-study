@@ -176,22 +176,6 @@ typedef enum
     DEM_CYCLE_STATE_END   = 1U   /**< 操作サイクルを終了する       */
 } Dem_OperationCycleStateType;
 
-/**
- * \brief   FreezeFrame (故障時スナップショット) のデータ構造。
- *
- * \details DID 0x0101 (EngineSpeed) / 0x0102 (CoolantTemp) / 0x0103 (EngineState)
- *          に対応する 3 項目を固定フォーマットで保持する。
- *          AUTOSAR では FreezeFrameClass で項目を ARXML 設定するが、
- *          本実装は学習用簡略化のため固定 3 項目とする。
- *          RAM のみに保持し、EEPROM へは永続化しない（電源 OFF で消去）。
- */
-typedef struct
-{
-    uint16 EngineSpeed;   /**< DID 0x0101 相当のスナップショット値 (rpm) */
-    uint8  CoolantTemp;   /**< DID 0x0102 相当のスナップショット値 (℃)  */
-    uint8  EngineState;   /**< DID 0x0103 相当のスナップショット値      */
-} Dem_FreezeFrameType;
-
 /* -----------------------------------------------------------------------
  * 公開 API
  * ----------------------------------------------------------------------- */
@@ -691,6 +675,82 @@ Std_ReturnType Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* 
 Std_ReturnType Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
 
 /**
+ * \brief   FreezeFrame のレコードを選ぶ（[SWS_Dem_91015]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
+ *
+ * \details 以降の Dem_GetSizeOfFreezeFrameSelection() と Dem_GetNextFreezeFrameData() が、この選択を使う
+ *          （[SWS_Dem_01268]）。Dem_SelectDTC() を呼ぶと、この選択は破棄される。Dem_SelectDTC() が呼ばれていない
+ *          ときは、DEM_E_WRONG_CONDITION を報告する（[SWS_Dem_01271]）。
+ *          本プロジェクトのレコードは、DEM_FREEZE_FRAME_RECORD_NUMBER（0x01）の 1 件だけ。0xFF は、全レコード
+ *          （= この 1 件）。0x00（WWH-OBD のレコード）は持たない。
+ *
+ * \param[in]  ClientId      呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[in]  RecordNumber  レコード番号。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91015, SWS_Dem_01268, SWS_Dem_01269, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0xb9}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectFreezeFrameData(uint8 ClientId, uint8 RecordNumber);
+
+/**
+ * \brief   Dem_SelectFreezeFrameData() で選んだレコードの大きさを取得する（[SWS_Dem_00238]）。
+ *
+ * \details 大きさは、レコード番号と DID の数を含む（形式は {レコード番号, DID 数, DID, データ, ...}、
+ *          [SWS_Dem_00074]）。レコードが記録されていないときは、E_OK で 0 を返す（[SWS_Dem_00630]）。
+ *          DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
+ *
+ * \param[in]   ClientId           呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]  SizeOfFreezeFrame  大きさ（バイト）の格納先。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                 大きさを格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、格納先が NULL、または選択（Dem_SelectDTC() /
+ *                               Dem_SelectFreezeFrameData()）が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が、構成に無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00238, SWS_Dem_00074, SWS_Dem_00630, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0x1f}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetSizeOfFreezeFrameSelection(uint8 ClientId, uint16* SizeOfFreezeFrame);
+
+/**
+ * \brief   Dem_SelectFreezeFrameData() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00236]）。
+ *
+ * \details 書き出す形式は {レコード番号, DID 数, DID, データ, ...}（[SWS_Dem_00071]）。要求したレコード番号が
+ *          0xFF でも、先頭の 1 バイトは、実際のレコード番号（0x01）になる。DID の構成と、データ要素の読み出しは
+ *          Dem_PBCfg.c の `Dem_DidClassTable[]` による（データは、確定 FAILED の瞬間に取り、RAM に保持する）。
+ *          レコードが記録されていないときは、E_OK で BufSize を 0 にする（[SWS_Dem_00630]）。
+ *          1 回の選択で得られるレコードは、1 回の呼び出しで全て渡すため、続けて呼ぶと DEM_NO_SUCH_ELEMENT
+ *          （これ以上無い）を返す。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]    DestBuffer  レコードの書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: DestBuffer に書ける最大バイト数。出力: 実際に書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                 書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、ポインタが NULL、または選択が呼ばれていない。
+ * \retval  DEM_BUFFER_TOO_SMALL BufSize が、レコードより小さい（DestBuffer は書き換えない。選択は進めない）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い、または、これ以上渡すレコードが無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00236, SWS_Dem_00071, SWS_Dem_00630, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0x1d}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
+
+/**
  * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。
  *
  * \details 以降の Dem_GetNumberOfFilteredDTC() / Dem_GetNextFilteredDTC() /
@@ -795,67 +855,6 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
  */
 Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* DTCFaultDetectionCounter);
-
-/**
- * \brief   FreezeFrame として保存する現在値を更新する。
- *
- * \details SW-C (App_EngineManager) が周期 Runnable の先頭で毎回呼び出し、
- *          「現在の車両状態」を Dem 内部に保持させる。
- *          Dem_SetEventStatus() が FAILED 遷移を検出した瞬間に、
- *          この値をイベントごとのスナップショットとしてコピーする
- *          (リアルタイムに値を読みに行くのではなく、毎周期の最新値を使う点が
- *          学習用簡略化。AUTOSAR では FreezeFrameClass の DataElement を
- *          Dem が都度読み出す)。
- *
- * \param[in]  EngineSpeed  現在のエンジン回転数 (DID 0x0101 相当)。
- * \param[in]  CoolantTemp  現在の冷却水温 (DID 0x0102 相当)。
- * \param[in]  EngineState  現在のエンジン状態 (DID 0x0103 相当)。
- *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値。Dem_GetAllDTCs と同じ経緯で 0x25 から 0x2C へ
- *          移した（Dem_Cfg.h 冒頭コメント参照）。
- *
- * \ServiceID      {0x2C}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState);
-
-/**
- * \brief   指定イベントに保存された FreezeFrame を取得する。
- *
- * \details DCM SID 0x19 subFunc 0x04 (reportDTCSnapshotRecordByDTCNumber) から
- *          呼び出す。一度も FAILED 報告されていないイベントには記録がない。
- *
- * \param[in]   EventId  イベント ID (DemConf_DemEventParameter_* 定数)。
- * \param[out]  Frame    取得した FreezeFrame の格納先。NULL 禁止。
- *
- * \retval  E_OK      記録あり。
- * \retval  E_NOT_OK  EventId が範囲外、Frame が NULL、または記録なし。
- *
- * \ServiceID      {0x26}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame);
-
-/**
- * \brief   DTC コード (24-bit) から EventId を逆引きする。
- *
- * \details DCM SID 0x19 subFunc 0x04 はリクエストに DTC コードを含むため、
- *          内部処理用の EventId へ変換する必要がある。
- *
- * \param[in]   DTC      24-bit DTC コード。
- * \param[out]  EventId  対応するイベント ID の格納先。NULL 禁止。
- *
- * \retval  E_OK      一致する DTC が見つかった。
- * \retval  E_NOT_OK  一致する DTC がない、または EventId が NULL。
- *
- * \ServiceID      {0x27}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
 
 /**
  * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。

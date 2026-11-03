@@ -18,6 +18,7 @@
  * ====================================================================== */
 
 #include "Dem_PBCfg.h"
+#include "Rte.h"
 
 /* ======================================================================
  * Global Variables
@@ -84,3 +85,10 @@ const uint8 Dem_AgingThresholdTable[DEM_EVENT_COUNT] = {
     DEM_AGING_THRESHOLD_CANSM_MODE_REQUEST_TIMEOUT  /* event 15 */
 };
 /* @@GEN-END dem-tables */
+
+/** FreezeFrame の DID の構成（DemDidClass）。データ要素の読み出し関数は、RTE（Rte.c）が提供する。 */
+const Dem_DidClassType Dem_DidClassTable[DEM_FREEZE_FRAME_DID_COUNT] = {
+    { DEM_DID_ENGINE_SPEED, DEM_DID_ENGINE_SPEED_SIZE, Rte_Call_DataServices_EngineSpeed_ReadData },
+    { DEM_DID_COOLANT_TEMP, DEM_DID_COOLANT_TEMP_SIZE, Rte_Call_DataServices_CoolantTemp_ReadData },
+    { DEM_DID_ENGINE_STATE, DEM_DID_ENGINE_STATE_SIZE, Rte_Call_DataServices_EngineState_ReadData }
+};
