@@ -81,6 +81,21 @@ Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalF
            ? CAN_HW_OK : CAN_HW_FAIL;
 }
 
+/** MCP2515 のレジスタの指定したビットを、SPI で直接書き換える（BIT MODIFY）。mcp_can には、レジスタを書く公開 API が無いので、
+ *  ライブラリの mcp2515_modifyRegister() と同じ手順（SPI の設定も同じ）を直接送る。
+ *  協調スケジューラ上の単一の流れから呼ばれ、割り込みは SPI に触れない（フラグを立てるだけ）。 */
+static void Can_Hw_BitModify(uint8_t address, uint8_t mask, uint8_t data)
+{
+    SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
+    digitalWrite(Can_Hw_CsPin, LOW);
+    SPI.transfer(MCP_BITMOD);
+    SPI.transfer(address);
+    SPI.transfer(mask);
+    SPI.transfer(data);
+    digitalWrite(Can_Hw_CsPin, HIGH);
+    SPI.endTransaction();
+}
+
 Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
 {
     INT8U ret;
@@ -216,18 +231,22 @@ Can_Hw_ReturnType Can_Hw_TakeRxOverflow(void)
     const uint8_t observed = (uint8_t)(driver->getError() & MCP_EFLG_RXOVR);
     if (observed == 0U) return CAN_HW_FAIL;
 
-    /* RXnOVR は MCU が消さないと立ったままになる。mcp_can にはレジスタを書く公開 API が無いので、
-     * ライブラリの mcp2515_modifyRegister() と同じ BIT MODIFY の手順（SPI 設定も同じ）を直接送る。
-     * 読み取ったビットだけを消し、読んだ後に立った別のバッファの分は残す。
-     * 協調スケジューラ上の単一の流れから呼ばれ、割り込みは SPI に触れない（フラグを立てるだけ）。 */
-    SPI.beginTransaction(SPISettings(10000000, MSBFIRST, SPI_MODE0));
-    digitalWrite(Can_Hw_CsPin, LOW);
-    SPI.transfer(MCP_BITMOD);
-    SPI.transfer(MCP_EFLG);
-    SPI.transfer(observed);
-    SPI.transfer(0x00U);
-    digitalWrite(Can_Hw_CsPin, HIGH);
-    SPI.endTransaction();
+    /* RXnOVR は MCU が消さないと立ったままになる。読み取ったビットだけを消し、読んだ後に立った別のバッファの分は残す。 */
+    Can_Hw_BitModify(MCP_EFLG, observed, 0x00U);
+    return CAN_HW_OK;
+}
+
+Can_Hw_ReturnType Can_Hw_AbortTx(void)
+{
+    if (driver == nullptr) return CAN_HW_FAIL;
+
+    /* 送信バッファごとに TXREQ だけを消して、未送信のフレームを取り消す（ABAT ビットは使わない。Can_Hw.h 参照）。 */
+    static const uint8_t txCtrl[] = { MCP_TXB0CTRL, MCP_TXB1CTRL, MCP_TXB2CTRL };
+    for (uint8_t i = 0U; i < (uint8_t)(sizeof(txCtrl) / sizeof(txCtrl[0])); i++)
+    {
+        Can_Hw_BitModify(txCtrl[i], MCP_TXB_TXREQ_M, 0x00U);
+    }
+    DET_LOGD(TAG, "TX buffers aborted (pending frames cancelled)");
     return CAN_HW_OK;
 }
 

@@ -23,6 +23,7 @@ uint32 FakeCanHw_SetModeCount         = 0U;
 uint32 FakeCanHw_CheckReceiveCount    = 0U;
 uint32 FakeCanHw_IsBusOffCount        = 0U;
 uint32 FakeCanHw_TakeRxOverflowCount  = 0U;
+uint32 FakeCanHw_AbortTxCount         = 0U;
 uint32 FakeCanHw_GetErrorStateCount   = 0U;
 uint32 FakeCanHw_IsWakeupPendingCount = 0U;
 uint32 FakeCanHw_AttachRxIsrCount     = 0U;
@@ -66,6 +67,7 @@ void FakeCanHw_Reset(void)
     FakeCanHw_CheckReceiveCount    = 0U;
     FakeCanHw_IsBusOffCount        = 0U;
     FakeCanHw_TakeRxOverflowCount  = 0U;
+    FakeCanHw_AbortTxCount         = 0U;
     FakeCanHw_GetErrorStateCount   = 0U;
     FakeCanHw_IsWakeupPendingCount = 0U;
     FakeCanHw_AttachRxIsrCount     = 0U;
@@ -166,6 +168,12 @@ Can_Hw_ReturnType Can_Hw_IsBusOff(void)
 {
     FakeCanHw_IsBusOffCount++;
     return FakeCanHw_IsBusOffReturn;
+}
+
+Can_Hw_ReturnType Can_Hw_AbortTx(void)
+{
+    FakeCanHw_AbortTxCount++;
+    return CAN_HW_OK;
 }
 
 Can_Hw_ReturnType Can_Hw_TakeRxOverflow(void)

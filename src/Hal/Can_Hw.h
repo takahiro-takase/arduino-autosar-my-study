@@ -71,6 +71,16 @@ Can_Hw_ReturnType Can_Hw_IsBusOff(void);
  *  \retval  CAN_HW_FAIL  オーバーフローなし、またはドライバ未初期化 */
 Can_Hw_ReturnType Can_Hw_TakeRxOverflow(void);
 
+/** MCP2515 の送信バッファ（TXB0〜TXB2）に残っている、未送信のフレームを取り消す（TXREQ を消す）。
+ *  Can_Hw_Send() が失敗（ACK が返らない、バッファが空かないなど）したとき、フレームは送信バッファに残り続け、
+ *  バスの状況が変わると、あとから送出される（古いフレームが遅れて出る）。また、3 つのバッファがすべて残ると、
+ *  以降の送信が常に失敗する。「失敗＝送られていない」にするため、失敗のあとに呼ぶ。
+ *  mcp_can の abortTX() は、ABAT ビットを立てるだけで、消す公開 API が無く、以降の送信を止めたままにしてしまうため使わず、
+ *  各 TXBnCTRL の TXREQ だけを BIT MODIFY で消す（SPI を直接使う。Can_Hw_TakeRxOverflow() と同じ手順）。
+ *  \retval  CAN_HW_OK    取り消しを送った
+ *  \retval  CAN_HW_FAIL  ドライバ未初期化 */
+Can_Hw_ReturnType Can_Hw_AbortTx(void);
+
 /** MCP2515 の EFLG レジスタから、Bus-Off/Error-Passive/Active の3状態を
  *  導出して *errorStateOut に格納する（0=Active, 1=Passive, 2=Bus-Off。
  *  Can_GeneralTypes.h の Can_ErrorStateType と同じ数値のため、呼び出し元は

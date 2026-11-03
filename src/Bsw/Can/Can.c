@@ -808,6 +808,10 @@ Std_ReturnType Can_Write(Can_HwHandleType Hth, const Can_PduType* PduInfo)
 
     if (Can_Hw_Send(PduInfo->id, txLength, txData) != CAN_HW_OK)
     {
+        /* 失敗したフレームは、MCP2515 の送信バッファに残り続ける。E_NOT_OK は「送られていない」の意味なので、取り消す
+         * （残すと、バスの状況が変わったときに、古いフレームが遅れて出る。バッファがすべて埋まると、以降の送信が常に失敗する）。 */
+        (void)Can_Hw_AbortTx();
+
         /* 一次検出（EFLG.TXBO）は Can_MainFunction_BusOff() のポーリングが担う。
          * 二次検出: mcp_can 環境で TXBO=1 が発生しない場合の補完。 */
         Can_TxErrCount++;

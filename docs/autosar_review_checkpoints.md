@@ -450,6 +450,8 @@ CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は
 （2026-11-03 追記 4: 受信側の BS≠0 の FC の再送（[SWS_CanTp_00278]・[SWS_CanTp_00067]）を実装した。BS は実行時の変数（`CanTp_RxBlockSize`）で持つ。
 タイマの起点を送信確認にする件（00075 ほか）は見送り: 本プロジェクトの `Can_Write()` は、mcp_can の `sendMsg()`（最大 2.5 ms、TXREQ のクリアまで待つ。送信は同期）で送るため、`E_OK` を返した時点で、実際の送信は終わっている（確認の通知は、`Can_MainFunction_Write()` へ遅らせるだけ）。送信の失敗（ACK なしなど）は、同期的な `E_NOT_OK` で分かる。このため、CanTp の N_As・N_Ar は、同期的な送信失敗で近似できている。仕様どおり、送信を非同期（バッファへ載せて返り、TXREQ のクリアを後で確認）にするには、mcp_can の公開 API が足りず（`sendMsg()` は private、レジスタ読み出しも private）、独自の SPI ドライバが要る。）
 （2026-11-03 追記 5: `CanIf_GetControllerMode()` を、`Can_GetControllerMode()` への転送に直した（[SWS_CANIF_00229]）。CanIf の記録 `CanIf_ControllerMode[]` は、CanIf 内部の判断用に残した。）
+（2026-11-03 追記 6: `Can_Write()` の送信失敗のとき、MCP2515 の送信バッファに残る未送信のフレームを取り消すようにした（`Can_Hw_AbortTx()`。各 TXBnCTRL の TXREQ を BIT MODIFY で消す）。
+以前は、失敗しても残り、バスの状況が変わると遅れて送出され、3 つ残ると以降の送信が常に失敗した。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|
