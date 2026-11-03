@@ -28,6 +28,9 @@ extern EngineSpeed_t FakeRte_EngineSpeed;
 /** Rte_Read_TempSensor_CoolantTemp() が返す値（既定 0）。 */
 extern CoolantTemp_t FakeRte_CoolantTemp;
 
+/** TRUE のとき、Rte_Call_DataServices_*_ReadData()（Dem の FreezeFrame のデータ要素の読み出し）が、Data を書かずに E_NOT_OK を返す（既定 FALSE）。 */
+extern boolean FakeRte_DataReadFails;
+
 /* ======================================================================
  * Functions
  * ====================================================================== */

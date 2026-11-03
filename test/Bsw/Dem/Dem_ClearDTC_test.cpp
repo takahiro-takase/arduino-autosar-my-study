@@ -63,11 +63,20 @@ protected:
     }
 
     static const Dem_EventIdType kInvalidEventId = DEM_EVENT_COUNT;
+
+    // 構成にある DTC（イベント 0 の DTC）。
+    static uint32 ValidDtc()
+    {
+        uint32 dtc = 0U;
+        (void)Dem_GetDTCOfEvent(0U, DEM_DTC_FORMAT_UDS, &dtc);
+        return dtc;
+    }
 };
 
 /* ======================================================================
  * Test Functions
  * ====================================================================== */
+
 
 TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_Uninit)
 {
@@ -79,7 +88,7 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -88,7 +97,7 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_Uninit)
     EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_UNINIT);
 }
 
-TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_WrongConfiguration)
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_InvalidClientId)
 {
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
@@ -98,7 +107,45 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_WrongConfiguration)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, static_cast<Dem_DTCOriginType>(0xFFFFU));
+    const Std_ReturnType ret = Dem_ClearDTC(DEM_CLIENT_COUNT);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);   // [SWS_Dem_01252]
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_WRONG_CONFIGURATION);
+}
+
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_NoSelection)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // Dem_SelectDTC() を呼ばない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);   // 対象の DTC が選ばれていない
+    EXPECT_EQ(FakeDetHw_LastErrorId, DEM_E_WRONG_CONDITION);   // [SWS_Dem_01255]
+}
+
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_WrongOrigin)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, static_cast<Dem_DTCOriginType>(0xFFFFU)), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -112,12 +159,12 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_UnsupportedDtcFormat)
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で初期化済み）
+    ASSERT_EQ(Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_OBD, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_OBD, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -130,12 +177,12 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_UnknownDtc)
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で初期化済み）
+    ASSERT_EQ(Dem_SelectDTC(0U, 0x123456UL, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // どのイベントにも割り当てられていない DTC
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_ClearDTC(0U, 0x123456UL, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);   // どのイベントにも割り当てられていない DTC
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -149,12 +196,13 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_NG_NvmWriteFailureIsReportedAsMemoryError
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
+    ASSERT_EQ(Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
     ASSERT_EQ(NvM_SetBlockProtection(NVM_BLOCK_ID_DEM_STATUS, TRUE), E_OK);   // NvM_WriteBlock() が失敗する
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -168,17 +216,88 @@ TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_OK_ClearsAllDtcs)
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    // なし（SetUp() で NvM と Dem を初期化済み）
+    ASSERT_EQ(Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    Std_ReturnType ret = Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(ret, E_OK);
+}
+
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_OK_ClearsASingleDtc)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SelectDTC(0U, ValidDtc(), DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_ClearDTC(0U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+}
+
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_OK_SelectionRemainsAfterClear)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+    ASSERT_EQ(Dem_ClearDTC(0U), E_OK);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_ClearDTC(0U);   // 選び直さずに、もう一度
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);   // [SWS_Dem_01253]: 選択は、次に Dem_SelectDTC() を呼ぶまで残る
+}
+
+TEST_F(Dem_ClearDTC_Test, Dem_ClearDTC_OK_DiscardsTheFreezeFrameAndTheExtendedData)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < 20U; i++)
+    {
+        (void)Dem_SetEventStatus(0U, DEM_EVENT_STATUS_FAILED);   // 確定させる（FreezeFrame と ExtendedData が記録される）
+    }
+    ASSERT_EQ(Dem_SelectDTC(0U, ValidDtc(), DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+    ASSERT_EQ(Dem_SelectFreezeFrameData(0U, DEM_RECORD_NUMBER_ALL), E_OK);
+    uint16 before = 0U;
+    ASSERT_EQ(Dem_GetSizeOfFreezeFrameSelection(0U, &before), E_OK);
+    ASSERT_EQ(before, DEM_FREEZE_FRAME_RECORD_SIZE);   // 記録されている
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Dem_ClearDTC(0U);   // 選択（イベント 0 の DTC）のまま、消去する
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    uint16 afterFreezeFrame = 0xAAU;
+    uint16 afterExtendedData = 0xAAU;
+    ASSERT_EQ(Dem_SelectFreezeFrameData(0U, DEM_RECORD_NUMBER_ALL), E_OK);
+    ASSERT_EQ(Dem_GetSizeOfFreezeFrameSelection(0U, &afterFreezeFrame), E_OK);
+    ASSERT_EQ(Dem_SelectExtendedDataRecord(0U, DEM_RECORD_NUMBER_ALL), E_OK);
+    ASSERT_EQ(Dem_GetSizeOfExtendedDataRecordSelection(0U, &afterExtendedData), E_OK);
+    EXPECT_EQ(afterFreezeFrame, 0U);    // 記録は無くなる
+    EXPECT_EQ(afterExtendedData, 0U);
 }
 
 }  // namespace

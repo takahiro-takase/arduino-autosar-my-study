@@ -935,6 +935,52 @@ Std_ReturnType Rte_Call_Button_GetLevel(uint8* level)
 }
 
 /**
+ * \brief   Dem の FreezeFrame のデータ要素「EngineSpeed」（DID 0x0101、2 バイト）を読む。
+ *
+ * \details DemDataElementReadFnc（[SWS_Dem_00464]）。Rte_Read_SpeedSensor_EngineSpeed() の最後の正常値を、
+ *          MSB first で書く。
+ *
+ * \param[out]  Data  書き込み先（2 バイト）。
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Rte_Call_DataServices_EngineSpeed_ReadData(uint8* Data)
+{
+    EngineSpeed_t speed = 0U;
+    (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
+    Data[0] = (uint8)(speed >> 8U);
+    Data[1] = (uint8)(speed & 0xFFU);
+    return E_OK;
+}
+
+/**
+ * \brief   Dem の FreezeFrame のデータ要素「CoolantTemp」（DID 0x0102、1 バイト）を読む。
+ *
+ * \param[out]  Data  書き込み先（1 バイト）。
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Rte_Call_DataServices_CoolantTemp_ReadData(uint8* Data)
+{
+    CoolantTemp_t temp = 0U;
+    (void)Rte_Read_TempSensor_CoolantTemp(&temp);
+    Data[0] = temp;
+    return E_OK;
+}
+
+/**
+ * \brief   Dem の FreezeFrame のデータ要素「EngineState」（DID 0x0103、1 バイト）を読む。
+ *
+ * \param[out]  Data  書き込み先（1 バイト）。
+ * \retval  E_OK  常に正常。
+ */
+Std_ReturnType Rte_Call_DataServices_EngineState_ReadData(uint8* Data)
+{
+    EngineState_t state = ENGINE_STATE_OFF;
+    (void)Rte_Read_EngineStatus_EngineState(&state);
+    Data[0] = (uint8)state;
+    return E_OK;
+}
+
+/**
  * \brief   ADC センサ電圧値取得の Client/Server ポート。
  *
  * \details SW-C (App_EngineManager) から呼び出され、

@@ -24,6 +24,22 @@
 #include "Dem_Cfg.h"
 
 /* ======================================================================
+ * Type Definitions
+ * ====================================================================== */
+
+/** データ要素の読み出し関数（DemDataElementReadFnc、[SWS_Dem_00464]）。Dem が、FreezeFrame を取る瞬間に呼ぶ。
+ *  Buffer へ、データ要素を、DemDataElementClass の大きさ（バイト）だけ書く（MSB first）。 */
+typedef Std_ReturnType (*Dem_DataElementReadFncType)(uint8* Buffer);
+
+/** FreezeFrame の DID の構成（DemDidClass）。 */
+typedef struct
+{
+    uint16                     Did;      /**< DID */
+    uint8                      Size;     /**< データ要素の大きさ（バイト） */
+    Dem_DataElementReadFncType ReadFnc;  /**< データ要素の読み出し関数 */
+} Dem_DidClassType;
+
+/* ======================================================================
  * Global Variables
  * ====================================================================== */
 
@@ -35,5 +51,8 @@ extern const sint8 Dem_DebounceLimitTable[DEM_EVENT_COUNT];
 
 /** イベント ID → 経年回復(Aging)閾値 変換テーブル (Dem_Cfg.h の DEM_AGING_THRESHOLD_*) */
 extern const uint8 Dem_AgingThresholdTable[DEM_EVENT_COUNT];
+
+/** FreezeFrame の DID の構成。この順に、{DID, データ} をレコードへ並べる（手書き。Dem.json の生成の対象外） */
+extern const Dem_DidClassType Dem_DidClassTable[DEM_FREEZE_FRAME_DID_COUNT];
 
 #endif /* DEM_PBCFG_H */

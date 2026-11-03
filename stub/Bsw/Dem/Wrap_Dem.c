@@ -47,14 +47,22 @@ uint32 CallCount_Dem_ResetEventStatus                 = 0U;
 uint32 CallCount_Dem_ResetEventDebounceStatus         = 0U;
 uint32 CallCount_Dem_GetDebouncingOfEvent             = 0U;
 uint32 CallCount_Dem_ClearDTC                         = 0U;
+uint32 CallCount_Dem_GetDTCSelectionResult                    = 0U;
+uint32 CallCount_Dem_GetDTCSelectionResultForClearDTC         = 0U;
+uint32 CallCount_Dem_SelectDTC                                = 0U;
+uint32 CallCount_Dem_GetStatusOfDTC                           = 0U;
 uint32 CallCount_Dem_SetDTCFilter                     = 0U;
 uint32 CallCount_Dem_GetNumberOfFilteredDTC           = 0U;
 uint32 CallCount_Dem_GetNextFilteredDTC               = 0U;
 uint32 CallCount_Dem_GetNextFilteredDTCAndFDC         = 0U;
-uint32 CallCount_Dem_SetFreezeFrameContext            = 0U;
-uint32 CallCount_Dem_GetFreezeFrameOfEvent            = 0U;
-uint32 CallCount_Dem_GetEventIdOfDTC                  = 0U;
-uint32 CallCount_Dem_GetOccurrenceCounterOfEvent      = 0U;
+uint32 CallCount_Dem_SelectExtendedDataRecord                = 0U;
+uint32 CallCount_Dem_GetSizeOfExtendedDataRecordSelection    = 0U;
+uint32 CallCount_Dem_GetNextExtendedDataRecord               = 0U;
+uint32 CallCount_Dem_SelectFreezeFrameData                    = 0U;
+uint32 CallCount_Dem_GetSizeOfFreezeFrameSelection            = 0U;
+uint32 CallCount_Dem_GetNextFreezeFrameData                   = 0U;
+uint32 CallCount_Dem_DisableDTCRecordUpdate                   = 0U;
+uint32 CallCount_Dem_EnableDTCRecordUpdate                    = 0U;
 
 Dem_EventIdType     LastEventId_Dem_SetEventStatus     = 0xFFU;
 Dem_EventStatusType LastEventStatus_Dem_SetEventStatus = 0xFFU;
@@ -73,9 +81,18 @@ uint32 FailFromCallCount_Dem_ResetEventStatus              = WRAP_DEM_FAIL_FROM_
 uint32 FailFromCallCount_Dem_ResetEventDebounceStatus      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetDebouncingOfEvent          = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_ClearDTC                      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_Dem_GetEventIdOfDTC               = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-uint32 FailFromCallCount_Dem_GetOccurrenceCounterOfEvent   = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetDTCSelectionResult                    = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetDTCSelectionResultForClearDTC         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_SelectDTC                                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetStatusOfDTC                           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_SelectExtendedDataRecord                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetSizeOfExtendedDataRecordSelection    = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetNextExtendedDataRecord               = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_SelectFreezeFrameData            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection    = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_GetNextFreezeFrameData           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_DisableDTCRecordUpdate           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_EnableDTCRecordUpdate            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_SetDTCFilter                 = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetNumberOfFilteredDTC       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetNextFilteredDTC           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -94,9 +111,18 @@ Std_ReturnType ForcedReturn_Dem_ResetEventStatus             = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_ResetEventDebounceStatus     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetDebouncingOfEvent         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_ClearDTC                     = E_NOT_OK;
-Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent        = E_NOT_OK;
-Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC              = E_NOT_OK;
-Std_ReturnType ForcedReturn_Dem_GetOccurrenceCounterOfEvent  = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetDTCSelectionResult        = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetDTCSelectionResultForClearDTC = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_SelectDTC                    = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetStatusOfDTC               = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_SelectExtendedDataRecord    = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetSizeOfExtendedDataRecordSelection = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetNextExtendedDataRecord   = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_SelectFreezeFrameData         = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetSizeOfFreezeFrameSelection = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_GetNextFreezeFrameData        = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_DisableDTCRecordUpdate        = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_EnableDTCRecordUpdate         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_SetDTCFilter                = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNumberOfFilteredDTC      = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC          = E_NOT_OK;
@@ -116,14 +142,22 @@ void WrapDem_Reset(void)
     CallCount_Dem_SetEventStatus               = 0U;
     CallCount_Dem_GetDTCStatusAvailabilityMask = 0U;
     CallCount_Dem_ClearDTC                     = 0U;
+    CallCount_Dem_GetDTCSelectionResult                    = 0U;
+    CallCount_Dem_GetDTCSelectionResultForClearDTC         = 0U;
+    CallCount_Dem_SelectDTC                                = 0U;
+    CallCount_Dem_GetStatusOfDTC                           = 0U;
     CallCount_Dem_SetDTCFilter                 = 0U;
     CallCount_Dem_GetNumberOfFilteredDTC       = 0U;
     CallCount_Dem_GetNextFilteredDTC           = 0U;
     CallCount_Dem_GetNextFilteredDTCAndFDC     = 0U;
-    CallCount_Dem_SetFreezeFrameContext        = 0U;
-    CallCount_Dem_GetFreezeFrameOfEvent        = 0U;
-    CallCount_Dem_GetEventIdOfDTC              = 0U;
-    CallCount_Dem_GetOccurrenceCounterOfEvent  = 0U;
+    CallCount_Dem_SelectExtendedDataRecord                = 0U;
+    CallCount_Dem_GetSizeOfExtendedDataRecordSelection    = 0U;
+    CallCount_Dem_GetNextExtendedDataRecord               = 0U;
+    CallCount_Dem_SelectFreezeFrameData               = 0U;
+    CallCount_Dem_GetSizeOfFreezeFrameSelection       = 0U;
+    CallCount_Dem_GetNextFreezeFrameData              = 0U;
+    CallCount_Dem_DisableDTCRecordUpdate              = 0U;
+    CallCount_Dem_EnableDTCRecordUpdate               = 0U;
     CallCount_Dem_GetTranslationType           = 0U;
     CallCount_Dem_GetFaultDetectionCounter     = 0U;
     CallCount_Dem_EnableDTCSetting             = 0U;
@@ -146,9 +180,18 @@ void WrapDem_Reset(void)
     FailFromCallCount_Dem_GetDTCOfEvent                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetDTCStatusAvailabilityMask = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_ClearDTC                     = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_Dem_GetFreezeFrameOfEvent        = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_Dem_GetEventIdOfDTC              = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
-    FailFromCallCount_Dem_GetOccurrenceCounterOfEvent  = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetDTCSelectionResult                    = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetDTCSelectionResultForClearDTC         = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_SelectDTC                                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetStatusOfDTC                           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_SelectExtendedDataRecord                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetSizeOfExtendedDataRecordSelection    = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetNextExtendedDataRecord               = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_SelectFreezeFrameData       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection= WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_GetNextFreezeFrameData      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_DisableDTCRecordUpdate      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_EnableDTCRecordUpdate       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_SetDTCFilter                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetNumberOfFilteredDTC      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetNextFilteredDTC          = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -167,9 +210,18 @@ void WrapDem_Reset(void)
     ForcedReturn_Dem_GetDTCOfEvent                = E_NOT_OK;
     ForcedReturn_Dem_GetDTCStatusAvailabilityMask = E_NOT_OK;
     ForcedReturn_Dem_ClearDTC                     = E_NOT_OK;
-    ForcedReturn_Dem_GetFreezeFrameOfEvent        = E_NOT_OK;
-    ForcedReturn_Dem_GetEventIdOfDTC              = E_NOT_OK;
-    ForcedReturn_Dem_GetOccurrenceCounterOfEvent  = E_NOT_OK;
+    ForcedReturn_Dem_GetDTCSelectionResult        = E_NOT_OK;
+    ForcedReturn_Dem_GetDTCSelectionResultForClearDTC = E_NOT_OK;
+    ForcedReturn_Dem_SelectDTC                    = E_NOT_OK;
+    ForcedReturn_Dem_GetStatusOfDTC               = E_NOT_OK;
+    ForcedReturn_Dem_SelectExtendedDataRecord    = E_NOT_OK;
+    ForcedReturn_Dem_GetSizeOfExtendedDataRecordSelection = E_NOT_OK;
+    ForcedReturn_Dem_GetNextExtendedDataRecord   = E_NOT_OK;
+    ForcedReturn_Dem_SelectFreezeFrameData            = E_NOT_OK;
+    ForcedReturn_Dem_GetSizeOfFreezeFrameSelection    = E_NOT_OK;
+    ForcedReturn_Dem_GetNextFreezeFrameData           = E_NOT_OK;
+    ForcedReturn_Dem_DisableDTCRecordUpdate           = E_NOT_OK;
+    ForcedReturn_Dem_EnableDTCRecordUpdate            = E_NOT_OK;
     ForcedReturn_Dem_SetDTCFilter                = E_NOT_OK;
     ForcedReturn_Dem_GetNumberOfFilteredDTC      = E_NOT_OK;
     ForcedReturn_Dem_GetNextFilteredDTC          = E_NOT_OK;
@@ -241,8 +293,8 @@ void __wrap_Dem_Init(const Dem_ConfigType* ConfigPtr)
  * ---------------------------------------------------------------------- */
 
 extern
-Std_ReturnType __real_Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
-Std_ReturnType __wrap_Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+Std_ReturnType __real_Dem_ClearDTC(uint8 ClientId);
+Std_ReturnType __wrap_Dem_ClearDTC(uint8 ClientId)
 {
     CallCount_Dem_ClearDTC++;
     Log_Write(LOG_T, TAG, "Dem_ClearDTC", "called %u times", CallCount_Dem_ClearDTC);
@@ -252,7 +304,7 @@ Std_ReturnType __wrap_Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType
         return ForcedReturn_Dem_ClearDTC;
     }
 
-    return __real_Dem_ClearDTC(ClientId, DTC, DTCFormat, DTCOrigin);
+    return __real_Dem_ClearDTC(ClientId);
 }
 
 /* ----------------------------------------------------------------------
@@ -271,13 +323,39 @@ Std_ReturnType __wrap_Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType
  * Dem_GetDTCSelectionResult
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetDTCSelectionResult(uint8 ClientId);
+Std_ReturnType __wrap_Dem_GetDTCSelectionResult(uint8 ClientId)
+{
+    CallCount_Dem_GetDTCSelectionResult++;
+    Log_Write(LOG_T, TAG, "Dem_GetDTCSelectionResult", "called %u times", CallCount_Dem_GetDTCSelectionResult);
+
+    if (CallCount_Dem_GetDTCSelectionResult >= FailFromCallCount_Dem_GetDTCSelectionResult)
+    {
+        return ForcedReturn_Dem_GetDTCSelectionResult;
+    }
+
+    return __real_Dem_GetDTCSelectionResult(ClientId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetDTCSelectionResultForClearDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId);
+Std_ReturnType __wrap_Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId)
+{
+    CallCount_Dem_GetDTCSelectionResultForClearDTC++;
+    Log_Write(LOG_T, TAG, "Dem_GetDTCSelectionResultForClearDTC", "called %u times", CallCount_Dem_GetDTCSelectionResultForClearDTC);
+
+    if (CallCount_Dem_GetDTCSelectionResultForClearDTC >= FailFromCallCount_Dem_GetDTCSelectionResultForClearDTC)
+    {
+        return ForcedReturn_Dem_GetDTCSelectionResultForClearDTC;
+    }
+
+    return __real_Dem_GetDTCSelectionResultForClearDTC(ClientId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetEventUdsStatus
@@ -458,7 +536,20 @@ Std_ReturnType __wrap_Dem_ResetEventStatus(Dem_EventIdType EventId)
  * Dem_SelectDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
+Std_ReturnType __wrap_Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+{
+    CallCount_Dem_SelectDTC++;
+    Log_Write(LOG_T, TAG, "Dem_SelectDTC", "called %u times", CallCount_Dem_SelectDTC);
+
+    if (CallCount_Dem_SelectDTC >= FailFromCallCount_Dem_SelectDTC)
+    {
+        return ForcedReturn_Dem_SelectDTC;
+    }
+
+    return __real_Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SetComponentAvailable
@@ -604,7 +695,20 @@ Std_ReturnType __wrap_Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsSt
  * Dem_GetStatusOfDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus);
+Std_ReturnType __wrap_Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus)
+{
+    CallCount_Dem_GetStatusOfDTC++;
+    Log_Write(LOG_T, TAG, "Dem_GetStatusOfDTC", "called %u times", CallCount_Dem_GetStatusOfDTC);
+
+    if (CallCount_Dem_GetStatusOfDTC >= FailFromCallCount_Dem_GetStatusOfDTC)
+    {
+        return ForcedReturn_Dem_GetStatusOfDTC;
+    }
+
+    return __real_Dem_GetStatusOfDTC(ClientId, DTCStatus);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSeverityOfDTC
@@ -670,49 +774,153 @@ Std_ReturnType __wrap_Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsSt
  * Dem_DisableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_DisableDTCRecordUpdate(uint8 ClientId);
+Std_ReturnType __wrap_Dem_DisableDTCRecordUpdate(uint8 ClientId)
+{
+    CallCount_Dem_DisableDTCRecordUpdate++;
+    Log_Write(LOG_T, TAG, "Dem_DisableDTCRecordUpdate", "called %u times", CallCount_Dem_DisableDTCRecordUpdate);
+
+    if (CallCount_Dem_DisableDTCRecordUpdate >= FailFromCallCount_Dem_DisableDTCRecordUpdate)
+    {
+        return ForcedReturn_Dem_DisableDTCRecordUpdate;
+    }
+
+    return __real_Dem_DisableDTCRecordUpdate(ClientId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_EnableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_EnableDTCRecordUpdate(uint8 ClientId);
+Std_ReturnType __wrap_Dem_EnableDTCRecordUpdate(uint8 ClientId)
+{
+    CallCount_Dem_EnableDTCRecordUpdate++;
+    Log_Write(LOG_T, TAG, "Dem_EnableDTCRecordUpdate", "called %u times", CallCount_Dem_EnableDTCRecordUpdate);
+
+    if (CallCount_Dem_EnableDTCRecordUpdate >= FailFromCallCount_Dem_EnableDTCRecordUpdate)
+    {
+        return ForcedReturn_Dem_EnableDTCRecordUpdate;
+    }
+
+    return __real_Dem_EnableDTCRecordUpdate(ClientId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSizeOfExtendedDataRecordSelection
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* SizeOfExtendedDataRecord);
+Std_ReturnType __wrap_Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* SizeOfExtendedDataRecord)
+{
+    CallCount_Dem_GetSizeOfExtendedDataRecordSelection++;
+    Log_Write(LOG_T, TAG, "Dem_GetSizeOfExtendedDataRecordSelection", "called %u times", CallCount_Dem_GetSizeOfExtendedDataRecordSelection);
+
+    if (CallCount_Dem_GetSizeOfExtendedDataRecordSelection >= FailFromCallCount_Dem_GetSizeOfExtendedDataRecordSelection)
+    {
+        return ForcedReturn_Dem_GetSizeOfExtendedDataRecordSelection;
+    }
+
+    return __real_Dem_GetSizeOfExtendedDataRecordSelection(ClientId, SizeOfExtendedDataRecord);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSizeOfFreezeFrameSelection
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetSizeOfFreezeFrameSelection(uint8 ClientId, uint16* SizeOfFreezeFrame);
+Std_ReturnType __wrap_Dem_GetSizeOfFreezeFrameSelection(uint8 ClientId, uint16* SizeOfFreezeFrame)
+{
+    CallCount_Dem_GetSizeOfFreezeFrameSelection++;
+    Log_Write(LOG_T, TAG, "Dem_GetSizeOfFreezeFrameSelection", "called %u times", CallCount_Dem_GetSizeOfFreezeFrameSelection);
+
+    if (CallCount_Dem_GetSizeOfFreezeFrameSelection >= FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection)
+    {
+        return ForcedReturn_Dem_GetSizeOfFreezeFrameSelection;
+    }
+
+    return __real_Dem_GetSizeOfFreezeFrameSelection(ClientId, SizeOfFreezeFrame);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetNextExtendedDataRecord
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
+Std_ReturnType __wrap_Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, uint16* BufSize)
+{
+    CallCount_Dem_GetNextExtendedDataRecord++;
+    Log_Write(LOG_T, TAG, "Dem_GetNextExtendedDataRecord", "called %u times", CallCount_Dem_GetNextExtendedDataRecord);
+
+    if (CallCount_Dem_GetNextExtendedDataRecord >= FailFromCallCount_Dem_GetNextExtendedDataRecord)
+    {
+        return ForcedReturn_Dem_GetNextExtendedDataRecord;
+    }
+
+    return __real_Dem_GetNextExtendedDataRecord(ClientId, DestBuffer, BufSize);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetNextFreezeFrameData
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
+Std_ReturnType __wrap_Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uint16* BufSize)
+{
+    CallCount_Dem_GetNextFreezeFrameData++;
+    Log_Write(LOG_T, TAG, "Dem_GetNextFreezeFrameData", "called %u times", CallCount_Dem_GetNextFreezeFrameData);
+
+    if (CallCount_Dem_GetNextFreezeFrameData >= FailFromCallCount_Dem_GetNextFreezeFrameData)
+    {
+        return ForcedReturn_Dem_GetNextFreezeFrameData;
+    }
+
+    return __real_Dem_GetNextFreezeFrameData(ClientId, DestBuffer, BufSize);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SelectExtendedDataRecord
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_SelectExtendedDataRecord(uint8 ClientId, uint8 ExtendedDataNumber);
+Std_ReturnType __wrap_Dem_SelectExtendedDataRecord(uint8 ClientId, uint8 ExtendedDataNumber)
+{
+    CallCount_Dem_SelectExtendedDataRecord++;
+    Log_Write(LOG_T, TAG, "Dem_SelectExtendedDataRecord", "called %u times", CallCount_Dem_SelectExtendedDataRecord);
+
+    if (CallCount_Dem_SelectExtendedDataRecord >= FailFromCallCount_Dem_SelectExtendedDataRecord)
+    {
+        return ForcedReturn_Dem_SelectExtendedDataRecord;
+    }
+
+    return __real_Dem_SelectExtendedDataRecord(ClientId, ExtendedDataNumber);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SelectFreezeFrameData
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_SelectFreezeFrameData(uint8 ClientId, uint8 RecordNumber);
+Std_ReturnType __wrap_Dem_SelectFreezeFrameData(uint8 ClientId, uint8 RecordNumber)
+{
+    CallCount_Dem_SelectFreezeFrameData++;
+    Log_Write(LOG_T, TAG, "Dem_SelectFreezeFrameData", "called %u times", CallCount_Dem_SelectFreezeFrameData);
+
+    if (CallCount_Dem_SelectFreezeFrameData >= FailFromCallCount_Dem_SelectFreezeFrameData)
+    {
+        return ForcedReturn_Dem_SelectFreezeFrameData;
+    }
+
+    return __real_Dem_SelectFreezeFrameData(ClientId, RecordNumber);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_DisableDTCSetting
@@ -926,77 +1134,6 @@ Std_ReturnType __wrap_Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, 
     }
 
     return __real_Dem_GetNextFilteredDTCAndFDC(ClientId, DTC, DTCFaultDetectionCounter);
-}
-
-/* ----------------------------------------------------------------------
- * Dem_SetFreezeFrameContext
- * ---------------------------------------------------------------------- */
-
-extern
-void __real_Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState);
-void __wrap_Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState)
-{
-    CallCount_Dem_SetFreezeFrameContext++;
-    Log_Write(LOG_T, TAG, "Dem_SetFreezeFrameContext", "called %u times", CallCount_Dem_SetFreezeFrameContext);
-
-    __real_Dem_SetFreezeFrameContext(EngineSpeed, CoolantTemp, EngineState);
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetFreezeFrameOfEvent
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame);
-Std_ReturnType __wrap_Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame)
-{
-    CallCount_Dem_GetFreezeFrameOfEvent++;
-    Log_Write(LOG_T, TAG, "Dem_GetFreezeFrameOfEvent", "called %u times", CallCount_Dem_GetFreezeFrameOfEvent);
-
-    if (CallCount_Dem_GetFreezeFrameOfEvent >= FailFromCallCount_Dem_GetFreezeFrameOfEvent)
-    {
-        return ForcedReturn_Dem_GetFreezeFrameOfEvent;
-    }
-
-    return __real_Dem_GetFreezeFrameOfEvent(EventId, Frame);
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetEventIdOfDTC
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
-Std_ReturnType __wrap_Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
-{
-    CallCount_Dem_GetEventIdOfDTC++;
-    Log_Write(LOG_T, TAG, "Dem_GetEventIdOfDTC", "called %u times", CallCount_Dem_GetEventIdOfDTC);
-
-    if (CallCount_Dem_GetEventIdOfDTC >= FailFromCallCount_Dem_GetEventIdOfDTC)
-    {
-        return ForcedReturn_Dem_GetEventIdOfDTC;
-    }
-
-    return __real_Dem_GetEventIdOfDTC(DTC, EventId);
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetOccurrenceCounterOfEvent
- * ---------------------------------------------------------------------- */
-
-extern
-Std_ReturnType __real_Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
-Std_ReturnType __wrap_Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter)
-{
-    CallCount_Dem_GetOccurrenceCounterOfEvent++;
-    Log_Write(LOG_T, TAG, "Dem_GetOccurrenceCounterOfEvent", "called %u times", CallCount_Dem_GetOccurrenceCounterOfEvent);
-
-    if (CallCount_Dem_GetOccurrenceCounterOfEvent >= FailFromCallCount_Dem_GetOccurrenceCounterOfEvent)
-    {
-        return ForcedReturn_Dem_GetOccurrenceCounterOfEvent;
-    }
-
-    return __real_Dem_GetOccurrenceCounterOfEvent(EventId, Counter);
 }
 
 /* ======================================================================

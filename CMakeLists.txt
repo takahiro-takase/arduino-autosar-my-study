@@ -566,14 +566,22 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dem_GetMonitorStatus
     Dem_GetDTCOfEvent
     Dem_ClearDTC
+    Dem_GetDTCSelectionResult
+    Dem_GetDTCSelectionResultForClearDTC
+    Dem_SelectDTC
+    Dem_GetStatusOfDTC
     Dem_SetDTCFilter
     Dem_GetNumberOfFilteredDTC
     Dem_GetNextFilteredDTC
     Dem_GetNextFilteredDTCAndFDC
-    Dem_SetFreezeFrameContext
-    Dem_GetFreezeFrameOfEvent
-    Dem_GetEventIdOfDTC
-    Dem_GetOccurrenceCounterOfEvent
+    Dem_SelectExtendedDataRecord
+    Dem_GetSizeOfExtendedDataRecordSelection
+    Dem_GetNextExtendedDataRecord
+    Dem_SelectFreezeFrameData
+    Dem_GetSizeOfFreezeFrameSelection
+    Dem_GetNextFreezeFrameData
+    Dem_DisableDTCRecordUpdate
+    Dem_EnableDTCRecordUpdate
     Dem_GetTranslationType
     Dem_GetFaultDetectionCounter
     Dem_EnableDTCSetting

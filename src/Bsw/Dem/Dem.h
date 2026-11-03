@@ -13,7 +13,7 @@
  *          CONFIRMED を解除する（詳細は Dem.c / Dem_Cfg.h を参照）。
  *          DCM は Dem_SetDTCFilter() / Dem_GetNextFilteredDTC() / Dem_ClearDTC() 経由で UDS SID 0x19 / 0x14
  *          に応答する。FreezeFrame（故障時点のスナップショット）に加え、
- *          ExtendedData（累積故障確定回数、Dem_GetOccurrenceCounterOfEvent()）
+ *          ExtendedData（累積故障確定回数。Dem_SelectExtendedDataRecord() 系）
  *          も SID 0x19 subFunc 0x06 経由で提供する。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -56,6 +56,10 @@
  *  次の要素が無い。実仕様の Service Interface DiagnosticInfo（値表、
  *  DEM_NO_SUCH_ELEMENT = 48）に基づく数値。 */
 #define DEM_NO_SUCH_ELEMENT  48U
+
+/** [SWS_Dem_00239] Dem_GetNextExtendedDataRecord() の戻り値: 渡されたバッファが、レコードより小さい。
+ *  実仕様の Service Interface に数値の記載が無いため、既存の拡張戻り値（5〜9、48）と重ならない値を、独自に割り当てた。 */
+#define DEM_BUFFER_TOO_SMALL  21U
 
 /* ======================================================================
  * Type Definitions
@@ -171,22 +175,6 @@ typedef enum
     DEM_CYCLE_STATE_START = 0U,  /**< 操作サイクルを（再）開始する */
     DEM_CYCLE_STATE_END   = 1U   /**< 操作サイクルを終了する       */
 } Dem_OperationCycleStateType;
-
-/**
- * \brief   FreezeFrame (故障時スナップショット) のデータ構造。
- *
- * \details DID 0x0101 (EngineSpeed) / 0x0102 (CoolantTemp) / 0x0103 (EngineState)
- *          に対応する 3 項目を固定フォーマットで保持する。
- *          AUTOSAR では FreezeFrameClass で項目を ARXML 設定するが、
- *          本実装は学習用簡略化のため固定 3 項目とする。
- *          RAM のみに保持し、EEPROM へは永続化しない（電源 OFF で消去）。
- */
-typedef struct
-{
-    uint16 EngineSpeed;   /**< DID 0x0101 相当のスナップショット値 (rpm) */
-    uint8  CoolantTemp;   /**< DID 0x0102 相当のスナップショット値 (℃)  */
-    uint8  EngineState;   /**< DID 0x0103 相当のスナップショット値      */
-} Dem_FreezeFrameType;
 
 /* -----------------------------------------------------------------------
  * 公開 API
@@ -491,50 +479,321 @@ Std_ReturnType Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorStatusTy
 Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent);
 
 /**
- * \brief   指定 DTC（または全 DTC）をクリアし、EEPROM を初期状態へ戻す
- *          （[SWS_Dem_00665]）。DCM SID 0x14 (ClearDiagnosticInformation) から
- *          呼び出す。
+ * \brief   Dem_SelectDTC() で選んだ DTC（または DTC グループ）をクリアし、NvM (EEPROM) を初期状態へ戻す
+ *          （[SWS_Dem_00665]）。DCM SID 0x14 (ClearDiagnosticInformation) から呼び出す。
  *
- * \details 実仕様は `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)`
- *          [SWS_Dem_91016] で対象 DTC を選択したうえで `Dem_ClearDTC(ClientId)`
- *          [SWS_Dem_00665] を呼ぶ、非同期対応の2段階プロトコル（複数クライアント・
- *          `DEM_PENDING`/`DEM_BUSY` によるポーリングを前提とする）だが、本プロジェクトは
- *          単一クライアント・常に同期処理のみのため、`Dem_SelectDTC()` 側の3引数
- *          （DTC/DTCFormat/DTCOrigin）を本関数に統合し、選択と同時にクリアまで
- *          一度に行う（2026-09-27 是正: 従来の独自関数 `Dem_ClearAllDTCs`/
- *          `Dem_ClearOneDtc` を本関数へ統合し、衝突回避のため避けていた実仕様の
- *          関数名 `Dem_ClearDTC` と ServiceID 0x23 を採用した。Dem_Cfg.h
- *          冒頭コメント参照）。
+ * \details 実仕様どおりの 2 段階: 先に `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)` で対象を選び、
+ *          （任意で `Dem_GetDTCSelectionResultForClearDTC()` で選択の結果を確かめ、）本関数を呼ぶ。
+ *          選択は、次に `Dem_SelectDTC()` を呼ぶまで、クライアントごとに残る（[SWS_Dem_01253]）。
  *
- *          `DTC` に予約値 `DEM_GROUP_ALL_DTCS`（0xFFFFFF、ISO 14229-1 Annex D.1
- *          の "all DTCs" グループ）を渡すと、実仕様 [SWS_Dem_01203] のとおり
- *          `DTCOrigin` が示すメモリの全イベントをクリアする。それ以外の値は
- *          特定の DTC コードとみなし、`Dem_GetEventIdOfDTC()` で一致する
- *          イベントを探して 1 件だけクリアする（一致するイベントが無ければ
- *          E_NOT_OK）。
+ *          選んだのが `DEM_GROUP_ALL_DTCS`（0xFFFFFF）なら、[SWS_Dem_01203] のとおり、選んだ DTCOrigin の
+ *          全イベントをクリアする。それ以外は、一致するイベント 1 件だけをクリアする。
  *
- * \param[in]  ClientId   呼び出し元のクライアント識別子。本実装では未使用。
- * \param[in]  DTC        クリア対象の DTC（24-bit UDS 形式）、または
- *                        `DEM_GROUP_ALL_DTCS`（全 DTC 一括クリア）。
- * \param[in]  DTCFormat  DTC のフォーマット。本プロジェクトは
- *                        `DEM_DTC_FORMAT_UDS` のみ対応。
- * \param[in]  DTCOrigin  クリア対象のイベントメモリ。本プロジェクトは
- *                        `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する。
+ *          実仕様は、非同期（`DEM_PENDING`）・複数クライアント（`DEM_CLEAR_BUSY`、`DEM_BUSY`）を前提とするが、
+ *          本プロジェクトは常に同期的に完了するため、`DEM_PENDING`・`DEM_BUSY` は返さない。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
  *
  * \retval  E_OK                    正常クリア（RAM の状態を戻し、不揮発メモリへの書き込みも積んだ）。
- * \retval  E_NOT_OK                未初期化。
- * \retval  DEM_WRONG_DTC           DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外
- *                                  （要求した形式の DTC は構成されていない）。
- * \retval  DEM_WRONG_DTCORIGIN     DTCOrigin が非対応。
+ * \retval  E_NOT_OK                未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない
+ *                                  （DEM_E_WRONG_CONDITION、[SWS_Dem_01255]）。
+ * \retval  DEM_WRONG_DTC           選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN     選んだ DTCOrigin が非対応。
  * \retval  DEM_CLEAR_MEMORY_ERROR  不揮発メモリへの書き込みを積めなかった（NvM_WriteBlock() が失敗。RAM 上は
  *                                  クリア済み（巻き戻しはしない）だが、再起動すると、クリアした内容が復活しうる）。
  *
- * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_91016, SWS_Dem_01203}
+ * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_01203, SWS_Dem_01253, SWS_Dem_01255}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
+Std_ReturnType Dem_ClearDTC(uint8 ClientId);
+
+/**
+ * \brief   直近の Dem_SelectDTC() が、有効な DTC（または DTC グループ）を選んだかを返す（[SWS_Dem_91023]）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない
+ *                               （DEM_E_WRONG_CONDITION、[SWS_Dem_01255]）。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91023, SWS_Dem_01253}
+ * \ServiceID      {0xb8}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_GetDTCSelectionResult(uint8 ClientId);
+
+/**
+ * \brief   Dem_GetDTCSelectionResult() と同じだが、DTC 消去（Dem_ClearDTC()）の設定を考慮した結果を返す
+ *          （[SWS_Dem_91020]）。Dcm が、0x14 の否定応答コードを決めるために、消去の前に呼ぶ。
+ *
+ * \details 単一の DTC の消去だけを許す設定（DemClearDTCLimitation）は持たないため、結果は
+ *          Dem_GetDTCSelectionResult() と同じ。ただし、Dem_SelectDTC() が呼ばれていないときは、
+ *          E_NOT_OK ではなく DEM_WRONG_DTC を返す（本関数の戻り値表に E_NOT_OK が無いため。[SWS_Dem_01261]）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、または ClientId が範囲外。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、DTCFormat が DEM_DTC_FORMAT_UDS 以外、
+ *                               または Dem_SelectDTC() が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91020, SWS_Dem_01253, SWS_Dem_01261}
+ * \ServiceID      {0xbb}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId);
+
+/**
+ * \brief   以降の Dem_ClearDTC() などの対象にする、DTC（または DTC グループ）を選ぶ（[SWS_Dem_91016]）。
+ *
+ * \details 選択は、クライアントごとに、次に本関数を呼ぶまで残る（[SWS_Dem_01253]）。選択が有効かどうかは、
+ *          本関数の戻り値ではなく、Dem_GetDTCSelectionResult() など、選択に続く API の戻り値で分かる
+ *          （[SWS_Dem_01254]）。`DTC` に `DEM_GROUP_ALL_DTCS`（0xFFFFFF）を渡すと、全 DTC のグループを選ぶ。
+ *          本プロジェクトは、DTC グループを、これ 1 つだけ持つ。
+ *
+ * \param[in]  ClientId   呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[in]  DTC        選ぶ DTC（24-bit UDS 形式）、または `DEM_GROUP_ALL_DTCS`。
+ * \param[in]  DTCFormat  DTC のフォーマット。本プロジェクトは `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[in]  DTCOrigin  イベントメモリ。本プロジェクトは `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する
+ *                        （対応外の値は DEM_E_WRONG_CONFIGURATION を報告する）。
+ *
+ * \retval  E_OK      選択の処理を受け付けた（選択の結果は、Dem_GetDTCSelectionResult() で分かる）。
+ * \retval  E_NOT_OK  未初期化、または ClientId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_Dem_91016, SWS_Dem_01253, SWS_Dem_01254}
+ * \ServiceID      {0xb7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
+
+/**
+ * \brief   Dem_SelectDTC() で選んだ DTC のステータスバイトを取得する（[SWS_Dem_00212]）。
+ *
+ * \details Dcm は、イベント ID ではなく、本関数で DTC のステータスを取得する（`Dem_GetEventUdsStatus()` は、
+ *          SW-C や BSW モジュールが、イベント単位で使う）。ステータスは、`DemStatusAvailabilityMask` で
+ *          マスクして返す。DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
+ *
+ * \param[in]   ClientId   呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]  DTCStatus  ステータスバイト（ISO 14229-1）の格納先。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                 DTCStatus へ格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、DTCStatus が NULL、または Dem_SelectDTC() が
+ *                               呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、DTCFormat が DEM_DTC_FORMAT_UDS 以外、
+ *                               または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00212, SWS_Dem_01253}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus);
+
+/**
+ * \brief   選んだ DTC のレコード（FreezeFrame・ExtendedData）の更新と削除を止める（[SWS_Dem_00233]）。
+ *
+ * \details Dcm が、Dem_SelectFreezeFrameData() / Dem_SelectExtendedDataRecord() で読む前に呼び、読み終えてから
+ *          Dem_EnableDTCRecordUpdate() で戻す（[SWS_Dem_00270]）。止めている間、その DTC のイベントが
+ *          確定 FAILED になっても、FreezeFrame の取り直しと故障確定回数の加算は、止めている間は行わず、
+ *          Dem_EnableDTCRecordUpdate() が戻したときに行う（捨てない）。Dem_ClearDTC() が消去しても、そのレコードは
+ *          消さず、戻したときに消す（消去のあとに確定していれば、消してから、更新する）。
+ *          UDS ステータスの更新には影響しない。他のイベントのレコードも、影響を受けない。
+ *          同じクライアントが、1 つしか止められない（[SWS_Dem_00648]）。DTC グループは止められない。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK                 止めた。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、すでに
+ *                               同じクライアントが別の DTC を止めている（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00233, SWS_Dem_00270, SWS_Dem_00648}
+ * \ServiceID      {0x1a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_DisableDTCRecordUpdate(uint8 ClientId);
+
+/**
+ * \brief   Dem_DisableDTCRecordUpdate() で止めたレコードの更新と削除を、元に戻す（[SWS_Dem_00234]）。
+ *
+ * \details 止めている間に Dem_ClearDTC() が消去していたレコードは消し、止めている間に確定 FAILED になっていたときは、
+ *          FreezeFrame と故障確定回数を更新する（消去と更新は、保留した順に、NvM への書き込みを積む）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK      戻した。
+ * \retval  E_NOT_OK  未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、止めている DTC が
+ *                    無い（DEM_E_WRONG_CONDITION）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00234, SWS_Dem_00271}
+ * \ServiceID      {0x1b}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_EnableDTCRecordUpdate(uint8 ClientId);
+
+/**
+ * \brief   ExtendedData のレコードを選ぶ（[SWS_Dem_91017]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
+ *
+ * \details 以降の Dem_GetSizeOfExtendedDataRecordSelection() と Dem_GetNextExtendedDataRecord() が、この選択を使う
+ *          （[SWS_Dem_01272]）。Dem_SelectDTC() を呼ぶと、この選択は破棄される。Dem_SelectDTC() が呼ばれていない
+ *          ときは、DEM_E_WRONG_CONDITION を報告する（[SWS_Dem_01274]）。
+ *          選ぶ DTC が有効かどうか（DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN）は、本関数が返す。レコード番号が
+ *          構成に無いことは、本関数ではなく、Get 系が DEM_NO_SUCH_ELEMENT で返す（本関数の戻り値表に無いため）。
+ *          本プロジェクトのレコードは、DEM_EXTENDED_DATA_RECORD_NUMBER（0x01）の 1 件だけ。0xFF は、全レコード
+ *          （= この 1 件）。
+ *
+ * \param[in]  ClientId            呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[in]  ExtendedDataNumber  レコード番号。0xFF は全レコード、0xFE は OBD のレコード全て（本プロジェクトは持たない）。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91017, SWS_Dem_01272, SWS_Dem_01273, SWS_Dem_01274}
+ * \ServiceID      {0xba}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectExtendedDataRecord(uint8 ClientId, uint8 ExtendedDataNumber);
+
+/**
+ * \brief   Dem_SelectExtendedDataRecord() で選んだレコードの大きさを取得する（[SWS_Dem_00240]）。
+ *
+ * \details 大きさは、レコード番号を含む（形式は {レコード番号, データ...}、[SWS_Dem_00076]）。レコードが
+ *          記録されていない（一度も確定 FAILED していない）ときは、E_OK で 0 を返す（[SWS_Dem_00631]）。
+ *          DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
+ *
+ * \param[in]   ClientId                 呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]  SizeOfExtendedDataRecord  大きさ（バイト）の格納先。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                 大きさを格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、格納先が NULL、または選択（Dem_SelectDTC() /
+ *                               Dem_SelectExtendedDataRecord()）が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が、構成に無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00240, SWS_Dem_00076, SWS_Dem_00631, SWS_Dem_01274}
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* SizeOfExtendedDataRecord);
+
+/**
+ * \brief   Dem_SelectExtendedDataRecord() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00239]）。
+ *
+ * \details 書き出す形式は {レコード番号, データ...}（[SWS_Dem_00075]）。要求したレコード番号が 0xFF でも、
+ *          先頭の 1 バイトは、実際のレコード番号（0x01）になる。レコードが記録されていないときは、E_OK で
+ *          BufSize を 0 にする（[SWS_Dem_00631]）。1 回の選択で得られるレコードは、1 回の呼び出しで全て
+ *          渡すため、続けて呼ぶと DEM_NO_SUCH_ELEMENT（これ以上無い）を返す。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]    DestBuffer  レコードの書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: DestBuffer に書ける最大バイト数。出力: 実際に書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                 書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、ポインタが NULL、または選択が呼ばれていない。
+ * \retval  DEM_BUFFER_TOO_SMALL BufSize が、レコードより小さい（DestBuffer は書き換えない。選択は進めない）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い、または、これ以上渡すレコードが無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00239, SWS_Dem_00075, SWS_Dem_00631, SWS_Dem_01274}
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
+
+/**
+ * \brief   FreezeFrame のレコードを選ぶ（[SWS_Dem_91015]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
+ *
+ * \details 以降の Dem_GetSizeOfFreezeFrameSelection() と Dem_GetNextFreezeFrameData() が、この選択を使う
+ *          （[SWS_Dem_01268]）。Dem_SelectDTC() を呼ぶと、この選択は破棄される。Dem_SelectDTC() が呼ばれていない
+ *          ときは、DEM_E_WRONG_CONDITION を報告する（[SWS_Dem_01271]）。
+ *          本プロジェクトのレコードは、DEM_FREEZE_FRAME_RECORD_NUMBER（0x01）の 1 件だけ。0xFF は、全レコード
+ *          （= この 1 件）。0x00（WWH-OBD のレコード）は持たない。
+ *
+ * \param[in]  ClientId      呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[in]  RecordNumber  レコード番号。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91015, SWS_Dem_01268, SWS_Dem_01269, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0xb9}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectFreezeFrameData(uint8 ClientId, uint8 RecordNumber);
+
+/**
+ * \brief   Dem_SelectFreezeFrameData() で選んだレコードの大きさを取得する（[SWS_Dem_00238]）。
+ *
+ * \details 大きさは、レコード番号と DID の数を含む（形式は {レコード番号, DID 数, DID, データ, ...}、
+ *          [SWS_Dem_00074]）。レコードが記録されていないときは、E_OK で 0 を返す（[SWS_Dem_00630]）。
+ *          DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
+ *
+ * \param[in]   ClientId           呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]  SizeOfFreezeFrame  大きさ（バイト）の格納先。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                 大きさを格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、格納先が NULL、または選択（Dem_SelectDTC() /
+ *                               Dem_SelectFreezeFrameData()）が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が、構成に無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00238, SWS_Dem_00074, SWS_Dem_00630, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0x1f}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetSizeOfFreezeFrameSelection(uint8 ClientId, uint16* SizeOfFreezeFrame);
+
+/**
+ * \brief   Dem_SelectFreezeFrameData() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00236]）。
+ *
+ * \details 書き出す形式は {レコード番号, DID 数, DID, データ, ...}（[SWS_Dem_00071]）。要求したレコード番号が
+ *          0xFF でも、先頭の 1 バイトは、実際のレコード番号（0x01）になる。DID の構成と、データ要素の読み出しは
+ *          Dem_PBCfg.c の `Dem_DidClassTable[]` による（データは、確定 FAILED の瞬間に取り、RAM に保持する）。
+ *          レコードが記録されていないときは、E_OK で BufSize を 0 にする（[SWS_Dem_00630]）。
+ *          1 回の選択で得られるレコードは、1 回の呼び出しで全て渡すため、続けて呼ぶと DEM_NO_SUCH_ELEMENT
+ *          （これ以上無い）を返す。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]    DestBuffer  レコードの書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: DestBuffer に書ける最大バイト数。出力: 実際に書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                 書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、ポインタが NULL、または選択が呼ばれていない。
+ * \retval  DEM_BUFFER_TOO_SMALL BufSize が、レコードより小さい（DestBuffer は書き換えない。選択は進めない）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い、または、これ以上渡すレコードが無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00236, SWS_Dem_00071, SWS_Dem_00630, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0x1d}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
 
 /**
  * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。
@@ -641,98 +900,6 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
  * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
  */
 Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* DTCFaultDetectionCounter);
-
-/**
- * \brief   FreezeFrame として保存する現在値を更新する。
- *
- * \details SW-C (App_EngineManager) が周期 Runnable の先頭で毎回呼び出し、
- *          「現在の車両状態」を Dem 内部に保持させる。
- *          Dem_SetEventStatus() が FAILED 遷移を検出した瞬間に、
- *          この値をイベントごとのスナップショットとしてコピーする
- *          (リアルタイムに値を読みに行くのではなく、毎周期の最新値を使う点が
- *          学習用簡略化。AUTOSAR では FreezeFrameClass の DataElement を
- *          Dem が都度読み出す)。
- *
- * \param[in]  EngineSpeed  現在のエンジン回転数 (DID 0x0101 相当)。
- * \param[in]  CoolantTemp  現在の冷却水温 (DID 0x0102 相当)。
- * \param[in]  EngineState  現在のエンジン状態 (DID 0x0103 相当)。
- *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値。Dem_GetAllDTCs と同じ経緯で 0x25 から 0x2C へ
- *          移した（Dem_Cfg.h 冒頭コメント参照）。
- *
- * \ServiceID      {0x2C}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState);
-
-/**
- * \brief   指定イベントに保存された FreezeFrame を取得する。
- *
- * \details DCM SID 0x19 subFunc 0x04 (reportDTCSnapshotRecordByDTCNumber) から
- *          呼び出す。一度も FAILED 報告されていないイベントには記録がない。
- *
- * \param[in]   EventId  イベント ID (DemConf_DemEventParameter_* 定数)。
- * \param[out]  Frame    取得した FreezeFrame の格納先。NULL 禁止。
- *
- * \retval  E_OK      記録あり。
- * \retval  E_NOT_OK  EventId が範囲外、Frame が NULL、または記録なし。
- *
- * \ServiceID      {0x26}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame);
-
-/**
- * \brief   DTC コード (24-bit) から EventId を逆引きする。
- *
- * \details DCM SID 0x19 subFunc 0x04 はリクエストに DTC コードを含むため、
- *          内部処理用の EventId へ変換する必要がある。
- *
- * \param[in]   DTC      24-bit DTC コード。
- * \param[out]  EventId  対応するイベント ID の格納先。NULL 禁止。
- *
- * \retval  E_OK      一致する DTC が見つかった。
- * \retval  E_NOT_OK  一致する DTC がない、または EventId が NULL。
- *
- * \ServiceID      {0x27}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
-
-/**
- * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
- *
- * \details DCM SID 0x19 subFunc 0x06 (reportExtendedDataRecordByDTCNumber) から
- *          呼び出す。FreezeFrame（故障時点のスナップショット）とは異なり、
- *          これまでに確定 FAILED した累積回数を返す（0xFF で飽和）。
- *          一度も確定 FAILED していない（=ExtendedData 未記録の）イベントは
- *          E_NOT_OK を返す（[SWS_Dcm_01242]相当、2026-09 是正: 以前は常に
- *          E_OK・カウンタ 0 を返しており、唯一の呼び出し元 Dcm 側が
- *          誤って正応答を返してしまっていた）。
- *
- * \param[in]   EventId   イベント ID (DemConf_DemEventParameter_* 定数)。
- * \param[out]  Counter   故障確定回数の格納先。NULL 禁止。
- *
- * \retval  E_OK      正常取得（1 回以上確定 FAILED 済み）。
- * \retval  E_NOT_OK  EventId が範囲外、Counter が NULL、または ExtendedData
- *                    未記録（一度も確定 FAILED していない）。
- *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値のはずだったが、以前の 0x29 は実仕様の
- *          `Dem_GetIndicatorStatus`（[SWS_Dem_00205]）と衝突していたことが
- *          判明したため、実仕様のどの Dem 関数の Service ID とも一致しない
- *          ことを確認済みの 0x2E へ 2026-09-06 に付け替えた（Dem_Cfg.h
- *          冒頭コメント参照）。
- *
- * \ServiceID      {0x2E}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
 /**
  * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。

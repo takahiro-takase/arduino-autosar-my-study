@@ -23,6 +23,7 @@
 
 EngineSpeed_t FakeRte_EngineSpeed = 0U;
 CoolantTemp_t FakeRte_CoolantTemp = 0U;
+boolean       FakeRte_DataReadFails = FALSE;
 
 /* ======================================================================
  * Functions
@@ -32,6 +33,7 @@ void FakeRte_Reset(void)
 {
     FakeRte_EngineSpeed = 0U;
     FakeRte_CoolantTemp = 0U;
+    FakeRte_DataReadFails = FALSE;
 }
 
 Rte_IStatusType Rte_Read_SpeedSensor_EngineSpeed(EngineSpeed_t* data)
@@ -105,4 +107,45 @@ Std_ReturnType Rte_Call_LedRunning_SetLevel(uint8 level)
 void Rte_SecOCVerificationStatus_ImmobilizerCmd(SecOC_VerificationStatusType status)
 {
     (void)status;
+}
+
+/* Dem の FreezeFrame のデータ要素の読み出し（DemDataElementReadFnc）。本物の Rte.c と同じ形で、上の Rte_Read_*() の値を MSB first で書く。 */
+Std_ReturnType Rte_Call_DataServices_EngineSpeed_ReadData(uint8* Data)
+{
+    EngineSpeed_t speed = 0U;
+
+    if (FakeRte_DataReadFails)
+    {
+        return E_NOT_OK;
+    }
+    (void)Rte_Read_SpeedSensor_EngineSpeed(&speed);
+    Data[0] = (uint8)(speed >> 8U);
+    Data[1] = (uint8)(speed & 0xFFU);
+    return E_OK;
+}
+
+Std_ReturnType Rte_Call_DataServices_CoolantTemp_ReadData(uint8* Data)
+{
+    CoolantTemp_t temp = 0U;
+
+    if (FakeRte_DataReadFails)
+    {
+        return E_NOT_OK;
+    }
+    (void)Rte_Read_TempSensor_CoolantTemp(&temp);
+    Data[0] = temp;
+    return E_OK;
+}
+
+Std_ReturnType Rte_Call_DataServices_EngineState_ReadData(uint8* Data)
+{
+    EngineState_t state = ENGINE_STATE_OFF;
+
+    if (FakeRte_DataReadFails)
+    {
+        return E_NOT_OK;
+    }
+    (void)Rte_Read_EngineStatus_EngineState(&state);
+    Data[0] = (uint8)state;
+    return E_OK;
 }

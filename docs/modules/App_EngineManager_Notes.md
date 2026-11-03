@@ -62,8 +62,8 @@ SW-Component。OFF 継続を検知して ComM へ通信不要（NO_COM）を要�
 | `DemConf_DemEventParameter_STARTING_TIMEOUT`（0x000104） | STARTING が 5 秒続いても RUNNING にならない | STARTING→RUNNING |
 | `DemConf_DemEventParameter_COMM_TIMEOUT`（0x000105） | STARTING / RUNNING 中の EngineInfo 受信タイムアウト | 正常受信の周期ごと |
 
-また毎周期 `Dem_SetFreezeFrameContext()` で現在の回転数・水温・状態を Dem へ渡し、FAILED 遷移時の
-フリーズフレームとして記録されます。FAULT から OFF への復帰（`EngineOnFlag=0`、または警告確認ボタン）
+FAILED 遷移時には、Dem が、現在の回転数・水温・状態を RTE 経由で読んで、フリーズフレームとして記録します
+（以前は、本 Runnable が毎周期 `Dem_SetFreezeFrameContext()` で渡していたが、2026-11 に廃止した）。FAULT から OFF への復帰（`EngineOnFlag=0`、または警告確認ボタン）
 では FAILED を取り消しません。過熱・ストール・起動タイムアウトの PASSED は RUNNING に入らないと
 報告されないため、OFF に戻ってもこれらの TF ビットは次に RUNNING になるまで残ります。ボタンの受理は
 `FIM_FID_BUTTON_ACK` が許可されているときだけで、ボタン固着（`DemConf_DemEventParameter_BUTTON_STUCK`）の確定中は

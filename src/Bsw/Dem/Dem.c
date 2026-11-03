@@ -125,14 +125,11 @@ static uint8 Dem_StatusTable[DEM_EVENT_COUNT];
 /* イベント ID → DTC / デバウンス閾値 / Aging 閾値 の各テーブル (Dem_DtcTable[] 等) は
  * Dem_PBCfg.c（config/data/Dem.json から生成）で定義する。 */
 
-/** イベントごとの FreezeFrame (故障時スナップショット)。RAM のみ保持 */
-static Dem_FreezeFrameType Dem_FreezeFrameTable[DEM_EVENT_COUNT];
+/** イベントごとの FreezeFrame (故障時スナップショット) のデータ要素。Dem_DidClassTable[] の順に、DID を除いて並べる。RAM のみ保持 */
+static uint8 Dem_FreezeFrameData[DEM_EVENT_COUNT][DEM_FREEZE_FRAME_DATA_SIZE];
 
-/** Dem_FreezeFrameTable[i] が有効か (0=未記録, 1=記録あり) */
+/** Dem_FreezeFrameData[i] が有効か (0=未記録, 1=記録あり) */
 static uint8 Dem_FreezeFrameValid[DEM_EVENT_COUNT];
-
-/** SW-C が毎周期更新する「現在値」。FAILED 遷移時にこの値をコピーする */
-static Dem_FreezeFrameType Dem_CurrentContext;
 
 /** イベントごとのデバウンスカウンタ (-limit〜+limit, 0=中立。limit は Dem_DebounceLimitTable[]) */
 static sint8 Dem_DebounceCounter[DEM_EVENT_COUNT];
@@ -166,11 +163,65 @@ static uint8 Dem_FilterStatusMask = 0U;  /**< 0x00 はステータスによる�
 static uint8 Dem_FilterForFdc     = 0U;  /**< 1 = FDC が 1〜0x7E の DTC のみ */
 static uint8 Dem_FilterNextEvent  = 0U;  /**< 次に調べるイベント ID（Dem_GetNextFilteredDTC 系の走査位置） */
 
+/** レコード（ExtendedData / FreezeFrame）の種類。選択と読み出しの処理を、種類で切り替えて共有する。 */
+typedef enum
+{
+    DEM_RECORD_EXTENDED_DATA = 0,   /**< Dem_SelectExtendedDataRecord() 系 */
+    DEM_RECORD_FREEZE_FRAME  = 1,   /**< Dem_SelectFreezeFrameData() 系 */
+    DEM_RECORD_KIND_COUNT    = 2
+} Dem_RecordKindType;
+
+/** レコードの選択（Dem_Select*Record/FreezeFrameData() の結果）。 */
+typedef struct
+{
+    uint8 selected;    /**< 1 = Dem_Select*() が呼ばれた */
+    uint8 number;      /**< 選んだレコード番号 */
+    uint8 delivered;   /**< 1 = Dem_GetNext*() が、レコードを渡し済み */
+} Dem_RecordSelectionType;
+
+/** Dem_SelectDTC() の選択（クライアントごと、[SWS_Dem_01253]）。選択は、次に Dem_SelectDTC() を呼ぶまで残る。 */
+typedef struct
+{
+    uint8           selected;   /**< 1 = Dem_SelectDTC() が呼ばれた */
+    uint32          dtc;        /**< 選んだ DTC、または DEM_GROUP_ALL_DTCS */
+    Dem_EventIdType eventId;    /**< 単一の DTC を選んだときの、一致したイベント（result が E_OK のときだけ有効） */
+    Std_ReturnType  result;     /**< 選択の検査の結果: E_OK / DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN */
+    Dem_RecordSelectionType record[DEM_RECORD_KIND_COUNT];   /**< レコードの選択（ExtendedData / FreezeFrame。Dem_SelectDTC() で破棄） */
+} Dem_SelectionType;
+
+static Dem_SelectionType Dem_Selection[DEM_CLIENT_COUNT];
+
+/** Dem_DisableDTCRecordUpdate() で止めている DTC（クライアントごとに 1 つ、[SWS_Dem_00648]）。 */
+typedef struct
+{
+    uint8           locked;    /**< 1 = 止めている */
+    Dem_EventIdType eventId;   /**< 止めているイベント（locked が 1 のときだけ有効） */
+} Dem_RecordLockType;
+
+static Dem_RecordLockType Dem_RecordLock[DEM_CLIENT_COUNT];
+
+/** 1 = 止めている間に Dem_ClearDTC() が消去したため、止めを戻すときに、レコードを消す */
+static uint8 Dem_RecordClearPending[DEM_EVENT_COUNT];
+
+/** 1 = 止めている間に確定 FAILED になったため、止めを戻すときに、FreezeFrame と故障確定回数を更新する（[SWS_Dem_00270]: 更新は、止めるだけで、捨てない） */
+static uint8 Dem_RecordCapturePending[DEM_EVENT_COUNT];
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
 
 static uint8 Dem_ClearOne(Dem_EventIdType EventId);
+static boolean Dem_FindEventOfDtc(uint32 DTC, Dem_EventIdType* EventId);
+static boolean Dem_IsRecordLocked(Dem_EventIdType EventId);
+static void Dem_StoreRecords(Dem_EventIdType EventId);
+static void Dem_DiscardRecords(Dem_EventIdType EventId);
+static Std_ReturnType Dem_CheckClient(uint8 ClientId, uint8 apiId);
+static Std_ReturnType Dem_CheckSelected(uint8 ClientId, uint8 apiId);
+static Std_ReturnType Dem_CheckRecordSelection(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint16* RecordSize);
+static Std_ReturnType Dem_SelectRecord(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint8 RecordNumber);
+static Std_ReturnType Dem_GetSizeOfRecord(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint16* Size);
+static Std_ReturnType Dem_GetNextRecord(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint8* DestBuffer, uint16* BufSize);
+static void Dem_CaptureFreezeFrame(Dem_EventIdType EventId);
 static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit);
 static uint8 Dem_FilterMatches(Dem_EventIdType EventId);
 static void Dem_EvaluateAging(Dem_EventIdType EventId);
@@ -282,14 +333,28 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
      * （デバウンスカウンタは、Dem_BeginOperationCycle() が 0 へ戻す） */
     for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
     {
-        Dem_FreezeFrameValid[i]  = 0U;
+        Dem_FreezeFrameValid[i]    = 0U;
+        Dem_RecordClearPending[i]  = 0U;
+        Dem_RecordCapturePending[i] = 0U;
     }
-    Dem_CurrentContext.EngineSpeed = 0U;
-    Dem_CurrentContext.CoolantTemp = 0U;
-    Dem_CurrentContext.EngineState = 0U;
 
     Dem_DTCSettingEnabled = 1U;
     Dem_FilterActive      = 0U;
+    for (uint8 c = 0U; c < DEM_CLIENT_COUNT; c++)
+    {
+        Dem_Selection[c].selected = 0U;
+        Dem_Selection[c].dtc      = 0U;
+        Dem_Selection[c].eventId  = 0U;
+        Dem_Selection[c].result   = E_NOT_OK;
+        Dem_RecordLock[c].locked  = 0U;
+        Dem_RecordLock[c].eventId = 0U;
+        for (uint8 k = 0U; k < (uint8)DEM_RECORD_KIND_COUNT; k++)
+        {
+            Dem_Selection[c].record[k].selected  = 0U;
+            Dem_Selection[c].record[k].number    = 0U;
+            Dem_Selection[c].record[k].delivered = 0U;
+        }
+    }
 
     /* [SWS_Dem_00853]: DemOperationCycleAutostart の操作サイクルは、Dem_Init() が開始する */
     for (uint8 c = 0U; c < DEM_OPERATION_CYCLE_COUNT; c++)
@@ -315,35 +380,37 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   指定 DTC（または全 DTC）をクリアし、NvM (EEPROM) を初期状態へ戻す
+ * \brief   Dem_SelectDTC() で選んだ DTC（または DTC グループ）をクリアし、NvM (EEPROM) を初期状態へ戻す
  *          （[SWS_Dem_00665]、Dem.h 参照）。
  *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                    正常クリア。
+ * \retval  E_NOT_OK                未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC           選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN     選んだ DTCOrigin が非対応。
+ * \retval  DEM_CLEAR_MEMORY_ERROR  不揮発メモリへの書き込みを積めなかった。
+ *
+ * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_01203, SWS_Dem_01253, SWS_Dem_01255}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+Std_ReturnType Dem_ClearDTC(uint8 ClientId)
 {
-    (void)ClientId;
-
-    if (!Dem_Initialized)
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_CLEAR_DTC) != E_OK)
     {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    const Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    if (sel->result != E_OK)
     {
-        return DEM_WRONG_DTC;   /* 要求した形式の DTC は構成されていない */
+        return sel->result;   /* DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN */
     }
 
-    if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
-        return DEM_WRONG_DTCORIGIN;
-    }
-
-    if (DTC == DEM_GROUP_ALL_DTCS)
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
     {
         uint8 changed = 0U;
         for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
@@ -362,18 +429,11 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
     }
     else
     {
-        Dem_EventIdType eventId = 0U;
-
-        if (Dem_GetEventIdOfDTC(DTC, &eventId) != E_OK)
+        if (Dem_ClearOne(sel->eventId) != 0U)
         {
-            return DEM_WRONG_DTC;
+            FiM_DemTriggerOnMonitorStatus(sel->eventId);
         }
-
-        if (Dem_ClearOne(eventId) != 0U)
-        {
-            FiM_DemTriggerOnMonitorStatus(eventId);
-        }
-        DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)DTC);
+        DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)sel->dtc);
     }
 
     /* 不揮発メモリへの書き込みを積む（DemClearDTCBehavior = DEM_CLRRESP_NONVOLATILE_TRIGGER 相当: 書き込みの完了は待たない、
@@ -408,13 +468,63 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
  * Dem_GetDTCSelectionResult
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   直近の Dem_SelectDTC() が、有効な DTC（または DTC グループ）を選んだかを返す（[SWS_Dem_91023]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91023, SWS_Dem_01253}
+ * \ServiceID      {0xb8}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetDTCSelectionResult(uint8 ClientId)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_GET_DTC_SELECTION_RESULT) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+    return Dem_Selection[ClientId].result;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetDTCSelectionResultForClearDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_GetDTCSelectionResult() と同じだが、DTC 消去の設定を考慮した結果を返す（[SWS_Dem_91020]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、または ClientId が範囲外。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91020, SWS_Dem_01253, SWS_Dem_01261}
+ * \ServiceID      {0xbb}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId)
+{
+    if (Dem_CheckClient(ClientId, DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    if (Dem_Selection[ClientId].selected == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC, DEM_E_WRONG_CONDITION);
+        return DEM_WRONG_DTC;   /* [SWS_Dem_01261]: 選択が無い＝無効な選択 */
+    }
+    return Dem_Selection[ClientId].result;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetEventUdsStatus
@@ -824,7 +934,61 @@ Std_ReturnType Dem_ResetEventStatus(Dem_EventIdType EventId)
  * Dem_SelectDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   以降の Dem_ClearDTC() などの対象にする、DTC（または DTC グループ）を選ぶ（[SWS_Dem_91016]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId   呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[in]  DTC        選ぶ DTC（24-bit UDS 形式）、または DEM_GROUP_ALL_DTCS。
+ * \param[in]  DTCFormat  DTC のフォーマット（DEM_DTC_FORMAT_UDS のみ対応）。
+ * \param[in]  DTCOrigin  イベントメモリ（DEM_DTC_ORIGIN_PRIMARY_MEMORY のみ構成する）。
+ *
+ * \retval  E_OK      選択の処理を受け付けた（結果は、Dem_GetDTCSelectionResult() で分かる）。
+ * \retval  E_NOT_OK  未初期化、または ClientId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_Dem_91016, SWS_Dem_01253, SWS_Dem_01254}
+ * \ServiceID      {0xb7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+{
+    if (Dem_CheckClient(ClientId, DEM_API_ID_SELECT_DTC) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    sel->selected = 1U;
+    sel->dtc      = DTC;
+    sel->eventId  = 0U;
+    sel->result   = E_OK;
+    for (uint8 k = 0U; k < (uint8)DEM_RECORD_KIND_COUNT; k++)
+    {
+        sel->record[k].selected  = 0U;   /* レコードの選択は、DTC を選び直すと破棄する */
+        sel->record[k].delivered = 0U;
+    }
+
+    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    {
+        sel->result = DEM_WRONG_DTC;   /* 要求した形式の DTC は構成されていない */
+    }
+    else if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SELECT_DTC, DEM_E_WRONG_CONFIGURATION);
+        sel->result = DEM_WRONG_DTCORIGIN;
+    }
+    else if (DTC != DEM_GROUP_ALL_DTCS)
+    {
+        sel->result = Dem_FindEventOfDtc(DTC, &sel->eventId) ? E_OK : DEM_WRONG_DTC;
+    }
+    else
+    {
+        /* DEM_GROUP_ALL_DTCS: 全 DTC のグループ（イベントは決まらない） */
+    }
+
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SetComponentAvailable
@@ -1050,25 +1214,18 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
     {
         Dem_StatusTable[EventId] = status;
 
+        /* デバウンス確定 FAILED の瞬間にのみ FreezeFrame と ExtendedData を更新する。レコードの更新を止められている DTC は、
+         * UDS ステータスだけを更新し、レコードの更新は、止めを戻すとき（Dem_EnableDTCRecordUpdate()）まで保留する（[SWS_Dem_00270]） */
         if ((nowFailedConfirmed) != 0U)
         {
-            /* デバウンス確定 FAILED の瞬間にのみ FreezeFrame を更新する */
-            Dem_FreezeFrameTable[EventId] = Dem_CurrentContext;
-            Dem_FreezeFrameValid[EventId] = 1U;
-            DET_LOGI(TAG, "FreezeFrame ev=%u spd=%u tmp=%u st=%u",
-                     (unsigned)EventId,
-                     (unsigned)Dem_CurrentContext.EngineSpeed,
-                     (unsigned)Dem_CurrentContext.CoolantTemp,
-                     (unsigned)Dem_CurrentContext.EngineState);
-
-            /* ExtendedData: 確定 FAILED の累積回数を +1 (0xFF で飽和) */
-            if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+            if (Dem_IsRecordLocked(EventId))
             {
-                Dem_OccurrenceCounter[EventId]++;
+                Dem_RecordCapturePending[EventId] = 1U;
             }
-            (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
-            DET_LOGI(TAG, "ExtendedData ev=%u occurrence=%u",
-                     (unsigned)EventId, (unsigned)Dem_OccurrenceCounter[EventId]);
+            else
+            {
+                Dem_StoreRecords(EventId);
+            }
         }
 
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
@@ -1287,7 +1444,50 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
  * Dem_GetStatusOfDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_SelectDTC() で選んだ DTC のステータスバイトを取得する（[SWS_Dem_00212]、Dem.h 参照）。
+ *
+ * \param[in]   ClientId   呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[out]  DTCStatus  ステータスバイトの格納先。NULL 禁止。
+ *
+ * \retval  E_OK                 DTCStatus へ格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、DTCStatus が NULL、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00212, SWS_Dem_01253}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_GET_STATUS_OF_DTC) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    if (DTCStatus == NULL)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_STATUS_OF_DTC, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    if (sel->result != E_OK)
+    {
+        return sel->result;
+    }
+
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
+    {
+        return DEM_WRONG_DTC;   /* グループは、DTC が 1 件に決まらない */
+    }
+
+    *DTCStatus = Dem_StatusTable[sel->eventId] & DEM_STATUS_AVAILABILITY_MASK;
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSeverityOfDTC
@@ -1562,49 +1762,263 @@ Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* 
  * Dem_DisableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   選んだ DTC のレコードの更新と削除を止める（[SWS_Dem_00233]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                 止めた。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、すでに別の DTC を止めている。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00233, SWS_Dem_00270, SWS_Dem_00648}
+ * \ServiceID      {0x1a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_DisableDTCRecordUpdate(uint8 ClientId)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_DISABLE_DTC_RECORD_UPDATE) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    const Dem_SelectionType* sel  = &Dem_Selection[ClientId];
+    Dem_RecordLockType*      lock = &Dem_RecordLock[ClientId];
+
+    if (lock->locked != 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_RECORD_UPDATE, DEM_E_WRONG_CONDITION);   /* [SWS_Dem_00648] */
+        return E_NOT_OK;
+    }
+
+    if (sel->result != E_OK)
+    {
+        return sel->result;
+    }
+
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
+    {
+        return DEM_WRONG_DTC;   /* グループは、止められない */
+    }
+
+    lock->locked  = 1U;
+    lock->eventId = sel->eventId;
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_EnableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_DisableDTCRecordUpdate() で止めたレコードの更新と削除を、元に戻す（[SWS_Dem_00234]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK      戻した。
+ * \retval  E_NOT_OK  未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、止めている DTC が無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00234, SWS_Dem_00271}
+ * \ServiceID      {0x1b}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_EnableDTCRecordUpdate(uint8 ClientId)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_ENABLE_DTC_RECORD_UPDATE) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    Dem_RecordLockType* lock = &Dem_RecordLock[ClientId];
+
+    if (lock->locked == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_RECORD_UPDATE, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
+    }
+
+    const Dem_EventIdType eventId = lock->eventId;
+    lock->locked = 0U;
+
+    /* 止めている間に消去されていたレコードを、ここで消す（別のクライアントが同じイベントを止めているときは、そちらが戻すまで待つ） */
+    if (!Dem_IsRecordLocked(eventId))
+    {
+        /* 先に消去を、次に、消去のあとの確定の更新を、保留していた順に反映する */
+        if (Dem_RecordClearPending[eventId] != 0U)
+        {
+            Dem_RecordClearPending[eventId] = 0U;
+            Dem_DiscardRecords(eventId);
+            (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+        }
+        if (Dem_RecordCapturePending[eventId] != 0U)
+        {
+            Dem_RecordCapturePending[eventId] = 0U;
+            Dem_StoreRecords(eventId);
+        }
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSizeOfExtendedDataRecordSelection
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_SelectExtendedDataRecord() で選んだレコードの大きさを取得する（[SWS_Dem_00240]、Dem.h 参照）。
+ *
+ * \param[in]   ClientId                 呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[out]  SizeOfExtendedDataRecord  大きさ（バイト）の格納先。NULL 禁止。
+ *
+ * \retval  E_OK                 大きさを格納した（記録が無いときは 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、格納先が NULL、または選択が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が、構成に無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00240, SWS_Dem_00076, SWS_Dem_00631, SWS_Dem_01274}
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* SizeOfExtendedDataRecord)
+{
+    return Dem_GetSizeOfRecord(ClientId, DEM_API_ID_GET_SIZE_OF_EXTENDED_DATA_RECORD_SELECTION, DEM_RECORD_EXTENDED_DATA, SizeOfExtendedDataRecord);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSizeOfFreezeFrameSelection
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_SelectFreezeFrameData() で選んだレコードの大きさを取得する（[SWS_Dem_00238]、Dem.h 参照）。
+ *
+ * \param[in]   ClientId           呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[out]  SizeOfFreezeFrame  大きさ（バイト）の格納先。NULL 禁止。
+ *
+ * \retval  E_OK                 大きさを格納した（記録が無いときは 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、格納先が NULL、または選択が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が、構成に無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00238, SWS_Dem_00074, SWS_Dem_00630, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0x1f}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetSizeOfFreezeFrameSelection(uint8 ClientId, uint16* SizeOfFreezeFrame)
+{
+    return Dem_GetSizeOfRecord(ClientId, DEM_API_ID_GET_SIZE_OF_FREEZE_FRAME_SELECTION, DEM_RECORD_FREEZE_FRAME, SizeOfFreezeFrame);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetNextExtendedDataRecord
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_SelectExtendedDataRecord() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00239]、Dem.h 参照）。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[out]    DestBuffer  レコードの書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: DestBuffer に書ける最大バイト数。出力: 実際に書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                 書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、ポインタが NULL、または選択が呼ばれていない。
+ * \retval  DEM_BUFFER_TOO_SMALL BufSize が、レコードより小さい。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い、または、これ以上渡すレコードが無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00239, SWS_Dem_00075, SWS_Dem_00631, SWS_Dem_01274}
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, uint16* BufSize)
+{
+    return Dem_GetNextRecord(ClientId, DEM_API_ID_GET_NEXT_EXTENDED_DATA_RECORD, DEM_RECORD_EXTENDED_DATA, DestBuffer, BufSize);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetNextFreezeFrameData
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_SelectFreezeFrameData() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00236]、Dem.h 参照）。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[out]    DestBuffer  レコードの書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: DestBuffer に書ける最大バイト数。出力: 実際に書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                 書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、ポインタが NULL、または選択が呼ばれていない。
+ * \retval  DEM_BUFFER_TOO_SMALL BufSize が、レコードより小さい。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い、または、これ以上渡すレコードが無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00236, SWS_Dem_00071, SWS_Dem_00630, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0x1d}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uint16* BufSize)
+{
+    return Dem_GetNextRecord(ClientId, DEM_API_ID_GET_NEXT_FREEZE_FRAME_DATA, DEM_RECORD_FREEZE_FRAME, DestBuffer, BufSize);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SelectExtendedDataRecord
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   ExtendedData のレコードを選ぶ（[SWS_Dem_91017]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId            呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[in]  ExtendedDataNumber  レコード番号。0xFF は全レコード。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91017, SWS_Dem_01272, SWS_Dem_01273, SWS_Dem_01274}
+ * \ServiceID      {0xba}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectExtendedDataRecord(uint8 ClientId, uint8 ExtendedDataNumber)
+{
+    return Dem_SelectRecord(ClientId, DEM_API_ID_SELECT_EXTENDED_DATA_RECORD, DEM_RECORD_EXTENDED_DATA, ExtendedDataNumber);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SelectFreezeFrameData
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   FreezeFrame のレコードを選ぶ（[SWS_Dem_91015]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId      呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[in]  RecordNumber  レコード番号。0xFF は全レコード。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91015, SWS_Dem_01268, SWS_Dem_01269, SWS_Dem_01270, SWS_Dem_01271}
+ * \ServiceID      {0xb9}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectFreezeFrameData(uint8 ClientId, uint8 RecordNumber)
+{
+    return Dem_SelectRecord(ClientId, DEM_API_ID_SELECT_FREEZE_FRAME_DATA, DEM_RECORD_FREEZE_FRAME, RecordNumber);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_DisableDTCSetting
@@ -1975,6 +2389,413 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
  * ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
+ * Dem_DiscardRecords
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   イベントのレコード（故障確定回数と FreezeFrame）を捨てる（NvM への書き込みは、呼び出し元の責務）。
+ *
+ * \details Dem_ClearOne()（止められていないとき）と、Dem_EnableDTCRecordUpdate()（保留していた消去）が呼ぶ。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ */
+static void Dem_DiscardRecords(Dem_EventIdType EventId)
+{
+    Dem_OccurrenceCounter[EventId] = 0U;
+    Dem_FreezeFrameValid[EventId]  = 0U;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_StoreRecords
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   確定 FAILED のレコードを更新する: FreezeFrame を取り、故障確定回数を +1 する（0xFF で飽和）。
+ *
+ * \details Dem_SetEventStatus()（確定の瞬間）と、Dem_EnableDTCRecordUpdate()（止めている間に確定していたとき）が呼ぶ。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ */
+static void Dem_StoreRecords(Dem_EventIdType EventId)
+{
+    Dem_CaptureFreezeFrame(EventId);
+    DET_LOGI(TAG, "FreezeFrame ev=%u captured", (unsigned)EventId);
+
+    if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+    {
+        Dem_OccurrenceCounter[EventId]++;
+    }
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+    DET_LOGI(TAG, "ExtendedData ev=%u occurrence=%u",
+             (unsigned)EventId, (unsigned)Dem_OccurrenceCounter[EventId]);
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_IsRecordLocked
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   いずれかのクライアントが、そのイベントのレコードの更新を止めているか。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ *
+ * \retval  TRUE   止められている（Dem_DisableDTCRecordUpdate()）。
+ * \retval  FALSE  止められていない。
+ */
+static boolean Dem_IsRecordLocked(Dem_EventIdType EventId)
+{
+    boolean locked = FALSE;
+
+    for (uint8 c = 0U; c < DEM_CLIENT_COUNT; c++)
+    {
+        if ((Dem_RecordLock[c].locked != 0U) && (Dem_RecordLock[c].eventId == EventId))
+        {
+            locked = TRUE;
+        }
+    }
+    return locked;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_FindEventOfDtc
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   DTC コードに割り当てられたイベントを探す（Dem_SelectDTC() が使う）。
+ *
+ * \param[in]   DTC      探す DTC（24-bit UDS 形式）。
+ * \param[out]  EventId  見つかったイベント ID の格納先。見つからないときは、書き換えない。
+ *
+ * \retval  TRUE   見つかった。
+ * \retval  FALSE  どのイベントにも割り当てられていない。
+ */
+static boolean Dem_FindEventOfDtc(uint32 DTC, Dem_EventIdType* EventId)
+{
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        if (Dem_DtcTable[i] == DTC)
+        {
+            *EventId = i;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_CheckClient / Dem_CheckSelected
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Dem が初期化済みで、ClientId が構成にあるかを確認する（[SWS_Dem_01252]）。
+ *
+ * \param[in]  ClientId  確認する ClientId。
+ * \param[in]  apiId     報告元の API の ID（DET 用）。
+ *
+ * \retval  E_OK      初期化済みで、ClientId は構成にある。
+ * \retval  E_NOT_OK  未初期化（DEM_E_UNINIT）、または ClientId が範囲外（DEM_E_WRONG_CONFIGURATION）。
+ */
+static Std_ReturnType Dem_CheckClient(uint8 ClientId, uint8 apiId)
+{
+    if (!Dem_Initialized)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (ClientId >= DEM_CLIENT_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    return E_OK;
+}
+
+/**
+ * \brief   Dem_CheckClient() に加えて、Dem_SelectDTC() が呼ばれていることを確認する（[SWS_Dem_01255]）。
+ *
+ * \param[in]  ClientId  確認する ClientId。
+ * \param[in]  apiId     報告元の API の ID（DET 用）。
+ *
+ * \retval  E_OK      確認に通った。
+ * \retval  E_NOT_OK  Dem_CheckClient() の失敗、または Dem_SelectDTC() が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ */
+static Std_ReturnType Dem_CheckSelected(uint8 ClientId, uint8 apiId)
+{
+    if (Dem_CheckClient(ClientId, apiId) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    if (Dem_Selection[ClientId].selected == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
+    }
+
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_CheckRecordSelection / Dem_SelectRecord / Dem_GetSizeOfRecord / Dem_GetNextRecord
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   選んだ DTC に記録されている、種類 kind のレコードの大きさ（バイト）。記録が無ければ 0。
+ *
+ * \param[in]  kind     レコードの種類。
+ * \param[in]  eventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ *
+ * \return  レコードの大きさ（レコード番号などのヘッダを含む）。
+ */
+static uint16 Dem_StoredRecordSize(Dem_RecordKindType kind, Dem_EventIdType eventId)
+{
+    uint16 size;
+
+    if (kind == DEM_RECORD_EXTENDED_DATA)
+    {
+        /* 故障確定回数が 0 = 一度も確定 FAILED していない = 記録されていない（[SWS_Dem_00631]） */
+        size = (Dem_OccurrenceCounter[eventId] == 0U) ? 0U : DEM_EXTENDED_DATA_RECORD_SIZE;
+    }
+    else
+    {
+        size = (Dem_FreezeFrameValid[eventId] == 0U) ? 0U : DEM_FREEZE_FRAME_RECORD_SIZE;   /* [SWS_Dem_00630] */
+    }
+    return size;
+}
+
+/**
+ * \brief   記録されているレコードを、{レコード番号, ...} の形式で書き出す（Dem_StoredRecordSize() が 0 でないときだけ呼ぶ）。
+ *
+ * \param[in]   kind        レコードの種類。
+ * \param[in]   eventId     イベント ID。
+ * \param[out]  DestBuffer  書き出し先（Dem_StoredRecordSize() バイト以上）。
+ */
+static void Dem_WriteStoredRecord(Dem_RecordKindType kind, Dem_EventIdType eventId, uint8* DestBuffer)
+{
+    if (kind == DEM_RECORD_EXTENDED_DATA)
+    {
+        DestBuffer[0] = DEM_EXTENDED_DATA_RECORD_NUMBER;   /* [SWS_Dem_00075] */
+        DestBuffer[1] = Dem_OccurrenceCounter[eventId];
+    }
+    else
+    {
+        /* [SWS_Dem_00071]: {RecordNumber, NumOfDIDs, DID[1], data[1], ..., DID[N], data[N]} */
+        uint8 pos = 0U;
+        uint8 src = 0U;
+
+        DestBuffer[0] = DEM_FREEZE_FRAME_RECORD_NUMBER;
+        DestBuffer[1] = DEM_FREEZE_FRAME_DID_COUNT;
+        pos           = 2U;
+        for (uint8 i = 0U; i < DEM_FREEZE_FRAME_DID_COUNT; i++)
+        {
+            DestBuffer[pos]      = (uint8)(Dem_DidClassTable[i].Did >> 8U);
+            DestBuffer[pos + 1U] = (uint8)(Dem_DidClassTable[i].Did & 0xFFU);
+            pos                  = (uint8)(pos + 2U);
+            for (uint8 j = 0U; j < Dem_DidClassTable[i].Size; j++)
+            {
+                DestBuffer[pos] = Dem_FreezeFrameData[eventId][src];
+                pos             = (uint8)(pos + 1U);
+                src             = (uint8)(src + 1U);
+            }
+        }
+    }
+}
+
+/**
+ * \brief   FreezeFrame を取る（確定 FAILED の瞬間に呼ぶ）。各 DID のデータ要素を、読み出し関数で読んで、記録する。
+ *
+ * \details 読み出し関数が失敗したデータ要素は、0xFF で埋める（無効なデータの印）。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ */
+static void Dem_CaptureFreezeFrame(Dem_EventIdType EventId)
+{
+    uint8 offset = 0U;
+
+    for (uint8 i = 0U; i < DEM_FREEZE_FRAME_DID_COUNT; i++)
+    {
+        const Dem_DidClassType* did = &Dem_DidClassTable[i];
+
+        if (did->ReadFnc(&Dem_FreezeFrameData[EventId][offset]) != E_OK)
+        {
+            for (uint8 j = 0U; j < did->Size; j++)
+            {
+                Dem_FreezeFrameData[EventId][offset + j] = 0xFFU;
+            }
+        }
+        offset = (uint8)(offset + did->Size);
+    }
+    Dem_FreezeFrameValid[EventId] = 1U;
+}
+
+/**
+ * \brief   レコードの選択が有効か確かめ、選んだレコードの大きさを求める（Get 系が共有する）。
+ *
+ * \param[in]   ClientId    確認する ClientId。
+ * \param[in]   apiId       報告元の API の ID（DET 用）。
+ * \param[in]   kind        レコードの種類。
+ * \param[out]  RecordSize  選んだレコードの大きさ（記録が無いときは 0）。E_OK のときだけ有効。
+ *
+ * \retval  E_OK                 選択が有効。
+ * \retval  E_NOT_OK             Dem_CheckSelected() の失敗、またはレコードの選択が呼ばれていない
+ *                               （DEM_E_WRONG_CONDITION、[SWS_Dem_01274]、[SWS_Dem_01270]）。
+ * \retval  DEM_WRONG_DTC        選んだ DTC が無効、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い。
+ */
+static Std_ReturnType Dem_CheckRecordSelection(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint16* RecordSize)
+{
+    if (Dem_CheckSelected(ClientId, apiId) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    const Dem_SelectionType*       sel = &Dem_Selection[ClientId];
+    const Dem_RecordSelectionType* rec = &sel->record[kind];
+
+    if (rec->selected == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
+    }
+
+    if (sel->result != E_OK)
+    {
+        return sel->result;
+    }
+
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
+    {
+        return DEM_WRONG_DTC;   /* グループは、DTC が 1 件に決まらない */
+    }
+
+    const uint8 ownNumber = (kind == DEM_RECORD_EXTENDED_DATA) ? DEM_EXTENDED_DATA_RECORD_NUMBER : DEM_FREEZE_FRAME_RECORD_NUMBER;
+    if ((rec->number != ownNumber) && (rec->number != DEM_RECORD_NUMBER_ALL))
+    {
+        return DEM_NO_SUCH_ELEMENT;
+    }
+
+    *RecordSize = Dem_StoredRecordSize(kind, sel->eventId);
+    return E_OK;
+}
+
+/**
+ * \brief   種類 kind のレコードを選ぶ（Dem_SelectExtendedDataRecord() と Dem_SelectFreezeFrameData() が共有する）。
+ *
+ * \param[in]  ClientId      呼び出し元のクライアント識別子。
+ * \param[in]  apiId         報告元の API の ID（DET 用）。
+ * \param[in]  kind          レコードの種類。
+ * \param[in]  RecordNumber  レコード番号。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             Dem_CheckSelected() の失敗。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ */
+static Std_ReturnType Dem_SelectRecord(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint8 RecordNumber)
+{
+    if (Dem_CheckSelected(ClientId, apiId) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    if (sel->result != E_OK)
+    {
+        return sel->result;   /* DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN */
+    }
+
+    sel->record[kind].selected  = 1U;
+    sel->record[kind].number    = RecordNumber;
+    sel->record[kind].delivered = 0U;
+    return E_OK;
+}
+
+/**
+ * \brief   選んだレコードの大きさを取得する（Dem_GetSizeOf*() が共有する）。
+ *
+ * \param[in]   ClientId  呼び出し元のクライアント識別子。
+ * \param[in]   apiId     報告元の API の ID（DET 用）。
+ * \param[in]   kind      レコードの種類。
+ * \param[out]  Size      大きさ（バイト）の格納先。NULL 禁止。
+ *
+ * \retval  E_OK 以外  Dem_CheckRecordSelection() の戻り値、または Size が NULL（DEM_E_PARAM_POINTER、E_NOT_OK）。
+ * \retval  E_OK       大きさを格納した。
+ */
+static Std_ReturnType Dem_GetSizeOfRecord(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint16* Size)
+{
+    uint16         recordSize = 0U;
+    Std_ReturnType ret        = Dem_CheckRecordSelection(ClientId, apiId, kind, &recordSize);
+    if (ret != E_OK)
+    {
+        return ret;
+    }
+
+    if (Size == NULL)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    *Size = recordSize;
+    return E_OK;
+}
+
+/**
+ * \brief   選んだレコードを、バッファへ書き出す（Dem_GetNext*() が共有する）。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子。
+ * \param[in]     apiId       報告元の API の ID（DET 用）。
+ * \param[in]     kind        レコードの種類。
+ * \param[out]    DestBuffer  書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: 書ける最大バイト数。出力: 書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                  書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  DEM_BUFFER_TOO_SMALL  BufSize が、レコードより小さい。
+ * \retval  DEM_NO_SUCH_ELEMENT   これ以上渡すレコードが無い。
+ * \retval  その他                Dem_CheckRecordSelection() の戻り値、またはポインタが NULL（DEM_E_PARAM_POINTER、E_NOT_OK）。
+ */
+static Std_ReturnType Dem_GetNextRecord(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint8* DestBuffer, uint16* BufSize)
+{
+    uint16         recordSize = 0U;
+    Std_ReturnType ret        = Dem_CheckRecordSelection(ClientId, apiId, kind, &recordSize);
+    if (ret != E_OK)
+    {
+        return ret;
+    }
+
+    if ((DestBuffer == NULL) || (BufSize == NULL))
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    if (sel->record[kind].delivered != 0U)
+    {
+        return DEM_NO_SUCH_ELEMENT;   /* 1 回の選択で得られるレコードは、渡し済み */
+    }
+
+    if (recordSize > *BufSize)
+    {
+        return DEM_BUFFER_TOO_SMALL;
+    }
+
+    if (recordSize != 0U)
+    {
+        Dem_WriteStoredRecord(kind, sel->eventId, DestBuffer);
+    }
+
+    *BufSize                    = recordSize;
+    sel->record[kind].delivered = 1U;
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
  * Dem_ClearOne
  * ---------------------------------------------------------------------- */
 
@@ -1994,169 +2815,17 @@ static uint8 Dem_ClearOne(Dem_EventIdType EventId)
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
     Dem_DebounceCounter[EventId]    = 0;
     Dem_AgingCounter[EventId]       = 0U;
-    Dem_OccurrenceCounter[EventId]  = 0U;
-    Dem_FreezeFrameValid[EventId]   = 0U;
+    if (Dem_IsRecordLocked(EventId))
+    {
+        Dem_RecordClearPending[EventId]   = 1U;   /* レコードは、Dem_EnableDTCRecordUpdate() が戻すときに消す */
+        Dem_RecordCapturePending[EventId] = 0U;   /* 消去は、それより前の確定の更新より、あとに効く */
+    }
+    else
+    {
+        Dem_DiscardRecords(EventId);
+    }
 
     return (Dem_StatusTable[EventId] != prevStatus) ? 1U : 0U;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_SetFreezeFrameContext
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   FreezeFrame として保存する現在値を更新する。
- *
- * \details Dem_SetEventStatus() が参照する「現在値」を上書きするだけで、
- *          この時点では FreezeFrameTable へのコピーは行わない。
- *
- * \ServiceID      {0x2C}
- * \Reentrancy     {Non Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void Dem_SetFreezeFrameContext(uint16 EngineSpeed, uint8 CoolantTemp, uint8 EngineState)
-{
-    if (!Dem_Initialized)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SET_FREEZE_FRAME_CONTEXT, DEM_E_UNINIT);
-        return;
-    }
-
-    Dem_CurrentContext.EngineSpeed = EngineSpeed;
-    Dem_CurrentContext.CoolantTemp = CoolantTemp;
-    Dem_CurrentContext.EngineState = EngineState;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetFreezeFrameOfEvent
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   指定イベントに保存された FreezeFrame を取得する。
- *
- * \ServiceID      {0x26}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFrameType* Frame)
-{
-    if (!Dem_Initialized)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (EventId >= DEM_EVENT_COUNT)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
-    }
-
-    if (Frame == NULL)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT, DEM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    if (Dem_FreezeFrameValid[EventId] == 0U)
-    {
-        return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
-    }
-
-    *Frame = Dem_FreezeFrameTable[EventId];
-    return E_OK;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetEventIdOfDTC
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   DTC コード (24-bit) から EventId を逆引きする。
- *
- * \ServiceID      {0x27}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
-{
-    if (!Dem_Initialized)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (EventId == NULL)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_EVENT_ID_OF_DTC, DEM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
-    {
-        if (Dem_DtcTable[i] == DTC)
-        {
-            *EventId = i;
-            return E_OK;
-        }
-    }
-    return E_NOT_OK;
-}
-
-/* ----------------------------------------------------------------------
- * Dem_GetOccurrenceCounterOfEvent
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
- *
- * \details カウンタは一度も確定 FAILED していなければ 0 のまま
- *          （確定 FAILED の瞬間にのみ +1 する、Dem_SetEventStatus() 参照）。
- *          0 は「ExtendedData が一度も記録されていない」ことと等価なため、
- *          FreezeFrame の Dem_GetFreezeFrameOfEvent()（Dem_FreezeFrameValid[]
- *          で判定）と同様に「未記録」として E_NOT_OK を返す（2026-09 是正:
- *          以前は「FreezeFrameと異なり記録なし状態を持たない」という設計
- *          だったため、一度も故障していない DTC でも常に E_OK を返し、
- *          唯一の呼び出し元 Dcm_HandleReadDtcExtendedData()(UDS 0x19/06)が
- *          誤って正応答(occurrenceCounter=0)を返してしまっていた。
- *          [SWS_Dcm_01242]相当のNRC 0x31 扱いに合わせる）。
- *
- * \note    本プロジェクト独自関数のため ApiId は任意の値のはずだったが、
- *          以前の 0x29 は実仕様の `Dem_GetIndicatorStatus`（[SWS_Dem_00205]）
- *          と衝突していたため 0x2E へ 2026-09-06 に付け替えた（Dem_Cfg.h
- *          参照）。
- *
- * \ServiceID      {0x2E}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter)
-{
-    if (!Dem_Initialized)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_UNINIT);
-        return E_NOT_OK;
-    }
-
-    if (EventId >= DEM_EVENT_COUNT)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_WRONG_CONFIGURATION);
-        return E_NOT_OK;
-    }
-
-    if (Counter == NULL)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT, DEM_E_PARAM_POINTER);
-        return E_NOT_OK;
-    }
-
-    if (Dem_OccurrenceCounter[EventId] == 0U)
-    {
-        return E_NOT_OK;  /* 未記録: DET 対象外（正常な「記録なし」状態） */
-    }
-
-    *Counter = Dem_OccurrenceCounter[EventId];
-    return E_OK;
 }
 
 /* ----------------------------------------------------------------------

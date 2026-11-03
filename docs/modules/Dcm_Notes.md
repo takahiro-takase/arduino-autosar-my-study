@@ -57,8 +57,8 @@ CAN 0x100（EngineInfo）・0x110（AbsInfo）・0x7E0（診断要求）は PduR
 | 0x14<br>ClearDiagnosticInformation | × | ○ | — | `04 14 FF FF FF 00 00 00` | byte2-4=groupOfDTC<br>・0xFFFFFF=全クリア<br>・DTCコード指定=1件クリア<br>**SecurityAccess Level1 必須**（未認証は NRC 0x33） |
 | 0x19<br>ReadDTCInformation | ○ | ○ | 0x01<br>(件数取得) | `03 19 01 MM 00 00 00 00` | byte3=statusMask |
 |  |  |  | 0x02<br>(DTC一覧取得) | `03 19 02 MM 00 00 00 00` | byte3=statusMask |
-|  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
-|  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（固定0x01） |
+|  |  |  | 0x04<br>(FreezeFrame取得) | `06 19 04 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（0x01 または全レコードの 0xFF。判定は Dem が行う。応答の recordNumber は、実際のレコード番号 0x01） |
+|  |  |  | 0x06<br>(ExtendedData取得) | `06 19 06 HH MM LL RR 00` | byte3-5=DTCコード<br>byte6=recordNumber（0x01 または全レコードの 0xFF。判定は Dem が行う。応答の recordNumber は、実際のレコード番号 0x01） |
 |  |  |  | 0x0A<br>(サポートDTC一覧取得) | `02 19 0A 00 00 00 00 00` | 追加パラメータなし。statusMask による絞り込みを一切行わず、本 ECU が対応する DEM_EVENT_COUNT 件全てを返す（後述） |
 |  |  |  | 0x14<br>(FaultDetectionCounter取得) | `02 19 14 00 00 00 00 00` | 追加パラメータなし。DTC 候補一覧は 0x0A と同じ取得元だが「prefailed」(FDC値1〜0x7E)のみへ絞り込む点、応答に statusAvailMask を含まない点が 0x02/0x0A と異なる（後述） |
 | 0x22<br>ReadDataByIdentifier | ○ | ○ | — | `03 22 HH LL 00 00 00 00` | byte2-3=DID（0x0101/0x0102/0x0103/0x0104/0x0109=SecureInfo/0xF190=VIN）。複数 DID は `05 22 HH LL HH LL` のように続ける（最大 4 個） |
@@ -661,10 +661,12 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 
 ## ClearDiagnosticInformation（SID 0x14）の否定応答（2026-10 追加）
 
-`Dem_ClearDTC()` の戻り値を、仕様（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）に従って、NRC へ対応付けます
-（`Dcm_ClearDtcResultToNrc()`）。以前は、E_OK 以外をすべて NRC 0x31 としていました。
+Dcm は、Dem を、実仕様の順（`Dem_SelectDTC()` → `Dem_GetDTCSelectionResultForClearDTC()` → `Dem_ClearDTC(ClientId)`、[SWS_Dem_01253]）で呼びます
+（2026-11 是正: 以前は、独自の 4 引数の `Dem_ClearDTC()` 1 つでした）。この 3 つの戻り値のうち、最初に `E_OK` 以外だったものを、
+仕様（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）に従って、NRC へ対応付けます（`Dcm_ClearDtcResultToNrc()`）。
+以前は、E_OK 以外をすべて NRC 0x31 としていました。
 
-| `Dem_ClearDTC()` の戻り値 | NRC | 起きる場面 |
+| Dem の戻り値（`Dem_GetDTCSelectionResultForClearDTC()` / `Dem_ClearDTC()`） | NRC | 起きる場面 |
 | --- | --- | --- |
 | `E_OK` | 正応答 `54` | クリアでき、不揮発メモリへの書き込みも積めた |
 | `DEM_WRONG_DTC` | 0x31 requestOutOfRange | groupOfDTC が、どの DTC にも一致しない（実機で起こせる） |

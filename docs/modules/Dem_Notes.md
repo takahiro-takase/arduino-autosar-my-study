@@ -277,11 +277,38 @@ ENGINE_OVERHEAT（DTC 0x000101）だけをクリアする例:
 送信 → 0x7E0: [04 14 00 01 01 00 00 00]
 受信 ← 0x7E8: [01 54 00 00 00 00 00 00]
 ```
-内部では `Dem_GetEventIdOfDTC(0x000101, &eventId)` で該当イベントを逆引きし、
-`Dem_ClearOneDtc(eventId)`（旧`Dem_ClearDTC`、2026-09-05に実仕様との名前衝突を
-避けて改名）でそのイベントだけをステータス・デバウンスカウンタ・
+内部では、`Dem_SelectDTC(ClientId, 0x000101, …)` が、該当イベントを逆引きして選択を持ち、
+`Dem_ClearDTC(ClientId)` が、そのイベントだけをステータス・デバウンスカウンタ・
 FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない）。
 一致する DTC が存在しない場合は NRC 0x31（requestOutOfRange）を返す。
+
+## 選択（Dem_SelectDTC）系の API（2026-11 追加）
+
+実仕様（[SWS_Dem_01253]）の「選んでから、要求する」の形です。クライアント（Dcm = `ClientId` 0。`DEM_CLIENT_COUNT` 個）が、先に
+`Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)` で DTC（または DTC グループ）を選ぶと、選択は、次に `Dem_SelectDTC()` を呼ぶまで残り、
+次の API が、その選択を対象にします。
+
+| API | 役割 |
+|---|---|
+| `Dem_SelectDTC` | 対象を選ぶ。選択の結果（有効か）は、この戻り値ではなく、続く API の戻り値で分かる（[SWS_Dem_01254]） |
+| `Dem_GetDTCSelectionResult` | 選択が有効か（`E_OK` / `DEM_WRONG_DTC` / `DEM_WRONG_DTCORIGIN`。選択が無ければ `E_NOT_OK`） |
+| `Dem_GetDTCSelectionResultForClearDTC` | 同じ。ただし、選択が無いときは `DEM_WRONG_DTC`（Dcm が 0x14 の NRC を決めるために、消去の前に呼ぶ） |
+| `Dem_ClearDTC(ClientId)` | 選んだ DTC（`DEM_GROUP_ALL_DTCS` なら全 DTC）を消去する |
+| `Dem_GetStatusOfDTC(ClientId, &status)` | 選んだ DTC のステータスバイト（グループを選んでいれば `DEM_WRONG_DTC`） |
+| `Dem_SelectExtendedDataRecord(ClientId, 番号)` | 選んだ DTC の ExtendedData のレコードを選ぶ（番号 0xFF は全レコード。`Dem_SelectDTC()` を呼び直すと破棄） |
+| `Dem_GetSizeOfExtendedDataRecordSelection` | 選んだレコードの大きさ（番号を含む。記録が無ければ `E_OK` で 0） |
+| `Dem_GetNextExtendedDataRecord(ClientId, buf, &size)` | `{レコード番号, データ...}` を書き出す。記録が無ければ `E_OK` で size 0、書き出し済みなら `DEM_NO_SUCH_ELEMENT`、バッファが小さければ `DEM_BUFFER_TOO_SMALL` |
+| `Dem_SelectFreezeFrameData(ClientId, 番号)` | FreezeFrame のレコードを選ぶ（番号 0xFF は全レコード） |
+| `Dem_GetSizeOfFreezeFrameSelection` | 選んだレコードの大きさ（記録が無ければ `E_OK` で 0） |
+| `Dem_GetNextFreezeFrameData(ClientId, buf, &size)` | `{レコード番号, DID 数, DID, データ, ...}` を書き出す（戻り値は、ExtendedData と同じ） |
+| `Dem_DisableDTCRecordUpdate(ClientId)` | 選んだ DTC のレコード（FreezeFrame・ExtendedData）の更新と削除を止める。読んでいる最中に、レコードが変わらないようにする（[SWS_Dem_00270]）。クライアントごとに 1 つだけ（[SWS_Dem_00648]）。グループは止められない |
+| `Dem_EnableDTCRecordUpdate(ClientId)` | 止めたレコードを戻す。止めている間に `Dem_ClearDTC()` が消去していたレコードは消し、止めている間に確定していた更新は、ここで反映する |
+
+- Dcm の 0x19/04・06 は、`Dem_DisableDTCRecordUpdate()` で止めてから読み、`Dem_EnableDTCRecordUpdate()` で戻す（読み出しが失敗しても、必ず戻す）。止めている間、そのイベントの確定 FAILED は、UDS ステータスだけをすぐ更新し、FreezeFrame の取り直しと故障確定回数の加算は、止めを戻すときに行う（保留し、捨てない）。止めている間の消去も、戻すときに反映する（保留した順に、消去、確定の更新）。
+- `DEM_GROUP_ALL_DTCS`（0xFFFFFF）は、全 DTC のグループです。本プロジェクトの DTC グループは、これだけです。
+- 範囲外の `ClientId` は `DEM_E_WRONG_CONFIGURATION`、`Dem_SelectDTC()` を呼ばずに、選択を前提とする API を呼ぶと、`DEM_E_WRONG_CONDITION`（[SWS_Dem_01255]）と `E_NOT_OK` です。
+- 簡略化: 常に同期的に完了するため、`DEM_PENDING` と `DEM_BUSY` は返しません。
+- 以前は、`Dem_ClearDTC(ClientId, DTC, DTCFormat, DTCOrigin)` という、選択と消去を 1 つにまとめた独自の 4 引数の関数でした（実仕様の `Dem_ClearDTC` は、`ClientId` だけを取る）。
 
 ## 操作サイクルの管理（2026-11 追加）
 
@@ -428,24 +455,36 @@ UDS SID 0x19 subFunc 0x04（reportDTCSnapshotRecordByDTCNumber）で読み出せ
 
 ### 記録の仕組み
 
-```
-App_EngineManager_Run（3000ms 周期、毎回呼ばれる）:
-  speed/temp/flag を RTE から読み取った直後に
-  Dem_SetFreezeFrameContext(speed, temp, s_state)
-    → Dem_CurrentContext を更新するだけ（まだイベントには紐付かない）
+2026-11 から、仕様（[SWS_Dem_00071] / DemDidClass / DemDataElementReadFnc）の形です。DID の構成は、
+`Dem_PBCfg.c` の `Dem_DidClassTable[]`（DID・データ要素の大きさ・読み出し関数）で持ちます。
 
-Dem_SetEventStatus(EventId, FAILED) が呼ばれ、ステータスが変化した場合のみ:
-  Dem_FreezeFrameTable[EventId] = Dem_CurrentContext   ← この瞬間のスナップショットを確定
+| DID | データ要素 | 大きさ | 読み出し関数（Rte.c） |
+|---|---|---|---|
+| 0x0101 | EngineSpeed | 2 バイト（MSB first） | `Rte_Call_DataServices_EngineSpeed_ReadData` |
+| 0x0102 | CoolantTemp | 1 バイト | `Rte_Call_DataServices_CoolantTemp_ReadData` |
+| 0x0103 | EngineState | 1 バイト | `Rte_Call_DataServices_EngineState_ReadData` |
+
+```
+Dem_SetEventStatus(EventId, FAILED) が呼ばれ、確定 FAILED に遷移した瞬間に:
+  Dem_CaptureFreezeFrame(EventId)
+    → Dem_DidClassTable[] の順に ReadFnc を呼び、データ要素を Dem_FreezeFrameData[EventId][] へ記録
+       （読み出しが失敗したデータ要素は、0xFF で埋める）
   Dem_FreezeFrameValid[EventId] = 1
 
 すでに FAILED 中の再報告（status == prev）はスナップショットを上書きしない。
 → 「最初に故障した瞬間」の値が保持される。
 ```
 
+以前は、`App_EngineManager_Run()` が、毎周期 `Dem_SetFreezeFrameContext()` で値を Dem へ渡していた（廃止）。
+今は、確定の瞬間に、Dem が読む。
+
+読み出しは、`Dem_SelectDTC()` → `Dem_SelectFreezeFrameData()` → `Dem_GetSizeOfFreezeFrameSelection()` →
+`Dem_GetNextFreezeFrameData()` の順で、`{レコード番号, DID 数, DID, データ, ...}`（12 バイト）が得られます。
+記録が無いときは、`E_OK` で size 0 です（[SWS_Dem_00630]）。レコードは、`Dem_ClearDTC()` で消えます。
+
 ボタン固着（BUTTON_STUCK）や ADC 電圧低下（ADC_VOLT_LOW）など、エンジン状態と直接関係しないイベントでも、
-その時点の `Dem_CurrentContext`（直近の Runnable サイクルでの車両状態）がスナップショットされます。
-これは実車 OBD-II の FreezeFrame が「DTC 固有のデータ」ではなく「DTC 検出時点の車両全体のスナップショット」を
-記録する考え方と同じです。
+確定の瞬間の車両状態がスナップショットされます。これは実車 OBD-II の FreezeFrame が「DTC 固有のデータ」ではなく
+「DTC 検出時点の車両全体のスナップショット」を記録する考え方と同じです。
 
 ### フレーム例（SID 0x19/04）
 
@@ -472,8 +511,8 @@ ENGINE_OVERHEAT（DTC 0x000101）が温度 101℃・回転数 1000rpm・RUNNING 
                CF DID2_L=02 CoolantTemp=0x65(=101) DID3=0x0103 EngineState=0x02(RUNNING)
 ```
 
-未記録（一度も FAILED していない DTC）またはレコード番号不一致の場合は NRC 0x31
-（requestOutOfRange）で応答します。
+DTC 不明、レコード番号不一致（Dem が `DEM_NO_SUCH_ELEMENT`）、または未記録（一度も FAILED していない DTC。Dem が `E_OK` で
+size 0 を返す）の場合は NRC 0x31（requestOutOfRange）で応答します。
 
 <a id="extendeddata"></a>
 ## ExtendedData（故障確定回数）
@@ -481,7 +520,8 @@ ENGINE_OVERHEAT（DTC 0x000101）が温度 101℃・回転数 1000rpm・RUNNING 
 FreezeFrame が「故障した瞬間の車両状態のスナップショット」（1 件のみ、上書きされる）
 であるのに対し、ExtendedData は「これまでに何回確定 FAILED したか」を表す
 **累積カウンタ**です。UDS SID 0x19 subFunc 0x06（reportExtendedDataRecordByDTCNumber）
-で読み出せます。
+で読み出せます（2026-11 から、Dcm は、独自関数ではなく、上の `Dem_SelectExtendedDataRecord()` 系の 3 関数で読む。
+レコード番号 0x01 の 1 件だけで、形式は `{0x01, 故障確定回数}` の 2 バイト）。
 
 | 観点 | FreezeFrame (subFunc 0x04) | ExtendedData (subFunc 0x06) |
 |---|---|---|
@@ -518,9 +558,8 @@ ENGINE_OVERHEAT（DTC 0x000101）がこれまでに 3 回確定 FAILED した場
                   00 01 01=DTC 2D=status      occurrenceCounter=3
 ```
 
-未記録（一度も FAILED していない DTC は occurrenceCounter=0 を返す。FreezeFrame と異なり
-「未記録」という特別な NRC にはならない）またはレコード番号不一致の場合は NRC 0x31
-（requestOutOfRange）で応答します。
+DTC 不明、レコード番号不一致（Dem が `DEM_NO_SUCH_ELEMENT`）、または未記録（一度も FAILED していない DTC。Dem が
+`E_OK` で size 0 を返す）の場合は NRC 0x31（requestOutOfRange）で応答します。
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 

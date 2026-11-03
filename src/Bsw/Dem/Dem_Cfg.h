@@ -108,7 +108,7 @@
  *  の3関数はシグネチャ準拠方針のもと実仕様の Service ID (0x16/0x25/0x24) を
  *  採用したため、元々そこを占めていた本プロジェクト独自関数
  *  Dem_GetAllDTCs/Dem_SetFreezeFrameContext（いずれも実 AUTOSAR に対応する
- *  関数が無く ApiId は任意）を 0x2B/0x2C（Enable/DisableDTCSetting が
+ *  関数が無く ApiId は任意。どちらも 2026-11 までに廃止済み。下の「2026-10/2026-11 是正」参照）を 0x2B/0x2C（Enable/DisableDTCSetting が
  *  空けた値）へ入れ替えて衝突を回避した） */
 /** ServiceID 0x01 は実仕様では未実装の Dem_PreInit（[SWS_Dem_00180]）に
  *  割り当てられているため、Dem_Init は正しくは 0x02 を使う（2026-09-05 是正）。 */
@@ -131,6 +131,7 @@
  *  関数の Service ID とも一致しないことを確認した空き番号
  *  (0x2E/0x2F/0x31) へ付け替えた:
  *    DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT: 0x29(実は Dem_GetIndicatorStatus [SWS_Dem_00205]) -> 0x2E
+ *                                                  （2026-11 廃止。下の「2026-11 是正」参照）
  *    DEM_API_ID_GET_SUPPORTED_DTCS:              0x2A(実は Dem_GetComponentFailed [SWS_Dem_01115]) -> 0x2F
  *    DEM_API_ID_GET_ALL_DTCS:                    0x2B(実は Dem_SetComponentAvailable [SWS_Dem_01117]) -> 0x31
  *  （0x30 は実仕様の別関数が使用済みのため飛ばした）。ロジック自体への
@@ -145,18 +146,35 @@
  *  Dem_GetPrefailedDTCs(0x43) を実仕様のフィルタ API（Dem_SetDTCFilter 0x13/
  *  Dem_GetNumberOfFilteredDTC 0x17/Dem_GetNextFilteredDTC 0x18/
  *  Dem_GetNextFilteredDTCAndFDC 0x3b）へ置き換えたため、この3つの ApiId は
- *  廃止した。 */
+ *  廃止した。
+ *
+ *  2026-11 是正: 独自関数 Dem_GetOccurrenceCounterOfEvent(0x2E) を、実仕様の ExtendedData 取得 API
+ *  （Dem_SelectExtendedDataRecord 0xBA / Dem_GetSizeOfExtendedDataRecordSelection 0x21 /
+ *  Dem_GetNextExtendedDataRecord 0x20）へ置き換えたため、この ApiId は廃止した。
+ *
+ *  2026-11 是正（第 3 段）: 独自関数 Dem_GetFreezeFrameOfEvent(0x26)・Dem_SetFreezeFrameContext(0x2C)・
+ *  Dem_GetEventIdOfDTC(0x27) を、実仕様の FreezeFrame 取得 API（Dem_SelectFreezeFrameData 0xB9 /
+ *  Dem_GetSizeOfFreezeFrameSelection 0x1F / Dem_GetNextFreezeFrameData 0x1D）へ置き換えたため、
+ *  この 3 つの ApiId は廃止した。 */
 #define DEM_API_ID_DISABLE_DTC_SETTING              0x24U
 #define DEM_API_ID_ENABLE_DTC_SETTING               0x25U
-#define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
-#define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
+#define DEM_API_ID_DISABLE_DTC_RECORD_UPDATE        0x1AU
+#define DEM_API_ID_ENABLE_DTC_RECORD_UPDATE         0x1BU
+#define DEM_API_ID_GET_NEXT_FREEZE_FRAME_DATA       0x1DU
+#define DEM_API_ID_GET_SIZE_OF_FREEZE_FRAME_SELECTION 0x1FU
+#define DEM_API_ID_SELECT_FREEZE_FRAME_DATA         0xB9U
 #define DEM_API_ID_CLEAR_DTC                        0x23U
-#define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x2EU
+#define DEM_API_ID_GET_STATUS_OF_DTC                0x15U
+#define DEM_API_ID_SELECT_DTC                       0xB7U
+#define DEM_API_ID_GET_DTC_SELECTION_RESULT         0xB8U
+#define DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC 0xBBU
+#define DEM_API_ID_GET_NEXT_EXTENDED_DATA_RECORD    0x20U
+#define DEM_API_ID_GET_SIZE_OF_EXTENDED_DATA_RECORD_SELECTION 0x21U
+#define DEM_API_ID_SELECT_EXTENDED_DATA_RECORD      0xBAU
 #define DEM_API_ID_SET_DTC_FILTER                   0x13U
 #define DEM_API_ID_GET_NUMBER_OF_FILTERED_DTC       0x17U
 #define DEM_API_ID_GET_NEXT_FILTERED_DTC            0x18U
 #define DEM_API_ID_GET_NEXT_FILTERED_DTC_AND_FDC    0x3BU
-#define DEM_API_ID_SET_FREEZE_FRAME_CONTEXT        0x2CU
 #define DEM_API_ID_GET_FAULT_DETECTION_COUNTER      0x3EU
 #define DEM_API_ID_GET_VERSION_INFO                 0x00U
 
@@ -338,5 +356,32 @@
 
 /** SID 0x14 で "全 DTC クリア" を指定するグループコード */
 #define DEM_GROUP_ALL_DTCS                   0xFFFFFFUL
+
+/** DemClientId の数（[SWS_Dem_01252]）。本プロジェクトは、Dcm だけが使う 1 クライアント（ClientId = 0）。
+ *  Dem_SelectDTC() の選択は、クライアントごとに持つ。範囲外の ClientId は DEM_E_WRONG_CONFIGURATION。 */
+#define DEM_CLIENT_COUNT                     1U
+
+/** ExtendedData のレコード番号（[SWS_Dem_00075]）。本プロジェクトは、故障確定回数 1 件だけを持つ（学習用簡略化）。
+ *  レコードの形式は {レコード番号, 故障確定回数}（DEM_EXTENDED_DATA_RECORD_SIZE バイト）。 */
+#define DEM_EXTENDED_DATA_RECORD_NUMBER      0x01U
+#define DEM_EXTENDED_DATA_RECORD_SIZE        2U
+
+/** FreezeFrame のレコード番号（[SWS_Dem_00071]）。本プロジェクトは、DID の組 1 件（故障時のスナップショット）だけを持つ（学習用簡略化）。
+ *  レコードの形式は {レコード番号, DID 数, DID, データ, ...}（[SWS_Dem_00071]、DEM_FREEZE_FRAME_RECORD_SIZE バイト）。 */
+#define DEM_FREEZE_FRAME_RECORD_NUMBER       0x01U
+
+/** FreezeFrame の DID（Dem_DidClassTable[] と同じ順。値は、Dcm の DID と同じ）と、データ要素の大きさ（バイト）。 */
+#define DEM_DID_ENGINE_SPEED                 0x0101U
+#define DEM_DID_ENGINE_SPEED_SIZE            2U
+#define DEM_DID_COOLANT_TEMP                 0x0102U
+#define DEM_DID_COOLANT_TEMP_SIZE            1U
+#define DEM_DID_ENGINE_STATE                 0x0103U
+#define DEM_DID_ENGINE_STATE_SIZE            1U
+#define DEM_FREEZE_FRAME_DID_COUNT           3U   /**< Dem_DidClassTable[] の要素数 */
+#define DEM_FREEZE_FRAME_DATA_SIZE           (DEM_DID_ENGINE_SPEED_SIZE + DEM_DID_COOLANT_TEMP_SIZE + DEM_DID_ENGINE_STATE_SIZE)   /**< データ要素の合計（DID を除く） */
+#define DEM_FREEZE_FRAME_RECORD_SIZE         (2U + (2U * DEM_FREEZE_FRAME_DID_COUNT) + DEM_FREEZE_FRAME_DATA_SIZE)
+
+/** Dem_SelectExtendedDataRecord() / Dem_SelectFreezeFrameData() に渡す、全レコードを表す番号（[SWS_Dem_00076]、[SWS_Dem_00074]）。 */
+#define DEM_RECORD_NUMBER_ALL                0xFFU
 
 #endif /* DEM_CFG_H */
