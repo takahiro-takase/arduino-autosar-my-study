@@ -459,6 +459,11 @@ CanTp_Notes と CanTp.c に理由を記録した。仕様の形にするには�
 以前の記録の「4 引数が実仕様」は誤りで、4.3.1 の仕様書では `Dem_ClearDTC(uint8 ClientId)` だけ）。Dcm の 0x14 は、Select → GetDTCSelectionResultForClearDTC → Clear の順で呼ぶ。
 選択は、クライアントごとに持つ（`DEM_CLIENT_COUNT`）。残り: 拡張データ（第 2 段）、凍結フレーム（第 3 段）、`Dem_Disable/EnableDTCRecordUpdate`（第 4 段）、
 独自関数 `Dem_GetEventIdOfDTC`・`Dem_GetFreezeFrameOfEvent`・`Dem_GetOccurrenceCounterOfEvent`・`Dem_SetFreezeFrameContext` の廃止。）
+（2026-11-03 追記 9: Dem の第 2 段（拡張データ）。`Dem_SelectExtendedDataRecord`（0xba）・`Dem_GetSizeOfExtendedDataRecordSelection`（0x21）・
+`Dem_GetNextExtendedDataRecord`（0x20）を実装し、独自関数 `Dem_GetOccurrenceCounterOfEvent` を廃止した。Dcm の 0x19/06 は、SelectDTC → GetDTCSelectionResult →
+GetStatusOfDTC → SelectExtendedDataRecord → GetSizeOf… → GetNext… の順で呼び、レコード番号の判定は Dem が行う（`DCM_EXTENDED_DATA_RECORD_NUMBER` は `DEM_EXTENDED_DATA_RECORD_NUMBER` へ移した）。
+`DEM_BUFFER_TOO_SMALL` は、4.3.1 に数値の記載が無いため、独自の値（21）を割り当てた。残り: 凍結フレーム（第 3 段）、`Dem_Disable/EnableDTCRecordUpdate`（第 4 段）、
+独自関数 `Dem_GetEventIdOfDTC`・`Dem_GetFreezeFrameOfEvent`・`Dem_SetFreezeFrameContext` の廃止。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

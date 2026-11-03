@@ -41,6 +41,7 @@ extern "C" {
 #include "MemIf.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dcm.h"
+#include "Wrap_Dem.h"
 #include "Fake_Millis.h"
 #include "Fake_Det_Hw.h"
 #include "Wrap_ComM.h"
@@ -811,6 +812,67 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_UnsupportedRecordNumberRetur
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     ASSERT_EQ(CallCount_CanTp_Transmit, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
+    EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
+}
+
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_ReadsThroughTheDemSelectionApis)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < 20U; i++)
+    {
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);   // 確定させる
+    }
+    WrapDem_Reset();
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      0x00U, 0x01U, 0x01U, DCM_RECORD_NUMBER_ALL };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SelectDTC, 1U);
+    EXPECT_EQ(CallCount_Dem_GetDTCSelectionResult, 1U);
+    EXPECT_EQ(CallCount_Dem_GetStatusOfDTC, 1U);
+    EXPECT_EQ(CallCount_Dem_SelectExtendedDataRecord, 1U);
+    EXPECT_EQ(CallCount_Dem_GetSizeOfExtendedDataRecordSelection, 1U);
+    EXPECT_EQ(CallCount_Dem_GetNextExtendedDataRecord, 1U);
+    ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
+    EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_EXTENDED_DATA_RECORD_NUMBER);   // 要求の 0xFF ではなく、実際のレコード番号
+    EXPECT_EQ(LastData_CanTp_Transmit[7], 1U);                                // 確定 FAILED は 1 回
+}
+
+TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_DemSelectionFailureReturnsRequestOutOfRange)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    for (uint8 i = 0U; i < 20U; i++)
+    {
+        (void)Dem_SetEventStatus(DemConf_DemEventParameter_ENGINE_OVERHEAT, DEM_EVENT_STATUS_FAILED);
+    }
+    WrapDem_Reset();
+    FailFromCallCount_Dem_GetNextExtendedDataRecord = 1U;
+    ForcedReturn_Dem_GetNextExtendedDataRecord      = DEM_NO_SUCH_ELEMENT;   // 読み出しが失敗する
+    uint8 req[6] = { DCM_SID_READ_DTC_INFO, DCM_DTC_SUBFUNC_REPORT_EXTDATA,
+                      0x00U, 0x01U, 0x01U, DCM_RECORD_NUMBER_ALL };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    SendReadDtcInfo(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);

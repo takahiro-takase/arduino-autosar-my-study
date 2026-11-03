@@ -319,6 +319,10 @@ static uint8 Dcm_TransferChecksum;
 /** UDS 応答バッファ (PCI バイトなし; CanTp がトランスポート層を付加する) */
 static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
 
+/** 0x19/06 の応答で、ExtendedData のレコード（{レコード番号, データ...}）を書き出す位置
+ *  （[0x59, 0x06, DTC_H, DTC_M, DTC_L, status] の後ろ） */
+#define DCM_EXTDATA_RECORD_OFFSET  6U
+
 /** 応答の送信位置（Dcm_CopyTxData() が次にコピーするバイトの位置）。CanTp は、応答の送信バッファを持たず、
  *  フレームごとに Dcm_CopyTxData() で、この Dcm_TxBuf から取り出す。 */
 static PduLengthType Dcm_TxPos;
@@ -2162,17 +2166,20 @@ static void Dcm_HandleReadDtcSnapshot(const uint8* uds, uint8 udsLen)
 /**
  * \brief   SID 0x19 subFunc 0x06 reportExtendedDataRecordByDTCNumber を処理する。
  *
- * \details 要求された DTC の ExtendedData（確定 FAILED の累積回数）を Dem から
- *          取得して返す。FreezeFrame（故障時点のスナップショット、18 バイトで
- *          CanTp の FF+CF が必要）とは異なり、応答は 8 バイトで SF に収まる。
- *          本実装はレコード番号 0x01 のみ保持する（イベントごとに 1 カウンタ）。
- *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF
- *          (DCM_RECORD_NUMBER_ALL) も、この唯一のレコードへの
- *          エイリアスとして受理する（7.5.2.5.5節。2026-09 追加）。
+ * \details 要求された DTC の ExtendedData（確定 FAILED の累積回数）を、Dem の選択 API で取得して返す
+ *          （Dem_SelectDTC() → Dem_GetDTCSelectionResult() → Dem_GetStatusOfDTC() →
+ *          Dem_SelectExtendedDataRecord() → Dem_GetSizeOfExtendedDataRecordSelection() →
+ *          Dem_GetNextExtendedDataRecord()。2026-11 是正: 以前は、独自の Dem_GetEventIdOfDTC() と
+ *          Dem_GetOccurrenceCounterOfEvent() で取得し、レコード番号の判定も Dcm が行っていた）。
+ *          レコード番号の判定は Dem が行い、要求の recordNumber をそのまま渡す。FreezeFrame（故障時点の
+ *          スナップショット、18 バイトで CanTp の FF+CF が必要）とは異なり、応答は 8 バイトで SF に収まる。
+ *          ISO 14229-1 の慣行で「全レコード要求」を意味する 0xFF (DCM_RECORD_NUMBER_ALL) も、
+ *          そのまま Dem へ渡す（7.5.2.5.5節）。
  *
  *          要求: [0x19, 0x06, DTC_H, DTC_M, DTC_L, recordNumber]
  *          応答: [0x59, 0x06, DTC_H, DTC_M, DTC_L, status, recordNumber, occurrenceCounter]
- *          (recordNumberは要求が0xFFでも実際のレコード番号0x01を返す)
+ *          (応答の recordNumber は、Dem が書き出したレコードの先頭の 1 バイト = 実際のレコード番号。
+ *          要求が 0xFF でも、要求値を echo しない)
  *
  * \param[in]  uds     UDS ペイロード先頭ポインタ。
  * \param[in]  udsLen  UDS ペイロード長。
@@ -2189,39 +2196,56 @@ static void Dcm_HandleReadDtcExtendedData(const uint8* uds, uint8 udsLen)
     uint32 dtc          = ((uint32)uds[2] << 16U) | ((uint32)uds[3] << 8U) | (uint32)uds[4];
     uint8  recordNumber = uds[5];
 
-    Dem_EventIdType eventId = 0U;
-    uint8           occurrenceCounter = 0U;
+    Dem_UdsStatusByteType statusByte = 0U;
+    uint16                recordSize = 0U;
+    uint16                bufSize    = (uint16)((uint16)DCM_TX_BUF_SIZE - (uint16)DCM_EXTDATA_RECORD_OFFSET);
 
-    if (Dem_GetEventIdOfDTC(dtc, &eventId) != E_OK
-        || ((recordNumber != DCM_EXTENDED_DATA_RECORD_NUMBER)
-            && (recordNumber != DCM_RECORD_NUMBER_ALL))
-        || Dem_GetOccurrenceCounterOfEvent(eventId, &occurrenceCounter) != E_OK)
+    /* DTC・レコードを選び、選択の結果を確かめてから読む。どれかが失敗したとき、または、レコードが記録されていない
+     * （一度も確定 FAILED していない DTC。Dem が BufSize 0 を返す。[SWS_Dcm_01242]相当）ときは、NRC 0x31。 */
+    Std_ReturnType ret = Dem_SelectDTC(DCM_DEM_CLIENT_ID, dtc, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    if (ret == E_OK)
     {
-        /* DTC 不明、レコード番号不一致、または ExtendedData 未記録
-         * （一度も確定 FAILED していない DTC。[SWS_Dcm_01242]相当。
-         * 2026-09 是正: 以前は Dem_GetOccurrenceCounterOfEvent() が
-         * 未記録でも常に E_OK・カウンタ 0 を返していたため誤って正応答して
-         * いた） */
+        ret = Dem_GetDTCSelectionResult(DCM_DEM_CLIENT_ID);
+    }
+    if (ret == E_OK)
+    {
+        ret = Dem_GetStatusOfDTC(DCM_DEM_CLIENT_ID, &statusByte);
+    }
+    if (ret == E_OK)
+    {
+        ret = Dem_SelectExtendedDataRecord(DCM_DEM_CLIENT_ID, recordNumber);
+    }
+    if (ret == E_OK)
+    {
+        ret = Dem_GetSizeOfExtendedDataRecordSelection(DCM_DEM_CLIENT_ID, &recordSize);
+    }
+    if ((ret == E_OK) && (recordSize <= bufSize))
+    {
+        ret = Dem_GetNextExtendedDataRecord(DCM_DEM_CLIENT_ID, &Dcm_TxBuf[DCM_EXTDATA_RECORD_OFFSET], &bufSize);
+    }
+    else
+    {
+        ret = E_NOT_OK;   /* 失敗、またはレコードが応答の領域に収まらない */
+    }
+
+    if ((ret != E_OK) || (bufSize == 0U))
+    {
         Dcm_SendNegativeResponse(DCM_SID_READ_DTC_INFO, DCM_NRC_REQUEST_OUT_OF_RANGE);
         return;
     }
 
-    DET_LOGI(TAG, "19/06 dtc=0x%06lX rec=%u occurrence=%u",
-             (unsigned long)dtc, (unsigned)recordNumber, (unsigned)occurrenceCounter);
+    DET_LOGI(TAG, "19/06 dtc=0x%06lX rec=%u size=%u",
+             (unsigned long)dtc, (unsigned)recordNumber, (unsigned)bufSize);
 
     Dcm_TxBuf[0] = 0x59U;                              /* SID 0x19 + 0x40 */
     Dcm_TxBuf[1] = DCM_DTC_SUBFUNC_REPORT_EXTDATA;
     Dcm_TxBuf[2] = (uint8)(dtc >> 16U);
     Dcm_TxBuf[3] = (uint8)(dtc >>  8U);
     Dcm_TxBuf[4] = (uint8)(dtc);
-    Dem_UdsStatusByteType statusByte = 0U;
-    (void)Dem_GetEventUdsStatus(eventId, &statusByte);
     Dcm_TxBuf[5] = statusByte;
-    /* [SWS_Dcm_00295]系と同様、応答recordNumberは実レコード番号を返す
-     * （要求値0xFFをそのままechoしない）。 */
-    Dcm_TxBuf[6] = DCM_EXTENDED_DATA_RECORD_NUMBER;
-    Dcm_TxBuf[7] = occurrenceCounter;
-    Dcm_TxPdu.SduLength = 8U;
+    /* Dcm_TxBuf[6..] は、Dem_GetNextExtendedDataRecord() が {レコード番号, データ...} を書き出し済み
+     * （[SWS_Dcm_00295]系と同様、応答のレコード番号は実レコード番号で、要求値の 0xFF を echo しない）。 */
+    Dcm_TxPdu.SduLength = (PduLengthType)(DCM_EXTDATA_RECORD_OFFSET + bufSize);
 
     Dcm_TransmitPositiveResponse();
 }

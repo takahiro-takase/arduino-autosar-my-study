@@ -131,6 +131,7 @@
  *  関数の Service ID とも一致しないことを確認した空き番号
  *  (0x2E/0x2F/0x31) へ付け替えた:
  *    DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT: 0x29(実は Dem_GetIndicatorStatus [SWS_Dem_00205]) -> 0x2E
+ *                                                  （2026-11 廃止。下の「2026-11 是正」参照）
  *    DEM_API_ID_GET_SUPPORTED_DTCS:              0x2A(実は Dem_GetComponentFailed [SWS_Dem_01115]) -> 0x2F
  *    DEM_API_ID_GET_ALL_DTCS:                    0x2B(実は Dem_SetComponentAvailable [SWS_Dem_01117]) -> 0x31
  *  （0x30 は実仕様の別関数が使用済みのため飛ばした）。ロジック自体への
@@ -145,7 +146,11 @@
  *  Dem_GetPrefailedDTCs(0x43) を実仕様のフィルタ API（Dem_SetDTCFilter 0x13/
  *  Dem_GetNumberOfFilteredDTC 0x17/Dem_GetNextFilteredDTC 0x18/
  *  Dem_GetNextFilteredDTCAndFDC 0x3b）へ置き換えたため、この3つの ApiId は
- *  廃止した。 */
+ *  廃止した。
+ *
+ *  2026-11 是正: 独自関数 Dem_GetOccurrenceCounterOfEvent(0x2E) を、実仕様の ExtendedData 取得 API
+ *  （Dem_SelectExtendedDataRecord 0xBA / Dem_GetSizeOfExtendedDataRecordSelection 0x21 /
+ *  Dem_GetNextExtendedDataRecord 0x20）へ置き換えたため、この ApiId は廃止した。 */
 #define DEM_API_ID_DISABLE_DTC_SETTING              0x24U
 #define DEM_API_ID_ENABLE_DTC_SETTING               0x25U
 #define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
@@ -155,7 +160,9 @@
 #define DEM_API_ID_SELECT_DTC                       0xB7U
 #define DEM_API_ID_GET_DTC_SELECTION_RESULT         0xB8U
 #define DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC 0xBBU
-#define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x2EU
+#define DEM_API_ID_GET_NEXT_EXTENDED_DATA_RECORD    0x20U
+#define DEM_API_ID_GET_SIZE_OF_EXTENDED_DATA_RECORD_SELECTION 0x21U
+#define DEM_API_ID_SELECT_EXTENDED_DATA_RECORD      0xBAU
 #define DEM_API_ID_SET_DTC_FILTER                   0x13U
 #define DEM_API_ID_GET_NUMBER_OF_FILTERED_DTC       0x17U
 #define DEM_API_ID_GET_NEXT_FILTERED_DTC            0x18U
@@ -346,5 +353,13 @@
 /** DemClientId の数（[SWS_Dem_01252]）。本プロジェクトは、Dcm だけが使う 1 クライアント（ClientId = 0）。
  *  Dem_SelectDTC() の選択は、クライアントごとに持つ。範囲外の ClientId は DEM_E_WRONG_CONFIGURATION。 */
 #define DEM_CLIENT_COUNT                     1U
+
+/** ExtendedData のレコード番号（[SWS_Dem_00075]）。本プロジェクトは、故障確定回数 1 件だけを持つ（学習用簡略化）。
+ *  レコードの形式は {レコード番号, 故障確定回数}（DEM_EXTENDED_DATA_RECORD_SIZE バイト）。 */
+#define DEM_EXTENDED_DATA_RECORD_NUMBER      0x01U
+#define DEM_EXTENDED_DATA_RECORD_SIZE        2U
+
+/** Dem_SelectExtendedDataRecord() に渡す、全レコードを表す番号（[SWS_Dem_00076]）。 */
+#define DEM_EXTENDED_DATA_NUMBER_ALL         0xFFU
 
 #endif /* DEM_CFG_H */

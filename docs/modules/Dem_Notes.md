@@ -295,6 +295,9 @@ FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない
 | `Dem_GetDTCSelectionResultForClearDTC` | 同じ。ただし、選択が無いときは `DEM_WRONG_DTC`（Dcm が 0x14 の NRC を決めるために、消去の前に呼ぶ） |
 | `Dem_ClearDTC(ClientId)` | 選んだ DTC（`DEM_GROUP_ALL_DTCS` なら全 DTC）を消去する |
 | `Dem_GetStatusOfDTC(ClientId, &status)` | 選んだ DTC のステータスバイト（グループを選んでいれば `DEM_WRONG_DTC`） |
+| `Dem_SelectExtendedDataRecord(ClientId, 番号)` | 選んだ DTC の ExtendedData のレコードを選ぶ（番号 0xFF は全レコード。`Dem_SelectDTC()` を呼び直すと破棄） |
+| `Dem_GetSizeOfExtendedDataRecordSelection` | 選んだレコードの大きさ（番号を含む。記録が無ければ `E_OK` で 0） |
+| `Dem_GetNextExtendedDataRecord(ClientId, buf, &size)` | `{レコード番号, データ...}` を書き出す。記録が無ければ `E_OK` で size 0、書き出し済みなら `DEM_NO_SUCH_ELEMENT`、バッファが小さければ `DEM_BUFFER_TOO_SMALL` |
 
 - `DEM_GROUP_ALL_DTCS`（0xFFFFFF）は、全 DTC のグループです。本プロジェクトの DTC グループは、これだけです。
 - 範囲外の `ClientId` は `DEM_E_WRONG_CONFIGURATION`、`Dem_SelectDTC()` を呼ばずに、選択を前提とする API を呼ぶと、`DEM_E_WRONG_CONDITION`（[SWS_Dem_01255]）と `E_NOT_OK` です。
@@ -499,7 +502,8 @@ ENGINE_OVERHEAT（DTC 0x000101）が温度 101℃・回転数 1000rpm・RUNNING 
 FreezeFrame が「故障した瞬間の車両状態のスナップショット」（1 件のみ、上書きされる）
 であるのに対し、ExtendedData は「これまでに何回確定 FAILED したか」を表す
 **累積カウンタ**です。UDS SID 0x19 subFunc 0x06（reportExtendedDataRecordByDTCNumber）
-で読み出せます。
+で読み出せます（2026-11 から、Dcm は、独自関数ではなく、上の `Dem_SelectExtendedDataRecord()` 系の 3 関数で読む。
+レコード番号 0x01 の 1 件だけで、形式は `{0x01, 故障確定回数}` の 2 バイト）。
 
 | 観点 | FreezeFrame (subFunc 0x04) | ExtendedData (subFunc 0x06) |
 |---|---|---|
@@ -536,9 +540,8 @@ ENGINE_OVERHEAT（DTC 0x000101）がこれまでに 3 回確定 FAILED した場
                   00 01 01=DTC 2D=status      occurrenceCounter=3
 ```
 
-未記録（一度も FAILED していない DTC は occurrenceCounter=0 を返す。FreezeFrame と異なり
-「未記録」という特別な NRC にはならない）またはレコード番号不一致の場合は NRC 0x31
-（requestOutOfRange）で応答します。
+DTC 不明、レコード番号不一致（Dem が `DEM_NO_SUCH_ELEMENT`）、または未記録（一度も FAILED していない DTC。Dem が
+`E_OK` で size 0 を返す）の場合は NRC 0x31（requestOutOfRange）で応答します。
 
 ## 開発の経緯（実機で見つかった不具合・設計変更）
 

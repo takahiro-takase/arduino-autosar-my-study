@@ -1947,13 +1947,14 @@ class UdsTesterFrame(ttk.Frame):
                 entries.append(f"{uds_link.dtc_name(dtc)} (FDC={fdc_signed})")
                 i += 4
             return "; ".join(entries) if entries else "(no supported DTC)"
+        # 応答: [0x59, subFunc, DTC_H, DTC_M, DTC_L, status, recordNumber, ...]（raw[5] は status、raw[6] がレコード番号）
         if sub == 0x04 and len(raw) >= 7:
             dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
             data = " ".join(f"{b:02X}" for b in raw[6:])
-            return f"FreezeFrame {uds_link.dtc_name(dtc)} record={raw[5]} data={data}"
+            return f"FreezeFrame {uds_link.dtc_name(dtc)} status=0x{raw[5]:02X} record={raw[6]} data={data}"
         if sub == 0x06 and len(raw) >= 8:
             dtc = (raw[2] << 16) | (raw[3] << 8) | raw[4]
-            return f"ExtendedData {uds_link.dtc_name(dtc)} record={raw[5]} occurrence={raw[7]}"
+            return f"ExtendedData {uds_link.dtc_name(dtc)} status=0x{raw[5]:02X} record={raw[6]} occurrence={raw[7]}"
         return " ".join(f"{b:02X}" for b in raw)
 
     def _decode_request(self, uds: bytes) -> str:

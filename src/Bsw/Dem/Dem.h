@@ -13,7 +13,7 @@
  *          CONFIRMED を解除する（詳細は Dem.c / Dem_Cfg.h を参照）。
  *          DCM は Dem_SetDTCFilter() / Dem_GetNextFilteredDTC() / Dem_ClearDTC() 経由で UDS SID 0x19 / 0x14
  *          に応答する。FreezeFrame（故障時点のスナップショット）に加え、
- *          ExtendedData（累積故障確定回数、Dem_GetOccurrenceCounterOfEvent()）
+ *          ExtendedData（累積故障確定回数。Dem_SelectExtendedDataRecord() 系）
  *          も SID 0x19 subFunc 0x06 経由で提供する。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -56,6 +56,10 @@
  *  次の要素が無い。実仕様の Service Interface DiagnosticInfo（値表、
  *  DEM_NO_SUCH_ELEMENT = 48）に基づく数値。 */
 #define DEM_NO_SUCH_ELEMENT  48U
+
+/** [SWS_Dem_00239] Dem_GetNextExtendedDataRecord() の戻り値: 渡されたバッファが、レコードより小さい。
+ *  実仕様の Service Interface に数値の記載が無いため、既存の拡張戻り値（5〜9、48）と重ならない値を、独自に割り当てた。 */
+#define DEM_BUFFER_TOO_SMALL  21U
 
 /* ======================================================================
  * Type Definitions
@@ -611,6 +615,82 @@ Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFo
 Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus);
 
 /**
+ * \brief   ExtendedData のレコードを選ぶ（[SWS_Dem_91017]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
+ *
+ * \details 以降の Dem_GetSizeOfExtendedDataRecordSelection() と Dem_GetNextExtendedDataRecord() が、この選択を使う
+ *          （[SWS_Dem_01272]）。Dem_SelectDTC() を呼ぶと、この選択は破棄される。Dem_SelectDTC() が呼ばれていない
+ *          ときは、DEM_E_WRONG_CONDITION を報告する（[SWS_Dem_01274]）。
+ *          選ぶ DTC が有効かどうか（DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN）は、本関数が返す。レコード番号が
+ *          構成に無いことは、本関数ではなく、Get 系が DEM_NO_SUCH_ELEMENT で返す（本関数の戻り値表に無いため）。
+ *          本プロジェクトのレコードは、DEM_EXTENDED_DATA_RECORD_NUMBER（0x01）の 1 件だけ。0xFF は、全レコード
+ *          （= この 1 件）。
+ *
+ * \param[in]  ClientId            呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[in]  ExtendedDataNumber  レコード番号。0xFF は全レコード、0xFE は OBD のレコード全て（本プロジェクトは持たない）。
+ *
+ * \retval  E_OK                 選んだ。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91017, SWS_Dem_01272, SWS_Dem_01273, SWS_Dem_01274}
+ * \ServiceID      {0xba}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectExtendedDataRecord(uint8 ClientId, uint8 ExtendedDataNumber);
+
+/**
+ * \brief   Dem_SelectExtendedDataRecord() で選んだレコードの大きさを取得する（[SWS_Dem_00240]）。
+ *
+ * \details 大きさは、レコード番号を含む（形式は {レコード番号, データ...}、[SWS_Dem_00076]）。レコードが
+ *          記録されていない（一度も確定 FAILED していない）ときは、E_OK で 0 を返す（[SWS_Dem_00631]）。
+ *          DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
+ *
+ * \param[in]   ClientId                 呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]  SizeOfExtendedDataRecord  大きさ（バイト）の格納先。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                 大きさを格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、格納先が NULL、または選択（Dem_SelectDTC() /
+ *                               Dem_SelectExtendedDataRecord()）が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が、構成に無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00240, SWS_Dem_00076, SWS_Dem_00631, SWS_Dem_01274}
+ * \ServiceID      {0x21}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* SizeOfExtendedDataRecord);
+
+/**
+ * \brief   Dem_SelectExtendedDataRecord() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00239]）。
+ *
+ * \details 書き出す形式は {レコード番号, データ...}（[SWS_Dem_00075]）。要求したレコード番号が 0xFF でも、
+ *          先頭の 1 バイトは、実際のレコード番号（0x01）になる。レコードが記録されていないときは、E_OK で
+ *          BufSize を 0 にする（[SWS_Dem_00631]）。1 回の選択で得られるレコードは、1 回の呼び出しで全て
+ *          渡すため、続けて呼ぶと DEM_NO_SUCH_ELEMENT（これ以上無い）を返す。
+ *
+ * \param[in]     ClientId    呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]    DestBuffer  レコードの書き出し先。NULL 禁止。
+ * \param[in,out] BufSize     入力: DestBuffer に書ける最大バイト数。出力: 実際に書いたバイト数。NULL 禁止。
+ *
+ * \retval  E_OK                 書き出した（記録が無いときは、BufSize が 0）。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、ポインタが NULL、または選択が呼ばれていない。
+ * \retval  DEM_BUFFER_TOO_SMALL BufSize が、レコードより小さい（DestBuffer は書き換えない。選択は進めない）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ * \retval  DEM_NO_SUCH_ELEMENT  選んだレコード番号が構成に無い、または、これ以上渡すレコードが無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00239, SWS_Dem_00075, SWS_Dem_00631, SWS_Dem_01274}
+ * \ServiceID      {0x20}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING は返さない）}
+ */
+Std_ReturnType Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, uint16* BufSize);
+
+/**
  * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。
  *
  * \details 以降の Dem_GetNumberOfFilteredDTC() / Dem_GetNextFilteredDTC() /
@@ -776,37 +856,6 @@ Std_ReturnType Dem_GetFreezeFrameOfEvent(Dem_EventIdType EventId, Dem_FreezeFram
  * \Synchronicity  {Synchronous}
  */
 Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId);
-
-/**
- * \brief   指定イベントの ExtendedData（故障確定回数）を取得する。
- *
- * \details DCM SID 0x19 subFunc 0x06 (reportExtendedDataRecordByDTCNumber) から
- *          呼び出す。FreezeFrame（故障時点のスナップショット）とは異なり、
- *          これまでに確定 FAILED した累積回数を返す（0xFF で飽和）。
- *          一度も確定 FAILED していない（=ExtendedData 未記録の）イベントは
- *          E_NOT_OK を返す（[SWS_Dcm_01242]相当、2026-09 是正: 以前は常に
- *          E_OK・カウンタ 0 を返しており、唯一の呼び出し元 Dcm 側が
- *          誤って正応答を返してしまっていた）。
- *
- * \param[in]   EventId   イベント ID (DemConf_DemEventParameter_* 定数)。
- * \param[out]  Counter   故障確定回数の格納先。NULL 禁止。
- *
- * \retval  E_OK      正常取得（1 回以上確定 FAILED 済み）。
- * \retval  E_NOT_OK  EventId が範囲外、Counter が NULL、または ExtendedData
- *                    未記録（一度も確定 FAILED していない）。
- *
- * \note    本プロジェクト独自の関数（実 AUTOSAR に対応する関数は無い）のため
- *          ApiId は任意の値のはずだったが、以前の 0x29 は実仕様の
- *          `Dem_GetIndicatorStatus`（[SWS_Dem_00205]）と衝突していたことが
- *          判明したため、実仕様のどの Dem 関数の Service ID とも一致しない
- *          ことを確認済みの 0x2E へ 2026-09-06 に付け替えた（Dem_Cfg.h
- *          冒頭コメント参照）。
- *
- * \ServiceID      {0x2E}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType Dem_GetOccurrenceCounterOfEvent(Dem_EventIdType EventId, uint8* Counter);
 
 /**
  * \brief   本 ECU が構成する DTC 翻訳フォーマットを取得する。

@@ -200,7 +200,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
     FakeCanHw_RxData[3] = 0x00U;  // DTC_H
     FakeCanHw_RxData[4] = 0x01U;  // DTC_M
     FakeCanHw_RxData[5] = 0x01U;  // DTC_L
-    FakeCanHw_RxData[6] = DCM_EXTENDED_DATA_RECORD_NUMBER;
+    FakeCanHw_RxData[6] = DEM_EXTENDED_DATA_RECORD_NUMBER;
     FakeCanHw_RxPendingCount = 1U;
 
     /* ------------------------- */
@@ -214,7 +214,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
     ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_EXTDATA);
-    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_EXTENDED_DATA_RECORD_NUMBER);
 
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
@@ -321,7 +321,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
     ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[1], DCM_DTC_SUBFUNC_REPORT_EXTDATA);
-    EXPECT_EQ(LastData_CanTp_Transmit[6], DCM_EXTENDED_DATA_RECORD_NUMBER);
+    EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_EXTENDED_DATA_RECORD_NUMBER);
 
     ASSERT_EQ(FakeCanHw_SendCount, 1U);
     EXPECT_EQ(FakeCanHw_LastSendId, 0x7E8U);
@@ -379,7 +379,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
     {
         EXPECT_EQ(reassembled[i], LastData_CanTp_Transmit[i]) << "byte " << (unsigned)i;
     }
-    EXPECT_EQ(reassembled[6], DCM_EXTENDED_DATA_RECORD_NUMBER);  // 要求0xFFをechoしない
+    EXPECT_EQ(reassembled[6], DEM_EXTENDED_DATA_RECORD_NUMBER);  // 要求0xFFをechoしない
 }
 
 // ------------------------------------------------------------
@@ -444,7 +444,7 @@ TEST_F(DcmStack_SID19_SF06_ReadDtcExtendedData_Test,
     FakeCanHw_RxData[3] = 0x00U;
     FakeCanHw_RxData[4] = 0x01U;
     FakeCanHw_RxData[5] = 0x01U;
-    FakeCanHw_RxData[6] = DCM_EXTENDED_DATA_RECORD_NUMBER;
+    FakeCanHw_RxData[6] = DEM_EXTENDED_DATA_RECORD_NUMBER;
     FakeCanHw_RxPendingCount = 1U;
 
     /* ----------------------- */

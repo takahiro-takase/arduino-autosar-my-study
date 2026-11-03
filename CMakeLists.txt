@@ -577,7 +577,9 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dem_SetFreezeFrameContext
     Dem_GetFreezeFrameOfEvent
     Dem_GetEventIdOfDTC
-    Dem_GetOccurrenceCounterOfEvent
+    Dem_SelectExtendedDataRecord
+    Dem_GetSizeOfExtendedDataRecordSelection
+    Dem_GetNextExtendedDataRecord
     Dem_GetTranslationType
     Dem_GetFaultDetectionCounter
     Dem_EnableDTCSetting
