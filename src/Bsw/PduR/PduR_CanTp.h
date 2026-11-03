@@ -40,11 +40,11 @@ extern "C" {
 
 /* SWS 8.3.4 章: 下位層の TP（CanTp）が上位層（Dcm）を呼ぶ API。PduR が、TP のルーティングパス
  * （PduR_TpRxRoutingPathType / PduR_TpTxRoutingPathType）で上位層の PDU ID へ変換して転送する。 */
-BufReq_ReturnType PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
-                                             PduLengthType* bufferSizePtr);                          /* SWS_PduR_00507 */
 BufReq_ReturnType PduR_CanTpCopyRxData(PduIdType id, const PduInfoType* info,
                                        PduLengthType* bufferSizePtr);                                /* SWS_PduR_00512 */
 void              PduR_CanTpRxIndication(PduIdType id, Std_ReturnType result);                       /* SWS_PduR_00375 */
+BufReq_ReturnType PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
+                                             PduLengthType* bufferSizePtr);                          /* SWS_PduR_00507 */
 BufReq_ReturnType PduR_CanTpCopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry,
                                        PduLengthType* availableDataPtr);                             /* SWS_PduR_00518 */
 void              PduR_CanTpTxConfirmation(PduIdType id, Std_ReturnType result);                     /* SWS_PduR_00381 */

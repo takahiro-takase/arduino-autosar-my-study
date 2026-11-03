@@ -799,64 +799,6 @@ Std_ReturnType PduR_CanIfTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfo
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * PduR_CanTpStartOfReception
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   CanTp が N-SDU の受信を始めたことを、上位層（Dcm）へ伝える。
- *
- * \details TP の RX ルーティングパス（TpRxPaths）を、CanTp 側の ID（SrcPduId）で検索し、
- *          上位層の StartOfReception（Dcm_StartOfReception()）を、上位層の PDU ID（DestPduId）で呼んで、
- *          戻り値と bufferSizePtr をそのまま返す（[SWS_PduR_00507]）。
- *
- * \param[in]   id             CanTp が受信している N-SDU の ID（TP の RX ルーティングパスの SrcPduId）。
- * \param[in]   info           SF/FF のペイロードと長さ。持たないときは NULL（そのまま上位層へ渡す）。
- * \param[in]   TpSduLength    受信する N-SDU 全体の長さ。0 のときは、上位層の受信バッファの大きさを問い合わせるだけ。
- * \param[out]  bufferSizePtr  上位層の受信バッファの空き。NULL 禁止。
- *
- * \retval  BUFREQ_OK         上位層が受信を受け入れた。
- * \retval  BUFREQ_E_NOT_OK   PduR 未初期化、bufferSizePtr が NULL、一致するパスなし、または上位層が拒否した。
- * \retval  BUFREQ_E_OVFL     上位層に、必要な大きさのバッファがない。
- *
- * \pre        PduR_Init() が正常に完了していること。
- *
- * \AUTOSARReq     {SWS_PduR_00507}
- * \ServiceID      {0x46}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-BufReq_ReturnType PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
-                                             PduLengthType* bufferSizePtr)
-{
-    if (PduR_ConfigPtr == NULL)
-    {
-        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_UNINIT);
-        return BUFREQ_E_NOT_OK;
-    }
-
-    if (bufferSizePtr == NULL)
-    {
-        DET_LOGE(TAG, "TP StartOfReception E: bufferSizePtr NULL");
-        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_PARAM_POINTER);
-        return BUFREQ_E_NOT_OK;
-    }
-
-    const PduR_TpRxRoutingPathType* path = PduR_FindTpRxPath(id);
-
-    if (path == NULL)
-    {
-        DET_LOGW(TAG, "TP StartOfReception no route id=%u", (unsigned)id);
-        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_PDU_ID_INVALID);
-        return BUFREQ_E_NOT_OK;
-    }
-
-    DET_LOGD(TAG, "TP StartOfReception id=%u -> up=%u len=%u", (unsigned)id, (unsigned)path->DestPduId,
-             (unsigned)TpSduLength);
-
-    return path->StartOfReceptionFct(path->DestPduId, info, TpSduLength, bufferSizePtr);
-}
-
-/* ----------------------------------------------------------------------
  * PduR_CanTpCopyRxData
  * ---------------------------------------------------------------------- */
 
@@ -949,6 +891,64 @@ void PduR_CanTpRxIndication(PduIdType id, Std_ReturnType result)
              (unsigned)result);
 
     path->RxIndicationFct(path->DestPduId, result);
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_CanTpStartOfReception
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CanTp が N-SDU の受信を始めたことを、上位層（Dcm）へ伝える。
+ *
+ * \details TP の RX ルーティングパス（TpRxPaths）を、CanTp 側の ID（SrcPduId）で検索し、
+ *          上位層の StartOfReception（Dcm_StartOfReception()）を、上位層の PDU ID（DestPduId）で呼んで、
+ *          戻り値と bufferSizePtr をそのまま返す（[SWS_PduR_00507]）。
+ *
+ * \param[in]   id             CanTp が受信している N-SDU の ID（TP の RX ルーティングパスの SrcPduId）。
+ * \param[in]   info           SF/FF のペイロードと長さ。持たないときは NULL（そのまま上位層へ渡す）。
+ * \param[in]   TpSduLength    受信する N-SDU 全体の長さ。0 のときは、上位層の受信バッファの大きさを問い合わせるだけ。
+ * \param[out]  bufferSizePtr  上位層の受信バッファの空き。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK         上位層が受信を受け入れた。
+ * \retval  BUFREQ_E_NOT_OK   PduR 未初期化、bufferSizePtr が NULL、一致するパスなし、または上位層が拒否した。
+ * \retval  BUFREQ_E_OVFL     上位層に、必要な大きさのバッファがない。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00507}
+ * \ServiceID      {0x46}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
+                                             PduLengthType* bufferSizePtr)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (bufferSizePtr == NULL)
+    {
+        DET_LOGE(TAG, "TP StartOfReception E: bufferSizePtr NULL");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    const PduR_TpRxRoutingPathType* path = PduR_FindTpRxPath(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP StartOfReception no route id=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_PDU_ID_INVALID);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    DET_LOGD(TAG, "TP StartOfReception id=%u -> up=%u len=%u", (unsigned)id, (unsigned)path->DestPduId,
+             (unsigned)TpSduLength);
+
+    return path->StartOfReceptionFct(path->DestPduId, info, TpSduLength, bufferSizePtr);
 }
 
 /* ----------------------------------------------------------------------

@@ -86,13 +86,13 @@ extern uint32 CallCount_PduR_Init;
 extern uint32 CallCount_PduR_GetVersionInfo;
 extern uint32 CallCount_PduR_ComTransmit;
 extern uint32 CallCount_PduR_SecOCTransmit;
+extern uint32 CallCount_PduR_DcmTransmit;
 extern uint32 CallCount_PduR_ComRxIndication;
 extern uint32 CallCount_PduR_CanIfTxConfirmation;
 extern uint32 CallCount_PduR_SecOCTxConfirmation;
-extern uint32 CallCount_PduR_DcmTransmit;
-extern uint32 CallCount_PduR_CanTpStartOfReception;
 extern uint32 CallCount_PduR_CanTpCopyRxData;
 extern uint32 CallCount_PduR_CanTpRxIndication;
+extern uint32 CallCount_PduR_CanTpStartOfReception;
 extern uint32 CallCount_PduR_CanTpCopyTxData;
 extern uint32 CallCount_PduR_CanTpTxConfirmation;
 
@@ -106,8 +106,8 @@ extern uint32 CallCount_PduR_CanTpTxConfirmation;
 extern uint32 FailFromCallCount_PduR_ComTransmit;
 extern uint32 FailFromCallCount_PduR_SecOCTransmit;
 extern uint32 FailFromCallCount_PduR_DcmTransmit;
-extern uint32 FailFromCallCount_PduR_CanTpStartOfReception;
 extern uint32 FailFromCallCount_PduR_CanTpCopyRxData;
+extern uint32 FailFromCallCount_PduR_CanTpStartOfReception;
 extern uint32 FailFromCallCount_PduR_CanTpCopyTxData;
 
 /* ----------------------------------------------------------------------
@@ -116,8 +116,8 @@ extern uint32 FailFromCallCount_PduR_CanTpCopyTxData;
 extern Std_ReturnType ForcedReturn_PduR_ComTransmit;
 extern Std_ReturnType ForcedReturn_PduR_SecOCTransmit;
 extern Std_ReturnType ForcedReturn_PduR_DcmTransmit;
-extern BufReq_ReturnType ForcedReturn_PduR_CanTpStartOfReception;
 extern BufReq_ReturnType ForcedReturn_PduR_CanTpCopyRxData;
+extern BufReq_ReturnType ForcedReturn_PduR_CanTpStartOfReception;
 extern BufReq_ReturnType ForcedReturn_PduR_CanTpCopyTxData;
 
 /* ======================================================================

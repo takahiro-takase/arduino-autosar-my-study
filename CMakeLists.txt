@@ -677,13 +677,13 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     PduR_GetVersionInfo
     PduR_ComTransmit
     PduR_SecOCTransmit
+    PduR_DcmTransmit
     PduR_ComRxIndication
     PduR_CanIfTxConfirmation
     PduR_SecOCTxConfirmation
-    PduR_DcmTransmit
-    PduR_CanTpStartOfReception
     PduR_CanTpCopyRxData
     PduR_CanTpRxIndication
+    PduR_CanTpStartOfReception
     PduR_CanTpCopyTxData
     PduR_CanTpTxConfirmation
     # Port.h の公開API全5関数（Wrap_Port.h/.c 参照）。
