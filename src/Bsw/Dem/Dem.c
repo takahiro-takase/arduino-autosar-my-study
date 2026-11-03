@@ -166,11 +166,25 @@ static uint8 Dem_FilterStatusMask = 0U;  /**< 0x00 はステータスによる�
 static uint8 Dem_FilterForFdc     = 0U;  /**< 1 = FDC が 1〜0x7E の DTC のみ */
 static uint8 Dem_FilterNextEvent  = 0U;  /**< 次に調べるイベント ID（Dem_GetNextFilteredDTC 系の走査位置） */
 
+/** Dem_SelectDTC() の選択（クライアントごと、[SWS_Dem_01253]）。選択は、次に Dem_SelectDTC() を呼ぶまで残る。 */
+typedef struct
+{
+    uint8           selected;   /**< 1 = Dem_SelectDTC() が呼ばれた */
+    uint32          dtc;        /**< 選んだ DTC、または DEM_GROUP_ALL_DTCS */
+    Dem_EventIdType eventId;    /**< 単一の DTC を選んだときの、一致したイベント（result が E_OK のときだけ有効） */
+    Std_ReturnType  result;     /**< 選択の検査の結果: E_OK / DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN */
+} Dem_SelectionType;
+
+static Dem_SelectionType Dem_Selection[DEM_CLIENT_COUNT];
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
 
 static uint8 Dem_ClearOne(Dem_EventIdType EventId);
+static boolean Dem_FindEventOfDtc(uint32 DTC, Dem_EventIdType* EventId);
+static Std_ReturnType Dem_CheckClient(uint8 ClientId, uint8 apiId);
+static Std_ReturnType Dem_CheckSelected(uint8 ClientId, uint8 apiId);
 static sint8 Dem_MapDebounceCounterToFdc(sint8 counter, sint8 limit);
 static uint8 Dem_FilterMatches(Dem_EventIdType EventId);
 static void Dem_EvaluateAging(Dem_EventIdType EventId);
@@ -290,6 +304,13 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
 
     Dem_DTCSettingEnabled = 1U;
     Dem_FilterActive      = 0U;
+    for (uint8 c = 0U; c < DEM_CLIENT_COUNT; c++)
+    {
+        Dem_Selection[c].selected = 0U;
+        Dem_Selection[c].dtc      = 0U;
+        Dem_Selection[c].eventId  = 0U;
+        Dem_Selection[c].result   = E_NOT_OK;
+    }
 
     /* [SWS_Dem_00853]: DemOperationCycleAutostart の操作サイクルは、Dem_Init() が開始する */
     for (uint8 c = 0U; c < DEM_OPERATION_CYCLE_COUNT; c++)
@@ -315,35 +336,37 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
  * ---------------------------------------------------------------------- */
 
 /**
- * \brief   指定 DTC（または全 DTC）をクリアし、NvM (EEPROM) を初期状態へ戻す
+ * \brief   Dem_SelectDTC() で選んだ DTC（または DTC グループ）をクリアし、NvM (EEPROM) を初期状態へ戻す
  *          （[SWS_Dem_00665]、Dem.h 参照）。
  *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                    正常クリア。
+ * \retval  E_NOT_OK                未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC           選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN     選んだ DTCOrigin が非対応。
+ * \retval  DEM_CLEAR_MEMORY_ERROR  不揮発メモリへの書き込みを積めなかった。
+ *
+ * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_01203, SWS_Dem_01253, SWS_Dem_01255}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+Std_ReturnType Dem_ClearDTC(uint8 ClientId)
 {
-    (void)ClientId;
-
-    if (!Dem_Initialized)
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_CLEAR_DTC) != E_OK)
     {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_UNINIT);
         return E_NOT_OK;
     }
 
-    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    const Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    if (sel->result != E_OK)
     {
-        return DEM_WRONG_DTC;   /* 要求した形式の DTC は構成されていない */
+        return sel->result;   /* DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN */
     }
 
-    if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
-    {
-        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_CLEAR_DTC, DEM_E_WRONG_CONFIGURATION);
-        return DEM_WRONG_DTCORIGIN;
-    }
-
-    if (DTC == DEM_GROUP_ALL_DTCS)
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
     {
         uint8 changed = 0U;
         for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
@@ -362,18 +385,11 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
     }
     else
     {
-        Dem_EventIdType eventId = 0U;
-
-        if (Dem_GetEventIdOfDTC(DTC, &eventId) != E_OK)
+        if (Dem_ClearOne(sel->eventId) != 0U)
         {
-            return DEM_WRONG_DTC;
+            FiM_DemTriggerOnMonitorStatus(sel->eventId);
         }
-
-        if (Dem_ClearOne(eventId) != 0U)
-        {
-            FiM_DemTriggerOnMonitorStatus(eventId);
-        }
-        DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)DTC);
+        DET_LOGI(TAG, "ClearDTC dtc=0x%06lX ok", (unsigned long)sel->dtc);
     }
 
     /* 不揮発メモリへの書き込みを積む（DemClearDTCBehavior = DEM_CLRRESP_NONVOLATILE_TRIGGER 相当: 書き込みの完了は待たない、
@@ -408,13 +424,63 @@ Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFor
  * Dem_GetDTCSelectionResult
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   直近の Dem_SelectDTC() が、有効な DTC（または DTC グループ）を選んだかを返す（[SWS_Dem_91023]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91023, SWS_Dem_01253}
+ * \ServiceID      {0xb8}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetDTCSelectionResult(uint8 ClientId)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_GET_DTC_SELECTION_RESULT) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+    return Dem_Selection[ClientId].result;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetDTCSelectionResultForClearDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_GetDTCSelectionResult() と同じだが、DTC 消去の設定を考慮した結果を返す（[SWS_Dem_91020]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、または ClientId が範囲外。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91020, SWS_Dem_01253, SWS_Dem_01261}
+ * \ServiceID      {0xbb}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId)
+{
+    if (Dem_CheckClient(ClientId, DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    if (Dem_Selection[ClientId].selected == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC, DEM_E_WRONG_CONDITION);
+        return DEM_WRONG_DTC;   /* [SWS_Dem_01261]: 選択が無い＝無効な選択 */
+    }
+    return Dem_Selection[ClientId].result;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetEventUdsStatus
@@ -824,7 +890,56 @@ Std_ReturnType Dem_ResetEventStatus(Dem_EventIdType EventId)
  * Dem_SelectDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   以降の Dem_ClearDTC() などの対象にする、DTC（または DTC グループ）を選ぶ（[SWS_Dem_91016]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId   呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[in]  DTC        選ぶ DTC（24-bit UDS 形式）、または DEM_GROUP_ALL_DTCS。
+ * \param[in]  DTCFormat  DTC のフォーマット（DEM_DTC_FORMAT_UDS のみ対応）。
+ * \param[in]  DTCOrigin  イベントメモリ（DEM_DTC_ORIGIN_PRIMARY_MEMORY のみ構成する）。
+ *
+ * \retval  E_OK      選択の処理を受け付けた（結果は、Dem_GetDTCSelectionResult() で分かる）。
+ * \retval  E_NOT_OK  未初期化、または ClientId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_Dem_91016, SWS_Dem_01253, SWS_Dem_01254}
+ * \ServiceID      {0xb7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin)
+{
+    if (Dem_CheckClient(ClientId, DEM_API_ID_SELECT_DTC) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    sel->selected = 1U;
+    sel->dtc      = DTC;
+    sel->eventId  = 0U;
+    sel->result   = E_OK;
+
+    if (DTCFormat != DEM_DTC_FORMAT_UDS)
+    {
+        sel->result = DEM_WRONG_DTC;   /* 要求した形式の DTC は構成されていない */
+    }
+    else if (DTCOrigin != DEM_DTC_ORIGIN_PRIMARY_MEMORY)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_SELECT_DTC, DEM_E_WRONG_CONFIGURATION);
+        sel->result = DEM_WRONG_DTCORIGIN;
+    }
+    else if (DTC != DEM_GROUP_ALL_DTCS)
+    {
+        sel->result = Dem_FindEventOfDtc(DTC, &sel->eventId) ? E_OK : DEM_WRONG_DTC;
+    }
+    else
+    {
+        /* DEM_GROUP_ALL_DTCS: 全 DTC のグループ（イベントは決まらない） */
+    }
+
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_SetComponentAvailable
@@ -1287,7 +1402,50 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
  * Dem_GetStatusOfDTC
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_SelectDTC() で選んだ DTC のステータスバイトを取得する（[SWS_Dem_00212]、Dem.h 参照）。
+ *
+ * \param[in]   ClientId   呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ * \param[out]  DTCStatus  ステータスバイトの格納先。NULL 禁止。
+ *
+ * \retval  E_OK                 DTCStatus へ格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、DTCStatus が NULL、または Dem_SelectDTC() が呼ばれていない。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00212, SWS_Dem_01253}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_GET_STATUS_OF_DTC) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    if (DTCStatus == NULL)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_GET_STATUS_OF_DTC, DEM_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const Dem_SelectionType* sel = &Dem_Selection[ClientId];
+
+    if (sel->result != E_OK)
+    {
+        return sel->result;
+    }
+
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
+    {
+        return DEM_WRONG_DTC;   /* グループは、DTC が 1 件に決まらない */
+    }
+
+    *DTCStatus = Dem_StatusTable[sel->eventId] & DEM_STATUS_AVAILABILITY_MASK;
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSeverityOfDTC
@@ -1975,6 +2133,87 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
  * ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
+ * Dem_FindEventOfDtc
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   DTC コードに割り当てられたイベントを探す（Dem_SelectDTC() と Dem_GetEventIdOfDTC() が共有する）。
+ *
+ * \param[in]   DTC      探す DTC（24-bit UDS 形式）。
+ * \param[out]  EventId  見つかったイベント ID の格納先。見つからないときは、書き換えない。
+ *
+ * \retval  TRUE   見つかった。
+ * \retval  FALSE  どのイベントにも割り当てられていない。
+ */
+static boolean Dem_FindEventOfDtc(uint32 DTC, Dem_EventIdType* EventId)
+{
+    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
+    {
+        if (Dem_DtcTable[i] == DTC)
+        {
+            *EventId = i;
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_CheckClient / Dem_CheckSelected
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   Dem が初期化済みで、ClientId が構成にあるかを確認する（[SWS_Dem_01252]）。
+ *
+ * \param[in]  ClientId  確認する ClientId。
+ * \param[in]  apiId     報告元の API の ID（DET 用）。
+ *
+ * \retval  E_OK      初期化済みで、ClientId は構成にある。
+ * \retval  E_NOT_OK  未初期化（DEM_E_UNINIT）、または ClientId が範囲外（DEM_E_WRONG_CONFIGURATION）。
+ */
+static Std_ReturnType Dem_CheckClient(uint8 ClientId, uint8 apiId)
+{
+    if (!Dem_Initialized)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (ClientId >= DEM_CLIENT_COUNT)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_WRONG_CONFIGURATION);
+        return E_NOT_OK;
+    }
+
+    return E_OK;
+}
+
+/**
+ * \brief   Dem_CheckClient() に加えて、Dem_SelectDTC() が呼ばれていることを確認する（[SWS_Dem_01255]）。
+ *
+ * \param[in]  ClientId  確認する ClientId。
+ * \param[in]  apiId     報告元の API の ID（DET 用）。
+ *
+ * \retval  E_OK      確認に通った。
+ * \retval  E_NOT_OK  Dem_CheckClient() の失敗、または Dem_SelectDTC() が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ */
+static Std_ReturnType Dem_CheckSelected(uint8 ClientId, uint8 apiId)
+{
+    if (Dem_CheckClient(ClientId, apiId) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    if (Dem_Selection[ClientId].selected == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, apiId, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
+    }
+
+    return E_OK;
+}
+
+/* ----------------------------------------------------------------------
  * Dem_ClearOne
  * ---------------------------------------------------------------------- */
 
@@ -2092,15 +2331,7 @@ Std_ReturnType Dem_GetEventIdOfDTC(uint32 DTC, Dem_EventIdType* EventId)
         return E_NOT_OK;
     }
 
-    for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
-    {
-        if (Dem_DtcTable[i] == DTC)
-        {
-            *EventId = i;
-            return E_OK;
-        }
-    }
-    return E_NOT_OK;
+    return Dem_FindEventOfDtc(DTC, EventId) ? E_OK : E_NOT_OK;
 }
 
 /* ----------------------------------------------------------------------

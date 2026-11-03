@@ -277,11 +277,29 @@ ENGINE_OVERHEAT（DTC 0x000101）だけをクリアする例:
 送信 → 0x7E0: [04 14 00 01 01 00 00 00]
 受信 ← 0x7E8: [01 54 00 00 00 00 00 00]
 ```
-内部では `Dem_GetEventIdOfDTC(0x000101, &eventId)` で該当イベントを逆引きし、
-`Dem_ClearOneDtc(eventId)`（旧`Dem_ClearDTC`、2026-09-05に実仕様との名前衝突を
-避けて改名）でそのイベントだけをステータス・デバウンスカウンタ・
+内部では、`Dem_SelectDTC(ClientId, 0x000101, …)` が、該当イベントを逆引きして選択を持ち、
+`Dem_ClearDTC(ClientId)` が、そのイベントだけをステータス・デバウンスカウンタ・
 FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない）。
 一致する DTC が存在しない場合は NRC 0x31（requestOutOfRange）を返す。
+
+## 選択（Dem_SelectDTC）系の API（2026-11 追加）
+
+実仕様（[SWS_Dem_01253]）の「選んでから、要求する」の形です。クライアント（Dcm = `ClientId` 0。`DEM_CLIENT_COUNT` 個）が、先に
+`Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)` で DTC（または DTC グループ）を選ぶと、選択は、次に `Dem_SelectDTC()` を呼ぶまで残り、
+次の API が、その選択を対象にします。
+
+| API | 役割 |
+|---|---|
+| `Dem_SelectDTC` | 対象を選ぶ。選択の結果（有効か）は、この戻り値ではなく、続く API の戻り値で分かる（[SWS_Dem_01254]） |
+| `Dem_GetDTCSelectionResult` | 選択が有効か（`E_OK` / `DEM_WRONG_DTC` / `DEM_WRONG_DTCORIGIN`。選択が無ければ `E_NOT_OK`） |
+| `Dem_GetDTCSelectionResultForClearDTC` | 同じ。ただし、選択が無いときは `DEM_WRONG_DTC`（Dcm が 0x14 の NRC を決めるために、消去の前に呼ぶ） |
+| `Dem_ClearDTC(ClientId)` | 選んだ DTC（`DEM_GROUP_ALL_DTCS` なら全 DTC）を消去する |
+| `Dem_GetStatusOfDTC(ClientId, &status)` | 選んだ DTC のステータスバイト（グループを選んでいれば `DEM_WRONG_DTC`） |
+
+- `DEM_GROUP_ALL_DTCS`（0xFFFFFF）は、全 DTC のグループです。本プロジェクトの DTC グループは、これだけです。
+- 範囲外の `ClientId` は `DEM_E_WRONG_CONFIGURATION`、`Dem_SelectDTC()` を呼ばずに、選択を前提とする API を呼ぶと、`DEM_E_WRONG_CONDITION`（[SWS_Dem_01255]）と `E_NOT_OK` です。
+- 簡略化: 常に同期的に完了するため、`DEM_PENDING` と `DEM_BUSY` は返しません。
+- 以前は、`Dem_ClearDTC(ClientId, DTC, DTCFormat, DTCOrigin)` という、選択と消去を 1 つにまとめた独自の 4 引数の関数でした（実仕様の `Dem_ClearDTC` は、`ClientId` だけを取る）。
 
 ## 操作サイクルの管理（2026-11 追加）
 

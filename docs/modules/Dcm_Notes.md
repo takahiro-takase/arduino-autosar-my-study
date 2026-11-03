@@ -661,10 +661,12 @@ SecurityAccess の Level1（subFunc 0x01/0x02）でアンロックしないと N
 
 ## ClearDiagnosticInformation（SID 0x14）の否定応答（2026-10 追加）
 
-`Dem_ClearDTC()` の戻り値を、仕様（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）に従って、NRC へ対応付けます
-（`Dcm_ClearDtcResultToNrc()`）。以前は、E_OK 以外をすべて NRC 0x31 としていました。
+Dcm は、Dem を、実仕様の順（`Dem_SelectDTC()` → `Dem_GetDTCSelectionResultForClearDTC()` → `Dem_ClearDTC(ClientId)`、[SWS_Dem_01253]）で呼びます
+（2026-11 是正: 以前は、独自の 4 引数の `Dem_ClearDTC()` 1 つでした）。この 3 つの戻り値のうち、最初に `E_OK` 以外だったものを、
+仕様（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）に従って、NRC へ対応付けます（`Dcm_ClearDtcResultToNrc()`）。
+以前は、E_OK 以外をすべて NRC 0x31 としていました。
 
-| `Dem_ClearDTC()` の戻り値 | NRC | 起きる場面 |
+| Dem の戻り値（`Dem_GetDTCSelectionResultForClearDTC()` / `Dem_ClearDTC()`） | NRC | 起きる場面 |
 | --- | --- | --- |
 | `E_OK` | 正応答 `54` | クリアでき、不揮発メモリへの書き込みも積めた |
 | `DEM_WRONG_DTC` | 0x31 requestOutOfRange | groupOfDTC が、どの DTC にも一致しない（実機で起こせる） |

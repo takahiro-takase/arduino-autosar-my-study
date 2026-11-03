@@ -159,7 +159,8 @@ TEST_F(FiM_MainFunction_Test, MainFunction_OK_PermitsFidAgainWhenDtcIsCleared)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    ASSERT_EQ(Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // DTC を消去する
+    ASSERT_EQ(Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+    ASSERT_EQ(Dem_ClearDTC(0U), E_OK);   // DTC を消去する
     FiM_MainFunction();
 
     /* ----------------------- */
@@ -224,10 +225,12 @@ TEST_F(FiM_MainFunction_Test, MainFunction_OK_StaysInhibitedWhileOneOfTwoEventsR
     uint32 dtcStuck  = 0U;
     ASSERT_EQ(Dem_GetDTCOfEvent(DemConf_DemEventParameter_CAN_BUSOFF, DEM_DTC_FORMAT_UDS, &dtcBusOff), E_OK);
     ASSERT_EQ(Dem_GetDTCOfEvent(DemConf_DemEventParameter_BUTTON_STUCK, DEM_DTC_FORMAT_UDS, &dtcStuck), E_OK);
-    ASSERT_EQ(Dem_ClearDTC(0U, dtcBusOff, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // 片方だけを解除する
+    ASSERT_EQ(Dem_SelectDTC(0U, dtcBusOff, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+    ASSERT_EQ(Dem_ClearDTC(0U), E_OK);   // 片方だけを解除する
     FiM_MainFunction();
     const boolean afterFirstCleared = GetPermission(FIM_FID_RUNNING_LED);
-    ASSERT_EQ(Dem_ClearDTC(0U, dtcStuck, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);   // もう片方も解除する
+    ASSERT_EQ(Dem_SelectDTC(0U, dtcStuck, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY), E_OK);
+    ASSERT_EQ(Dem_ClearDTC(0U), E_OK);   // もう片方も解除する
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */

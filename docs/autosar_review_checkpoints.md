@@ -454,6 +454,11 @@ CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は
 以前は、失敗しても残り、バスの状況が変わると遅れて送出され、3 つ残ると以降の送信が常に失敗した。）
 （2026-11-03 追記 7: CanTp の CF の送信失敗の再送（[SWS_CanTp_00343] は即中断）は、意図的に残す判断とした。`Can_Write()` が同期で `CAN_BUSY` を返さず、CanIf に送信バッファが無いための補いで、Arduino のライブラリの制約が理由。
 CanTp_Notes と CanTp.c に理由を記録した。仕様の形にするには、`Can_Write()` の `CAN_BUSY` と CanIf の送信バッファが要る。）
+（2026-11-03 追記 8: Dem の SelectDTC 系の第 1 段。`Dem_SelectDTC`（0xb7）、`Dem_GetDTCSelectionResult`（0xb8）、`Dem_GetDTCSelectionResultForClearDTC`（0xbb）、
+`Dem_GetStatusOfDTC`（0x15）を実装し、`Dem_ClearDTC` を、実仕様どおりの `Dem_ClearDTC(ClientId)` に直した（以前は、選択と消去を 1 つにまとめた独自の 4 引数。
+以前の記録の「4 引数が実仕様」は誤りで、4.3.1 の仕様書では `Dem_ClearDTC(uint8 ClientId)` だけ）。Dcm の 0x14 は、Select → GetDTCSelectionResultForClearDTC → Clear の順で呼ぶ。
+選択は、クライアントごとに持つ（`DEM_CLIENT_COUNT`）。残り: 拡張データ（第 2 段）、凍結フレーム（第 3 段）、`Dem_Disable/EnableDTCRecordUpdate`（第 4 段）、
+独自関数 `Dem_GetEventIdOfDTC`・`Dem_GetFreezeFrameOfEvent`・`Dem_GetOccurrenceCounterOfEvent`・`Dem_SetFreezeFrameContext` の廃止。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

@@ -694,6 +694,51 @@ TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_UnknownDtcGroupIsRejected)
     ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
 }
 
+// OK: 0x14 は、実仕様の順（Dem_SelectDTC → Dem_GetDTCSelectionResultForClearDTC → Dem_ClearDTC、[SWS_Dem_01253]）で Dem を呼ぶ。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_OK_CallsDemSelectDtcThenGetResultThenClear)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_SelectDTC, 1U);
+    EXPECT_EQ(CallCount_Dem_GetDTCSelectionResultForClearDTC, 1U);
+    EXPECT_EQ(CallCount_Dem_ClearDTC, 1U);
+}
+
+// NG: 選択の結果（Dem_GetDTCSelectionResultForClearDTC()）が DEM_WRONG_DTC なら、消去（Dem_ClearDTC()）を呼ばずに、NRC 0x31（[SWS_Dcm_00708]）。
+TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_SelectionResultWrongDtcIsRequestOutOfRangeWithoutClearing)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    UnlockSecurityAccessLevel1();
+    FailFromCallCount_Dem_GetDTCSelectionResultForClearDTC = 1U;
+    ForcedReturn_Dem_GetDTCSelectionResultForClearDTC      = DEM_WRONG_DTC;
+    const uint8 req[4] = { DCM_SID_CLEAR_DTC, 0xFFU, 0xFFU, 0xFFU };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Send(req, sizeof(req));
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ExpectNegative(DCM_SID_CLEAR_DTC, DCM_NRC_REQUEST_OUT_OF_RANGE);
+    EXPECT_EQ(CallCount_Dem_ClearDTC, 0U);   // 選択が有効でないので、消去へ進まない
+}
+
 // NG: Dem_ClearDTC() が DEM_WRONG_DTCORIGIN を返したら、NRC 0x31（[SWS_Dcm_01408]）。
 TEST_F(Dcm_UdsServices_Test, Dcm_ClearDtc_NG_DemWrongDtcOriginIsRequestOutOfRange)
 {

@@ -107,6 +107,10 @@ extern uint32 CallCount_Dem_ResetEventStatus;
 extern uint32 CallCount_Dem_ResetEventDebounceStatus;
 extern uint32 CallCount_Dem_GetDebouncingOfEvent;
 extern uint32 CallCount_Dem_ClearDTC;
+extern uint32 CallCount_Dem_GetDTCSelectionResult;
+extern uint32 CallCount_Dem_GetDTCSelectionResultForClearDTC;
+extern uint32 CallCount_Dem_SelectDTC;
+extern uint32 CallCount_Dem_GetStatusOfDTC;
 extern uint32 CallCount_Dem_SetDTCFilter;
 extern uint32 CallCount_Dem_GetNumberOfFilteredDTC;
 extern uint32 CallCount_Dem_GetNextFilteredDTC;
@@ -146,6 +150,10 @@ extern uint32 FailFromCallCount_Dem_ResetEventStatus;
 extern uint32 FailFromCallCount_Dem_ResetEventDebounceStatus;
 extern uint32 FailFromCallCount_Dem_GetDebouncingOfEvent;
 extern uint32 FailFromCallCount_Dem_ClearDTC;
+extern uint32 FailFromCallCount_Dem_GetDTCSelectionResult;
+extern uint32 FailFromCallCount_Dem_GetDTCSelectionResultForClearDTC;
+extern uint32 FailFromCallCount_Dem_SelectDTC;
+extern uint32 FailFromCallCount_Dem_GetStatusOfDTC;
 extern uint32 FailFromCallCount_Dem_GetFreezeFrameOfEvent;
 extern uint32 FailFromCallCount_Dem_GetEventIdOfDTC;
 extern uint32 FailFromCallCount_Dem_GetOccurrenceCounterOfEvent;
@@ -170,6 +178,10 @@ extern Std_ReturnType ForcedReturn_Dem_ResetEventStatus;               /**< 既�
 extern Std_ReturnType ForcedReturn_Dem_ResetEventDebounceStatus;       /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetDebouncingOfEvent;           /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_ClearDTC;                       /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetDTCSelectionResult; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetDTCSelectionResultForClearDTC; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_SelectDTC;      /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_GetStatusOfDTC; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetFreezeFrameOfEvent;          /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetEventIdOfDTC;                /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetOccurrenceCounterOfEvent;    /**< 既定 E_NOT_OK */

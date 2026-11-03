@@ -491,50 +491,124 @@ Std_ReturnType Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorStatusTy
 Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCFormat, uint32* DTCOfEvent);
 
 /**
- * \brief   指定 DTC（または全 DTC）をクリアし、EEPROM を初期状態へ戻す
- *          （[SWS_Dem_00665]）。DCM SID 0x14 (ClearDiagnosticInformation) から
- *          呼び出す。
+ * \brief   Dem_SelectDTC() で選んだ DTC（または DTC グループ）をクリアし、NvM (EEPROM) を初期状態へ戻す
+ *          （[SWS_Dem_00665]）。DCM SID 0x14 (ClearDiagnosticInformation) から呼び出す。
  *
- * \details 実仕様は `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)`
- *          [SWS_Dem_91016] で対象 DTC を選択したうえで `Dem_ClearDTC(ClientId)`
- *          [SWS_Dem_00665] を呼ぶ、非同期対応の2段階プロトコル（複数クライアント・
- *          `DEM_PENDING`/`DEM_BUSY` によるポーリングを前提とする）だが、本プロジェクトは
- *          単一クライアント・常に同期処理のみのため、`Dem_SelectDTC()` 側の3引数
- *          （DTC/DTCFormat/DTCOrigin）を本関数に統合し、選択と同時にクリアまで
- *          一度に行う（2026-09-27 是正: 従来の独自関数 `Dem_ClearAllDTCs`/
- *          `Dem_ClearOneDtc` を本関数へ統合し、衝突回避のため避けていた実仕様の
- *          関数名 `Dem_ClearDTC` と ServiceID 0x23 を採用した。Dem_Cfg.h
- *          冒頭コメント参照）。
+ * \details 実仕様どおりの 2 段階: 先に `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)` で対象を選び、
+ *          （任意で `Dem_GetDTCSelectionResultForClearDTC()` で選択の結果を確かめ、）本関数を呼ぶ。
+ *          選択は、次に `Dem_SelectDTC()` を呼ぶまで、クライアントごとに残る（[SWS_Dem_01253]）。
  *
- *          `DTC` に予約値 `DEM_GROUP_ALL_DTCS`（0xFFFFFF、ISO 14229-1 Annex D.1
- *          の "all DTCs" グループ）を渡すと、実仕様 [SWS_Dem_01203] のとおり
- *          `DTCOrigin` が示すメモリの全イベントをクリアする。それ以外の値は
- *          特定の DTC コードとみなし、`Dem_GetEventIdOfDTC()` で一致する
- *          イベントを探して 1 件だけクリアする（一致するイベントが無ければ
- *          E_NOT_OK）。
+ *          選んだのが `DEM_GROUP_ALL_DTCS`（0xFFFFFF）なら、[SWS_Dem_01203] のとおり、選んだ DTCOrigin の
+ *          全イベントをクリアする。それ以外は、一致するイベント 1 件だけをクリアする。
  *
- * \param[in]  ClientId   呼び出し元のクライアント識別子。本実装では未使用。
- * \param[in]  DTC        クリア対象の DTC（24-bit UDS 形式）、または
- *                        `DEM_GROUP_ALL_DTCS`（全 DTC 一括クリア）。
- * \param[in]  DTCFormat  DTC のフォーマット。本プロジェクトは
- *                        `DEM_DTC_FORMAT_UDS` のみ対応。
- * \param[in]  DTCOrigin  クリア対象のイベントメモリ。本プロジェクトは
- *                        `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する。
+ *          実仕様は、非同期（`DEM_PENDING`）・複数クライアント（`DEM_CLEAR_BUSY`、`DEM_BUSY`）を前提とするが、
+ *          本プロジェクトは常に同期的に完了するため、`DEM_PENDING`・`DEM_BUSY` は返さない。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
  *
  * \retval  E_OK                    正常クリア（RAM の状態を戻し、不揮発メモリへの書き込みも積んだ）。
- * \retval  E_NOT_OK                未初期化。
- * \retval  DEM_WRONG_DTC           DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外
- *                                  （要求した形式の DTC は構成されていない）。
- * \retval  DEM_WRONG_DTCORIGIN     DTCOrigin が非対応。
+ * \retval  E_NOT_OK                未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない
+ *                                  （DEM_E_WRONG_CONDITION、[SWS_Dem_01255]）。
+ * \retval  DEM_WRONG_DTC           選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN     選んだ DTCOrigin が非対応。
  * \retval  DEM_CLEAR_MEMORY_ERROR  不揮発メモリへの書き込みを積めなかった（NvM_WriteBlock() が失敗。RAM 上は
  *                                  クリア済み（巻き戻しはしない）だが、再起動すると、クリアした内容が復活しうる）。
  *
- * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_91016, SWS_Dem_01203}
+ * \AUTOSARReq     {SWS_Dem_00665, SWS_Dem_01203, SWS_Dem_01253, SWS_Dem_01255}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
  */
-Std_ReturnType Dem_ClearDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
+Std_ReturnType Dem_ClearDTC(uint8 ClientId);
+
+/**
+ * \brief   直近の Dem_SelectDTC() が、有効な DTC（または DTC グループ）を選んだかを返す（[SWS_Dem_91023]）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、または Dem_SelectDTC() が呼ばれていない
+ *                               （DEM_E_WRONG_CONDITION、[SWS_Dem_01255]）。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、または DTCFormat が DEM_DTC_FORMAT_UDS 以外。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91023, SWS_Dem_01253}
+ * \ServiceID      {0xb8}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_GetDTCSelectionResult(uint8 ClientId);
+
+/**
+ * \brief   Dem_GetDTCSelectionResult() と同じだが、DTC 消去（Dem_ClearDTC()）の設定を考慮した結果を返す
+ *          （[SWS_Dem_91020]）。Dcm が、0x14 の否定応答コードを決めるために、消去の前に呼ぶ。
+ *
+ * \details 単一の DTC の消去だけを許す設定（DemClearDTCLimitation）は持たないため、結果は
+ *          Dem_GetDTCSelectionResult() と同じ。ただし、Dem_SelectDTC() が呼ばれていないときは、
+ *          E_NOT_OK ではなく DEM_WRONG_DTC を返す（本関数の戻り値表に E_NOT_OK が無いため。[SWS_Dem_01261]）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK                 選んだ DTC（または DTC グループ）が有効。
+ * \retval  E_NOT_OK             未初期化、または ClientId が範囲外。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、DTCFormat が DEM_DTC_FORMAT_UDS 以外、
+ *                               または Dem_SelectDTC() が呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_91020, SWS_Dem_01253, SWS_Dem_01261}
+ * \ServiceID      {0xbb}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId);
+
+/**
+ * \brief   以降の Dem_ClearDTC() などの対象にする、DTC（または DTC グループ）を選ぶ（[SWS_Dem_91016]）。
+ *
+ * \details 選択は、クライアントごとに、次に本関数を呼ぶまで残る（[SWS_Dem_01253]）。選択が有効かどうかは、
+ *          本関数の戻り値ではなく、Dem_GetDTCSelectionResult() など、選択に続く API の戻り値で分かる
+ *          （[SWS_Dem_01254]）。`DTC` に `DEM_GROUP_ALL_DTCS`（0xFFFFFF）を渡すと、全 DTC のグループを選ぶ。
+ *          本プロジェクトは、DTC グループを、これ 1 つだけ持つ。
+ *
+ * \param[in]  ClientId   呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[in]  DTC        選ぶ DTC（24-bit UDS 形式）、または `DEM_GROUP_ALL_DTCS`。
+ * \param[in]  DTCFormat  DTC のフォーマット。本プロジェクトは `DEM_DTC_FORMAT_UDS` のみ対応。
+ * \param[in]  DTCOrigin  イベントメモリ。本プロジェクトは `DEM_DTC_ORIGIN_PRIMARY_MEMORY` のみ構成する
+ *                        （対応外の値は DEM_E_WRONG_CONFIGURATION を報告する）。
+ *
+ * \retval  E_OK      選択の処理を受け付けた（選択の結果は、Dem_GetDTCSelectionResult() で分かる）。
+ * \retval  E_NOT_OK  未初期化、または ClientId が範囲外。
+ *
+ * \AUTOSARReq     {SWS_Dem_91016, SWS_Dem_01253, SWS_Dem_01254}
+ * \ServiceID      {0xb7}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFormat, Dem_DTCOriginType DTCOrigin);
+
+/**
+ * \brief   Dem_SelectDTC() で選んだ DTC のステータスバイトを取得する（[SWS_Dem_00212]）。
+ *
+ * \details Dcm は、イベント ID ではなく、本関数で DTC のステータスを取得する（`Dem_GetEventUdsStatus()` は、
+ *          SW-C や BSW モジュールが、イベント単位で使う）。ステータスは、`DemStatusAvailabilityMask` で
+ *          マスクして返す。DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
+ *
+ * \param[in]   ClientId   呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ * \param[out]  DTCStatus  ステータスバイト（ISO 14229-1）の格納先。NULL 禁止。E_OK 以外のときは不定。
+ *
+ * \retval  E_OK                 DTCStatus へ格納した。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、DTCStatus が NULL、または Dem_SelectDTC() が
+ *                               呼ばれていない（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        選んだ DTC に一致するイベントが無い、DTCFormat が DEM_DTC_FORMAT_UDS 以外、
+ *                               または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00212, SWS_Dem_01253}
+ * \ServiceID      {0x15}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus);
 
 /**
  * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。

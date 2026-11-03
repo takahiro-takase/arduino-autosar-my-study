@@ -1625,7 +1625,7 @@ static void Dcm_HandleEcuReset(const uint8* uds, uint8 udsLen)
  * ----------------------------------------------------------------------- */
 
 /**
- * \brief   Dem_ClearDTC() の戻り値を、UDS 0x14 の否定応答コード（NRC）へ対応付ける。
+ * \brief   Dem_SelectDTC() 系・Dem_ClearDTC() の戻り値を、UDS 0x14 の否定応答コード（NRC）へ対応付ける。
  *
  * \details 仕様の対応（[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）:
  *            - DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN → 0x31 requestOutOfRange
@@ -1664,12 +1664,11 @@ static uint8 Dcm_ClearDtcResultToNrc(Std_ReturnType clearRet)
 /**
  * \brief   UDS 0x14 ClearDiagnosticInformation を処理する。
  *
- * \details groupOfDTC をそのまま Dem_ClearDTC() の DTC 引数へ渡す。
- *          0xFFFFFF (DEM_GROUP_ALL_DTCS) なら全 DTC を、それ以外は特定の
- *          DTC コード 1 件をクリアする（内部での分岐は Dem_ClearDTC() 側が
- *          行う。2026-09-27 是正: 従来の Dem_ClearAllDTCs()/Dem_ClearOneDtc()
- *          2関数呼び分けを Dem_ClearDTC() 1関数へ統合。Dem.h 参照）。
- *          Dem_ClearDTC() が失敗したときの否定応答コードは、Dcm_ClearDtcResultToNrc() が決める
+ * \details groupOfDTC をそのまま Dem_SelectDTC() の DTC 引数へ渡して対象を選び、Dem_GetDTCSelectionResultForClearDTC() で
+ *          選択の結果を確かめてから、Dem_ClearDTC() で消去する（実仕様の 2 段階。2026-11 是正: 以前は、
+ *          3 つの引数を 1 関数にまとめた、独自の 4 引数の Dem_ClearDTC() だった。Dem.h 参照）。
+ *          0xFFFFFF (DEM_GROUP_ALL_DTCS) なら全 DTC を、それ以外は特定の DTC コード 1 件をクリアする。
+ *          Dem の呼び出しのどれかが失敗したときの否定応答コードは、Dcm_ClearDtcResultToNrc() が決める
  *          （[SWS_Dcm_00705]〜[00708]/[00966]/[01060]/[01408]）。成功なら正応答 [0x54] を返す。
  *          DTC 履歴の消去は誤操作・悪用の影響が大きいため二重に保護する:
  *            ・extendedSession 限定（Dcm_ProcessRequest の Dcm_SidSessionTable[] が判定、
@@ -1699,7 +1698,16 @@ static void Dcm_HandleClearDtc(const uint8* uds, uint8 udsLen)
                  | ((uint32)uds[2] <<  8U)
                  | (uint32)uds[3];
 
-    const Std_ReturnType clearRet = Dem_ClearDTC(DCM_DEM_CLIENT_ID, group, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    /* [SWS_Dem_01253]: 先に対象を選び、選択の結果（NRC の判定に使う）を確かめてから、消去する。 */
+    Std_ReturnType clearRet = Dem_SelectDTC(DCM_DEM_CLIENT_ID, group, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    if (clearRet == E_OK)
+    {
+        clearRet = Dem_GetDTCSelectionResultForClearDTC(DCM_DEM_CLIENT_ID);
+    }
+    if (clearRet == E_OK)
+    {
+        clearRet = Dem_ClearDTC(DCM_DEM_CLIENT_ID);
+    }
     if (clearRet != E_OK)
     {
         Dcm_SendNegativeResponse(DCM_SID_CLEAR_DTC, Dcm_ClearDtcResultToNrc(clearRet));

@@ -169,7 +169,8 @@ TEST_F(FiM_DemTriggerOnMonitorStatus_Test, Dem_ClearDTC_OK_ReleasesFidWithoutWai
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    (void)Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);   // FiM_MainFunction() は呼ばない
+    (void)Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    (void)Dem_ClearDTC(0U);   // FiM_MainFunction() は呼ばない
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -192,7 +193,8 @@ TEST_F(FiM_DemTriggerOnMonitorStatus_Test, Dem_ClearDTC_OK_SingleDtcReleasesFidW
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    (void)Dem_ClearDTC(0U, dtc, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    (void)Dem_SelectDTC(0U, dtc, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    (void)Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -242,7 +244,8 @@ TEST_F(FiM_DemTriggerOnMonitorStatus_Test, Dem_ClearDTC_OK_UnchangedStatusDoesNo
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    (void)Dem_ClearDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    (void)Dem_SelectDTC(0U, DEM_GROUP_ALL_DTCS, DEM_DTC_FORMAT_UDS, DEM_DTC_ORIGIN_PRIMARY_MEMORY);
+    (void)Dem_ClearDTC(0U);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */

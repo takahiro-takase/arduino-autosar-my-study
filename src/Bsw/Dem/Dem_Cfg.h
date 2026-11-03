@@ -151,6 +151,10 @@
 #define DEM_API_ID_GET_FREEZE_FRAME_OF_EVENT        0x26U
 #define DEM_API_ID_GET_EVENT_ID_OF_DTC              0x27U
 #define DEM_API_ID_CLEAR_DTC                        0x23U
+#define DEM_API_ID_GET_STATUS_OF_DTC                0x15U
+#define DEM_API_ID_SELECT_DTC                       0xB7U
+#define DEM_API_ID_GET_DTC_SELECTION_RESULT         0xB8U
+#define DEM_API_ID_GET_DTC_SELECTION_RESULT_FOR_CLEAR_DTC 0xBBU
 #define DEM_API_ID_GET_OCCURRENCE_COUNTER_OF_EVENT  0x2EU
 #define DEM_API_ID_SET_DTC_FILTER                   0x13U
 #define DEM_API_ID_GET_NUMBER_OF_FILTERED_DTC       0x17U
@@ -338,5 +342,9 @@
 
 /** SID 0x14 で "全 DTC クリア" を指定するグループコード */
 #define DEM_GROUP_ALL_DTCS                   0xFFFFFFUL
+
+/** DemClientId の数（[SWS_Dem_01252]）。本プロジェクトは、Dcm だけが使う 1 クライアント（ClientId = 0）。
+ *  Dem_SelectDTC() の選択は、クライアントごとに持つ。範囲外の ClientId は DEM_E_WRONG_CONFIGURATION。 */
+#define DEM_CLIENT_COUNT                     1U
 
 #endif /* DEM_CFG_H */
