@@ -218,6 +218,16 @@ boolean CanTp_Test_IsTxBusy(void);
 void CanTp_Test_SetTxWaitFc(void);
 
 /**
+ * \brief   [テスト専用] 受信側が FC で送るブロックサイズ（BS）を設定する。
+ *
+ * \details 設定値（CANTP_BLOCK_SIZE）は 0 のため、ブロックごとの FC の送信を確かめるために、実行時の値を変える。
+ *          CanTp_Init() が、設定値へ戻す。
+ *
+ * \param[in]  bs  ブロックサイズ（0 = ブロックごとの FC なし）。
+ */
+void CanTp_Test_SetRxBlockSize(uint8 bs);
+
+/**
  * \brief   [テスト専用] 直近の FC フレームで受信し、換算した STmin（ms）を返す。
  *
  * \details CTS の FC フレームを受信すると、CanTp が、FC の STmin の生の値を ms に換算して保持する。

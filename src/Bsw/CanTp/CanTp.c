@@ -124,6 +124,8 @@ static struct {
     uint16            msgLen;    /**< FF で通知された総メッセージ長 */
     uint16            pos;       /**< Dcm へコピー済みのバイト数    */
     uint8             sn;        /**< 次に受信すべき CF シーケンス番号 */
+    uint8             bs;        /**< この受信で FC に載せるブロックサイズ。FF の受信時に CanTp_RxBlockSize から固定する（[SWS_CanTp_00067]: 途中で変えない） */
+    uint8             bsCnt;     /**< 現ブロックで、FC を送るまでに受信する CF の残り数（bs が 0 のときは使わない） */
     CanTp_RxStateType state;
     unsigned long     timer;     /**< N_Cr タイムアウト基点 (ms)   */
 } CanTp_Rx;
@@ -155,6 +157,10 @@ static struct {
  *  このフラグを使う。 */
 static uint8 CanTp_Initialized = 0U;
 
+/** 受信側が FC で送るブロックサイズ（BS。0 = ブロックごとの FC なし）。CanTp_Init() が CANTP_BLOCK_SIZE へ戻す。
+ *  BS は上限で、受信の状況に合わせて、設定値以下へ変えてよい（[SWS_CanTp_00091]）ため、定数ではなく変数で持つ。 */
+static uint8 CanTp_RxBlockSize = CANTP_BLOCK_SIZE;
+
 /** TX フレーム送信用バッファ (SF/FF/CF 共用)。FC は、CF の組み立て済みフレーム（再送待ち）を壊さないよう、
  *  CanTp_SendFlowControl() の中の別のバッファを使う */
 static uint8 CanTp_TxFrameBuf[8];
@@ -179,6 +185,7 @@ static void CanTp_RxAbort(void);
 static BufReq_ReturnType CanTp_CopyToUpper(const uint8* src, uint8 len);
 static void CanTp_TxFinish(Std_ReturnType result);
 static Std_ReturnType CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin);
+static boolean CanTp_SendRxFlowControl(void);
 static void CanTp_SendNextCF(void);
 static uint8 CanTp_DecodeStMin(uint8 raw);
 
@@ -206,6 +213,9 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr)
     CanTp_Rx.state  = CANTP_RX_IDLE;
     CanTp_Rx.msgLen = 0U;
     CanTp_Rx.pos    = 0U;
+    CanTp_Rx.bs     = 0U;
+    CanTp_Rx.bsCnt  = 0U;
+    CanTp_RxBlockSize = CANTP_BLOCK_SIZE;
     CanTp_Tx.state       = CANTP_TX_IDLE;
     CanTp_Tx.msgLen      = 0U;
     CanTp_Tx.pos         = 0U;
@@ -599,6 +609,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
 
         CanTp_Rx.msgLen = msgLen;
         CanTp_Rx.sn     = 1U;
+        CanTp_Rx.bs     = CanTp_RxBlockSize;
+        CanTp_Rx.bsCnt  = CanTp_Rx.bs;
         CanTp_Rx.state  = CANTP_RX_WAIT_CF;
         CanTp_Rx.timer  = CanTp_GetNowMs();
 
@@ -613,13 +625,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         }
         CanTp_Rx.pos = (uint16)CANTP_FF_DATA;
 
-        /* [SWS_CanTp_00342]: FC の送信が失敗したら、受信を終了する（上位層へは E_NOT_OK を通知する）。 */
-        if (CanTp_SendFlowControl(CANTP_FC_CTS, CANTP_BLOCK_SIZE, CANTP_ST_MIN) != E_OK)
-        {
-            DET_LOGE(TAG, "RX FF: FC send failed abort");
-            CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_COM);
-            CanTp_RxAbort();
-        }
+        (void)CanTp_SendRxFlowControl();
         break;
     }
 
@@ -677,6 +683,26 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             DET_LOGD(TAG, "RX MF done len=%u", (unsigned)CanTp_Rx.msgLen);
 
             PduR_CanTpRxIndication(CANTP_RX_SDU_ID, E_OK);
+        }
+        else if (CanTp_Rx.bs > 0U)
+        {
+            /* [SWS_CanTp_00278]: ブロック（BS 本の CF）の最後の CF の後で、まだ続きがあれば、FC を送る
+             * （BS・STmin は、どの FC も同じ値。[SWS_CanTp_00067]）。 */
+            CanTp_Rx.bsCnt--;
+            if (CanTp_Rx.bsCnt == 0U)
+            {
+                CanTp_Rx.bsCnt = CanTp_Rx.bs;
+
+                if (!CanTp_SendRxFlowControl())
+                {
+                    break;
+                }
+                CanTp_Rx.timer = CanTp_GetNowMs();   /* 次のブロックの先頭の CF を、N_Cr で待つ */
+            }
+        }
+        else
+        {
+            /* ブロックサイズ 0: FC は FF の後の 1 回だけ */
         }
         break;
     }
@@ -1033,6 +1059,22 @@ static Std_ReturnType CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
     return CanTp_SendFrame(fcFrame);
 }
 
+/** 受信中の N-SDU の次のブロックのために、FC(CTS)（この受信で固定した BS、STmin）を送る。
+ *  送信に失敗したら、受信を終了し（[SWS_CanTp_00342]。上位層へは E_NOT_OK を通知する）、DET の実行時エラーを報告する。
+ *  \retval TRUE   送信を受け付けた。
+ *  \retval FALSE  送信に失敗し、受信を終了した。 */
+static boolean CanTp_SendRxFlowControl(void)
+{
+    if (CanTp_SendFlowControl(CANTP_FC_CTS, CanTp_Rx.bs, CANTP_ST_MIN) != E_OK)
+    {
+        DET_LOGE(TAG, "RX: FC send failed abort");
+        CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_COM);
+        CanTp_RxAbort();
+        return FALSE;
+    }
+    return TRUE;
+}
+
 /**
  * \brief   次の Consecutive Frame を組立て送信する。
  *
@@ -1162,6 +1204,19 @@ boolean CanTp_Test_IsTxBusy(void)
 void CanTp_Test_SetTxWaitFc(void)
 {
     CanTp_Tx.state = CANTP_TX_WAIT_FC;
+}
+
+/**
+ * \brief   [テスト専用] 受信側が FC で送るブロックサイズ（BS）を設定する。
+ *
+ * \details 設定値（CANTP_BLOCK_SIZE）は 0 のため、ブロックごとの FC の送信を確かめるために、実行時の値を変える。
+ *          CanTp_Init() が、設定値へ戻す。
+ *
+ * \param[in]  bs  ブロックサイズ。
+ */
+void CanTp_Test_SetRxBlockSize(uint8 bs)
+{
+    CanTp_RxBlockSize = bs;
 }
 
 /**

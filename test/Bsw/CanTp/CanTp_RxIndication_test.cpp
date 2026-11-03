@@ -748,6 +748,136 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FlowControlIsPaddedWithCon
     }
 }
 
+// FF（総長 total、先頭 6 バイトは 0）を受け取ったことにする。
+static void ReceiveFirstFrameOfLength(uint16 total)
+{
+    uint8 frame[8] = { (uint8)(0x10U | (uint8)(total >> 8U)), (uint8)(total & 0xFFU), 0U, 0U, 0U, 0U, 0U, 0U };
+    PduInfoType info = { frame, 8U };
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FlowControlIsSentAfterEachBlockOfConsecutiveFrames)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetRxBlockSize(2U);
+    ReceiveFirstFrameOfLength(27U);   // FF の 6 バイト + CF 3 本（7 バイトずつ）
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);   // FF の後の FC
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 2U); // FC の BS
+    ReceiveConsecutiveFrame(1U, 8U);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);   // ブロックの途中では、FC を送らない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);   // ブロックの最後の CF（続きがある）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_Transmit, 2U);   // [SWS_CanTp_00278]: 次のブロックのための FC
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x30U);
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 2U);   // [SWS_CanTp_00067]: BS は、どの FC も同じ値
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);
+
+    ReceiveConsecutiveFrame(3U, 8U);   // 次のブロックの CF（最後）
+    EXPECT_NE(LastData_CanIf_Transmit[0] & 0xF0U, 0x30U);   // 受信が完了したので、FC は送らない（最後の送信は、Dcm の応答）
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_NoFlowControlWhenMessageEndsAtBlockEnd)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetRxBlockSize(2U);
+    ReceiveFirstFrameOfLength(20U);   // FF の 6 バイト + CF 2 本（ちょうど 1 ブロック）
+    ReceiveConsecutiveFrame(1U, 8U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);   // ブロックの最後で、メッセージの最後
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(LastData_CanIf_Transmit[0] & 0xF0U, 0x30U);   // FC は送らない（最後の送信は、Dcm の応答）
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_BlockEndFlowControlSendFailureAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetRxBlockSize(2U);
+    ReceiveFirstFrameOfLength(27U);
+    ReceiveConsecutiveFrame(1U, 8U);
+    FailFromCallCount_CanIf_Transmit = 2U;   // 2 回目の送信（ブロック終わりの FC）が失敗する
+    ForcedReturn_CanIf_Transmit      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);   // [SWS_CanTp_00342]: 受信を終了する
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_COM);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_BlockSizeZeroSendsOnlyOneFlowControl)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrameOfLength(27U);   // 既定のブロックサイズ（0）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+    ReceiveConsecutiveFrame(2U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // FF の後の FC だけ（ブロックごとの FC は送らない）
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 0U);
+
+    ReceiveConsecutiveFrame(3U, 8U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_BlockSizeChangeDoesNotAffectReceptionInProgress)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrameOfLength(27U);   // ブロックサイズ 0 で、受信が始まる
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    CanTp_Test_SetRxBlockSize(2U);   // 受信の途中で、変わる（[SWS_CanTp_00067]: 受信の途中の FC には、反映しない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+    ReceiveConsecutiveFrame(2U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // ブロックごとの FC は送らない
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);
+}
+
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FcStMinDirectValueIsKept)
 {
     /* ----------------------- */

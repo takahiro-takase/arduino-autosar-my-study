@@ -447,6 +447,9 @@ CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は
 (6) 最初の `CopyTxData` が BUSY なら、受け付けて再試行（[SWS_CanTp_00184]・[SWS_CanTp_00167]・[SWS_CanTp_00280]）。
 残る乖離: 受信側の BS≠0 の FC 再送（00278）、N_Br/FC(WAIT)/WFTmax（00082 ほか）、タイマの起点を送信確認にする件（00075 ほか）、
 機能アドレッシング・複数チャネル（00092・00096）、未実装 API（Shutdown・Cancel*・ChangeParameter・ReadParameter）。）
+（2026-11-03 追記 4: 受信側の BS≠0 の FC の再送（[SWS_CanTp_00278]・[SWS_CanTp_00067]）を実装した。BS は実行時の変数（`CanTp_RxBlockSize`）で持つ。
+タイマの起点を送信確認にする件（00075 ほか）は見送り: 本プロジェクトの TX 確認は、`Can_Write()` の成功で積んだ保留キューを `Can_MainFunction_Write()` が通知するだけで、MCP2515 の送信完了と結びついていないため、
+CanTp 側で確認を待っても、実際の N_As・N_Ar を表せない。先に、Can ドライバの TX 確認を、ハードウェアの送信完了（TXREQ のクリア・エラー）に結びつける必要がある。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

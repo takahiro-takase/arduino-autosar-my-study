@@ -56,6 +56,8 @@ Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は
   待っている間も、チャネルは使用中で、新しい送信要求は拒否します。
 - `StartOfReception` が受け入れても、空きが、受信済みのデータ（SF の長さ、FF の 6 バイト）より小さいときは、受信を中断します。
 - FC の送信が失敗したら、受信を終了し、上位へ `E_NOT_OK` を通知します。
+- 受信側のブロックサイズ（BS。`CANTP_BLOCK_SIZE`、現在は 0）が 0 以外のときは、FF の後と、各ブロック（BS 本の CF）の最後の CF の後（続きがあるとき）に、同じ BS・STmin の FC(CTS) を送ります（[SWS_CanTp_00278]、[SWS_CanTp_00067]）。
+  BS は上限で、実行時の変数（`CanTp_RxBlockSize`。`CanTp_Init()` が設定値へ戻す）で持ちます（[SWS_CanTp_00091]）。
 - パディングは `CANTP_PADDING_BYTE`（`CanTp.json` の `paddingByte`。既定 0xAA）で埋めます（SF、最後の CF、FC）。
 - 中断したときは、DET の実行時エラーを報告します（[SWS_CanTp_00229]）: タイムアウト（N_Cr は `CANTP_E_RX_COM`、N_Bs・N_As・N_Cs は `CANTP_E_TX_COM`）、
   それ以外（シーケンス番号の誤り、上位層の失敗、FC の OVFLW、FC の送信失敗など）は `CANTP_E_COM`。
