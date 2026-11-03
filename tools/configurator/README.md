@@ -40,6 +40,9 @@ src/Bsw/CanIf/CanIf_PBCfg.c, CanIf_Cfg.h / src/Bsw/Com/Com_PBCfg.c, Com_Cfg.h / 
 - 信号表に無いフレーム（UDS 診断など）だけ、設定 json に `canId` と `dlc` を直接書きます。
 - 設定 json に書くのは、信号表から決まらない値です（PDU ID の割り当て、経路の宛先モジュール、HTH/HRH、
   Com の送信モード・フィルタ・コールバック名など）。
+- **PduR の TP のルーティング**（`tpRxPaths` / `tpTxPaths`。CanTp ↔ Dcm の診断の経路）の ID は、`CanTp.json` の
+  `rxSduId`・`txSduId`・`dcmRxPduId`・`dcmTxPduId` と一致していなければなりません（食い違うと、生成時にエラー）。
+  生成される表は、`CANTP_RX_SDU_ID` などのマクロで書きます。関数は固定（`Dcm_StartOfReception` など）です。
 - **PduR は Com の I-PDU を名前で参照します**（`ipdu` / `confIpdu`）。PduR の宛先 ID の数値は、生成時に Com の設定から引きます。
   Com の `pduRId` も、PduR の経路から引きます（SecOC 経由の I-PDU は、SecOC の設定から引きます）。
 - **E2E / SecOC のレイアウトも信号表から引きます。** E2EXf の DataLength・Offset・DataID（既定は CAN ID）、
@@ -194,8 +197,8 @@ UDS の DID（0x22 読み出し・0x2E 書き込み・0x2F 入出力制御）の
 どちらも信号表とは関係なく、`config/data/CanTp.json` と `CanNm.json` が入力です（`modules/cantp.py`、`modules/cannm.py`）。
 定義の説明コメントも json の `doc` に持ち、`CanTp_Cfg.h`・`CanNm_Cfg.h` の目印の間に生成します（DET のエラーコード、API ID、バージョン情報などの手書きの定義は、そのまま残しています）。
 
-- **他のモジュールの PDU は名前で指します。** CanNm の `canifTxPdu` / `canifRxPdu` は CanIf.json の PDU の名前、CanTp の `pdurTxSrcPdu` は PduR.json の `txPaths` の名前です。
-  生成物ではシンボリック名（`CanIfConf_CanIfTxPduCfg_CanNm_Tx`、`PduRConf_PduRSrcPdu_DiagResp_Tx` など）になり、以前の `2U` / `1U` のような添字の手合わせはなくなりました。
+- **他のモジュールの PDU は名前で指します。** CanNm の `canifTxPdu` / `canifRxPdu` は CanIf.json の PDU の名前、CanTp の `canIfTxPdu` は CanIf.json の `txPdus` の名前です。
+  生成物ではシンボリック名（`CanIfConf_CanIfTxPduCfg_CanNm_Tx`、`CanIfConf_CanIfTxPduCfg_DiagResp_Tx` など）になり、以前の `2U` / `1U` のような添字の手合わせはなくなりました。
   名前が無いとき、または PDU の上位層が違うとき（CanNm なら CANNM、CanTp なら CANTP でないとき）は生成エラーです。
 - **周期の検査**: CanNm の `cycleMs` が `Os_PBCfg.c` の `CanNm_MainFunction` の周期と一致するかを検査します。`timeoutMs` は `cycleMs` より長くします。
 - 見出しコメントは `*Section`、MISRA 2.5（未使用マクロ）の抑止コメントは `unused: true` で指定します。

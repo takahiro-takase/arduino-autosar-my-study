@@ -25,7 +25,7 @@
  * ====================================================================== */
 
 #include "Platform_Types.h"
-#include "PduR_Cfg.h"
+#include "CanIf_Cfg.h"
 
 /* ======================================================================
  * Definitions
@@ -51,8 +51,8 @@
 /** 開発エラーコード（7.4.1 表より、実際に使用する分のみ） */
 #define CANTP_E_PARAM_POINTER   0x03U  /* [SWS_CanTp_00321 等]: NULL ポインタチェック */
 #define CANTP_E_UNINIT          0x20U  /* [SWS_CanTp_00031]: 未初期化時の API 呼び出し */
-#define CANTP_E_INVALID_TX_ID   0x30U  /* TxSduId が本実装の固定チャネル ID と不一致 */
-#define CANTP_E_INVALID_RX_ID   0x40U  /* RxPduId が本実装の固定チャネル ID と不一致 */
+#define CANTP_E_INVALID_TX_ID   0x30U  /* TxSduId（CanTp_Transmit）または TxPduId（CanTp_TxConfirmation）が、本実装の固定チャネル ID と不一致 */
+#define CANTP_E_INVALID_RX_ID   0x40U  /* RxPduId（CanTp_RxIndication）が、本実装の固定チャネル ID と不一致 */
 
 /** CAN フレーム（N-PDU）の長さ [バイト]。送受信とも常に 8 バイトへパディングする（受信パディング ON、[SWS_CanTp_00344] 他）。
  *  CanIf の設定 DLC（CanIf_PBCfg.c）と同じ値にすること（CAN FD では 64 などに変わる）。 */
@@ -60,6 +60,9 @@
 
 /** ランタイムエラーコード（7.4.2 [SWS_CanTp_00352] 表）。Det_ReportRuntimeError() で報告する。 */
 #define CANTP_E_PADDING         0x70U  /* 長さが 8 バイト未満の PDU を受信した（パディング ON の前提に反する） */
+#define CANTP_E_COM             0xB0U  /* [SWS_CanTp_00229]: タイムアウト以外の理由で、受信・送信を中断した */
+#define CANTP_E_RX_COM          0xC0U  /* [SWS_CanTp_00229]: 受信がタイムアウト（N_Cr など）で中断した */
+#define CANTP_E_TX_COM          0xD0U  /* [SWS_CanTp_00229]: 送信がタイムアウト（N_Bs、N_As、N_Cs など）で中断した */
 
 /** ApiId（各関数の Doxygen \ServiceID タグと一致させること。値は SWS 8.x 章の
  *  「Service ID[hex]」記載を実測して確認済み） */
@@ -110,17 +113,31 @@
 #define CANTP_N_AS_TIMEOUT_MS  1000UL
 
 /* -----------------------------------------------------------------------
+ * N-PDU のパディング（[SWS_CanTp_00059]、ECUC_CanTp_00298）
+ * ----------------------------------------------------------------------- */
+
+/** パディングバイト（CanTpPaddingByte）: SF・最後の CF・FC の、使わないバイトに入れる値（0xAA）。
+ *  ISO 15765-2 は値を定めない。0x00 や 0xFF とは違う値にして、バスの上でデータとの区別をつける。 */
+#define CANTP_PADDING_BYTE  0xAAU
+
+/* -----------------------------------------------------------------------
  * PDU / N-SDU ID
  * ----------------------------------------------------------------------- */
 
-/** CanTp が診断応答フレームを送信する際に使用する PduR TX SrcPduId
- *  （PduR.json の txPaths の name から求めたシンボリック名。CAN 0x7E8 の経路）。 */
-#define CANTP_PDUR_TX_SDU_ID  PduRConf_PduRSrcPdu_DiagResp_Tx
+/** CanTp が診断応答のフレーム（N-PDU）を送信する際に、CanIf_Transmit() へ渡す CanIf の TX PDU
+ *  （CanIf.json の txPdus の name から求めたシンボリック名。CAN 0x7E8 の PDU。txConfirm は CANTP）。 */
+#define CANTP_CANIF_TX_PDU_ID  CanIfConf_CanIfTxPduCfg_DiagResp_Tx
 
-/** Dcm が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル) */
+/** CanIf が CanTp_TxConfirmation() に渡す、TX N-PDU の ID（CanIf.json の DiagResp_Tx の上位層へ返す ID）。 */
+#define CANTP_TX_NPDU_ID  2U
+
+/** CanIf が CanTp_RxIndication() に渡す、RX N-PDU の ID（CanIf.json の DiagReq_Rx の上位層へ渡す ID）。 */
+#define CANTP_RX_NPDU_ID  1U
+
+/** PduR の TP のルーティングパス（PduR.json の tpTxPaths）が CanTp_Transmit() に渡す TX N-SDU ID (診断応答チャネル)。N-PDU の ID（txNPduId）とは別の名前空間 */
 #define CANTP_TX_SDU_ID  0U
 
-/** CanTp_RxIndication() が受け取る RX N-SDU ID (診断要求チャネル) */
+/** PduR の TP のルーティングパス（PduR.json の tpRxPaths）が、PduR_CanTpStartOfReception() などで受け取る RX N-SDU ID (診断要求チャネル)。N-PDU の ID（rxNPduId）とは別の名前空間 */
 #define CANTP_RX_SDU_ID  0U
 
 /** Dcm_StartOfReception() / Dcm_CopyRxData() / Dcm_TpRxIndication() に渡す、Dcm の RX I-PDU の ID。 */

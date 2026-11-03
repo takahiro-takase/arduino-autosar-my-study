@@ -6,23 +6,25 @@
     "DaVinci: /ActiveEcuC/PduR/PduRConfig/PduRRoutingTable 内の",
     "         RECEIVE 方向 PduRRoutingPath ノード数",
     "パス 0: CAN 0x100 → COM   (EngineInfo,  エンジン ECU)",
-    "パス 1: CAN 0x7E0 → CanTp (UDS 診断要求, 診断ツール)",
-    "パス 2: CAN 0x110 → COM   (AbsInfo,     ABS ECU)",
-    "パス 3: CAN 0x120 → SecOC (ImmobilizerCmd, KeyFobEcu 想定。検証成功後",
+    "パス 1: CAN 0x110 → COM   (AbsInfo,     ABS ECU)",
+    "パス 2: CAN 0x120 → SecOC (ImmobilizerCmd, KeyFobEcu 想定。検証成功後",
     "         SecOC 自身が Com_RxIndication() を直接呼ぶため、COM への",
-    "         配信先はここには現れない）"
+    "         配信先はここには現れない）",
+    "UDS 診断要求（CAN 0x7E0）は、CanIf が CanTp_RxIndication() を直接呼ぶ（IF の経路ではない）。",
+    "CanTp が上位層（Dcm）へ渡す N-SDU は、tpRxPaths で運ぶ。"
   ],
   "txPathCountDoc": [
     "TX ルーティングパス数",
     "パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)",
-    "パス 1: CanTp → CanIf TxPduId=1 (CAN 0x7E8, UDS 診断応答)",
-    "パス 2: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)",
-    "パス 3: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC。",
+    "パス 1: COM   → CanIf TxPduId=3 (CAN 0x210, WarningStatus Signal Group)",
+    "パス 2: COM   → CanIf TxPduId=4 (CAN 0x220, E2EHealthStatus PERIODIC。",
     "        E2E Profile05 保護のみ。以前は SecOC を経由していたが撤去済み)",
-    "パス 4: COM   → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus。",
+    "パス 3: COM   → CanIf TxPduId=5 (CAN 0x230, ImmobilizerStatus。",
     "        Signal Gateway の転送先。DIRECT)",
-    "SrcPduId は COM が PduR_ComTransmit() へ、CanTp が PduR_CanTpTransmit() へ",
-    "渡す共通の名前空間のため、各パスで重複しない値を割り当てること。"
+    "パス 4: COM   → CanIf TxPduId=6 (CAN 0x300, TestMsg)",
+    "UDS 診断応答（CAN 0x7E8）は、CanTp が CanIf_Transmit() を直接呼ぶ（IF の経路ではない）。",
+    "SrcPduId は COM が PduR_ComTransmit() へ渡す名前空間。各パスで重複しない値を割り当てること。",
+    "SrcPduId=1 は、かつて CanTp の診断応答に使っていた欠番（既存の ID を変えないため、詰めない）。"
   ],
   "rxPaths": [
     {
@@ -36,19 +38,6 @@
         {
           "module": "COM",
           "ipdu": "EngineInfo_Rx"
-        }
-      ]
-    },
-    {
-      "name": "DiagReq_Rx",
-      "tableSummary": "CAN 0x7E0 → CanTp (UDS 診断)",
-      "summary": "CanIf RxPduId=1 (CAN 0x7E0) → CanTp/DCM",
-      "srcPduId": 1,
-      "destCountNote": "CanTp のみ",
-      "dests": [
-        {
-          "module": "CANTP",
-          "destPduId": 0
         }
       ]
     },
@@ -92,19 +81,11 @@
       "confIpdu": "MeterStatus_Tx"
     },
     {
-      "name": "DiagResp_Tx",
-      "summary": "CanTp (SrcPduId=1) → CanIf TxPduId=1 (CAN 0x7E8)",
-      "srcPduId": 1,
-      "canIfTxPduId": 1,
-      "confDestPduId": 0,
-      "confModule": "CANTP"
-    },
-    {
       "name": "WarningStatus_Tx",
       "frame": "WarningStatus",
       "summary": "COM (SrcPduId=2) → CanIf TxPduId=3 (CAN {canId}, WarningStatus)",
       "note": [
-        "SrcPduId=1 は CanTp が既に使用しているため、COM の 2 番目の TX I-PDU",
+        "SrcPduId=1 は欠番（かつて CanTp の診断応答に使っていた）のため、COM の 2 番目の TX I-PDU",
         "(WarningStatus) には SrcPduId=2 を割り当てる。"
       ],
       "srcPduId": 2,
@@ -150,6 +131,22 @@
       "canIfTxPduId": 6,
       "confIpdu": "TestMsg_Tx",
       "confModule": "COM"
+    }
+  ],
+  "tpRxPaths": [
+    {
+      "name": "DiagReq_TpRx",
+      "summary": "CanTp (RxSduId=0) → Dcm (RX I-PDU 0)。UDS 診断要求の N-SDU",
+      "srcPduId": 0,
+      "destPduId": 0
+    }
+  ],
+  "tpTxPaths": [
+    {
+      "name": "DiagResp_TpTx",
+      "summary": "Dcm (TX I-PDU 0) → CanTp (TxSduId=0)。UDS 診断応答の N-SDU",
+      "srcPduId": 0,
+      "destPduId": 0
     }
   ]
 }

@@ -170,4 +170,69 @@ TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_OK_ReflectsStoppedRightAf
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
 }
 
+TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_OK_ForwardsToCanDriverState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // CanIf を経由せず、Can ドライバのモードだけを変える（CanIf が持つ記録は、STOPPED のまま）。
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    Can_ControllerStateType mode = CAN_CS_UNINIT;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mode, CAN_CS_STARTED);   // [SWS_CANIF_00229]: Can ドライバの状態を返す（CanIf の記録ではない）
+}
+
+TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_NG_CanDriverFailureIsReturned)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Test_SetConfigPtr(NULL);   // Can ドライバを未初期化にする（Can_GetControllerMode() が失敗する）
+    FakeDetHw_Reset();
+    Can_ControllerStateType mode = CAN_CS_STARTED;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(mode, CAN_CS_STARTED);   // 失敗のときは、格納先を書き換えない
+    EXPECT_EQ(FakeDetHw_LastErrorId, CAN_E_UNINIT);   // Can ドライバが、未初期化を報告する
+
+    Can_Init(&canConfig);   // 後続のテストへ、未初期化を残さない
+}
+
+TEST_F(CanIf_GetControllerMode_Test, GetControllerMode_OK_ForwardsSleepState)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_SLEEP), E_OK);   // CanIf を経由せず、Can ドライバだけを SLEEP にする
+    Can_ControllerStateType mode = CAN_CS_UNINIT;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = CanIf_GetControllerMode(0U, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mode, CAN_CS_SLEEP);
+}
+
 }  // namespace

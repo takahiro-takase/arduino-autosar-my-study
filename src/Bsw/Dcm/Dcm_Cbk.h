@@ -5,9 +5,9 @@
  *          CanTp との受け渡しは、仕様の TP の API（`Dcm_StartOfReception`/`Dcm_CopyRxData`/
  *          `Dcm_TpRxIndication`（受信）、`Dcm_CopyTxData`/`Dcm_TpTxConfirmation`（送信））で行う。
  *          CanTp は組み立て用のバッファを持たず、フレームごとに、Dcm の受信バッファへの
- *          コピーと、Dcm の送信バッファからのコピーを行う。仕様では PduR を経由する
- *          （PduR_CanTpStartOfReception など）が、本プロジェクトは PduR の TP の経路を
- *          持たないので、CanTp が Dcm を直接呼ぶ。
+ *          コピーと、Dcm の送信バッファからのコピーを行う。CanTp は PduR の TP の API
+ *          （PduR_CanTpStartOfReception など）を呼び、PduR が、TP のルーティングパスで
+ *          Dcm の PDU ID へ変換して、これらの関数を呼ぶ（Dcm の送信要求は、PduR_DcmTransmit() 経由）。
  *
  * \copyright  Copyright (c) 2025 T_T
  * \license    MIT License - 詳細は LICENSE ファイルを参照。

@@ -21,6 +21,8 @@ extern "C" {
 #include "NvM.h"
 #include "MemIf.h"
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dcm.h"
 #include "Wrap_ComM.h"
@@ -66,6 +68,7 @@ protected:
         FakeDetHw_LogSuppressed = 1U;
 
         CanTp_Init(NULL);
+        PduR_Init(&PduR_Config);
         MemIf_Init();
         NvM_Init(NULL);
         Dem_Init(NULL);

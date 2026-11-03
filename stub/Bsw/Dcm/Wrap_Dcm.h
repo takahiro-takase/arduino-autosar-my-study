@@ -110,6 +110,12 @@ extern Std_ReturnType ForcedReturn_Dcm_ResetToDefaultSession;  /**< 既定 E_NOT
 /** 直近の `Dcm_StartOfReception()` 呼び出しで渡された `TpSduLength`。 */
 extern PduLengthType LastTpSduLength_Dcm_StartOfReception;
 
+/** 直近の `Dcm_StartOfReception()` 呼び出しで渡された `info`（[SWS_CanTp_00329] の確認用）。
+ *  `LastInfoNull_…` は info が NULL なら 1。NULL でなければ、長さを `LastInfoLength_…`、先頭 8 バイトまでを `LastInfoData_…` へ残す。 */
+extern uint8         LastInfoNull_Dcm_StartOfReception;
+extern PduLengthType LastInfoLength_Dcm_StartOfReception;
+extern uint8         LastInfoData_Dcm_StartOfReception[8];
+
 /** 直近の `Dcm_TpRxIndication()` 呼び出しで渡された `result`。 */
 extern Std_ReturnType LastResult_Dcm_TpRxIndication;
 

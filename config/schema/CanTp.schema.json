@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CanTp configuration",
-  "description": "CanTp_Cfg.h のフロー制御・タイムアウト・ID の定義の生成元。診断応答の PduR の経路は、PduR.json の txPaths の名前で指す（生成物ではシンボリック名 PduRConf_PduRSrcPdu_<name> になる）。",
+  "description": "CanTp_Cfg.h のフロー制御・タイムアウト・ID の定義の生成元。診断応答を送る CanIf の TX PDU は、CanIf.json の txPdus の名前で指す（生成物ではシンボリック名 CanIfConf_CanIfTxPduCfg_<name> になる）。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -13,8 +13,12 @@
     "nCrTimeoutMs",
     "nBsTimeoutMs",
     "nAsTimeoutMs",
+    "paddingSection",
+    "paddingByte",
     "idSection",
-    "pdurTxSrcPdu",
+    "canIfTxPdu",
+    "txNPduId",
+    "rxNPduId",
     "txSduId",
     "rxSduId",
     "dcmTxPduId",
@@ -111,10 +115,17 @@
     "nAsTimeoutMs": {
       "$ref": "#/$defs/ms"
     },
+    "paddingSection": {
+      "$ref": "#/$defs/section"
+    },
+    "paddingByte": {
+      "$ref": "#/$defs/byte",
+      "description": "パディングバイト（CanTpPaddingByte）"
+    },
     "idSection": {
       "$ref": "#/$defs/section"
     },
-    "pdurTxSrcPdu": {
+    "canIfTxPdu": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -125,20 +136,28 @@
         "pdu": {
           "type": "string",
           "pattern": "^[A-Za-z][A-Za-z0-9_]*$",
-          "description": "PduR.json の txPaths の name（confModule が CANTP のもの）"
+          "description": "CanIf.json の txPdus の name（txConfirm が CANTP のもの）"
         },
         "doc": {
           "$ref": "#/$defs/doc"
         }
       }
     },
+    "txNPduId": {
+      "$ref": "#/$defs/byte",
+      "description": "CanIf が CanTp_TxConfirmation() に渡す TX N-PDU の ID"
+    },
+    "rxNPduId": {
+      "$ref": "#/$defs/byte",
+      "description": "CanIf が CanTp_RxIndication() に渡す RX N-PDU の ID"
+    },
     "txSduId": {
       "$ref": "#/$defs/byte",
-      "description": "Dcm が CanTp_Transmit() に渡す TX N-SDU ID"
+      "description": "PduR が CanTp_Transmit() に渡す TX N-SDU ID"
     },
     "rxSduId": {
       "$ref": "#/$defs/byte",
-      "description": "CanTp_RxIndication() が受け取る RX N-SDU ID"
+      "description": "PduR_CanTpStartOfReception() などが受け取る RX N-SDU ID"
     },
     "dcmRxPduId": {
       "$ref": "#/$defs/byte",

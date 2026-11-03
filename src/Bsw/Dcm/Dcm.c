@@ -137,7 +137,7 @@
  *            「どの SID がどのセッションで使えるか」を一覧できるようにしている。
  *
  *          応答送信フロー:
- *            Dcm → CanTp_Transmit(CANTP_TX_SDU_ID) → PduR_CanTpTransmit → CanIf
+ *            Dcm → PduR_DcmTransmit(CANTP_DCM_TX_PDU_ID) → CanTp_Transmit → CanIf_Transmit（CanTp が直接呼ぶ）
  *            → Can_Write → MCP2515 → CAN 0x7E8
  *
  *          ComM への診断アクティブ通知 (ComM_DCM_ActiveDiagnostic/
@@ -169,7 +169,8 @@
 #include "Dcm_Cfg.h"
 #include "Dcm_PBCfg.h"
 #include "Dem.h"
-#include "CanTp.h"
+#include "PduR.h"
+#include "CanTp_Cfg.h"
 #include "Rte.h"
 #include "ComM.h"
 #include "NvM.h"
@@ -322,7 +323,7 @@ static uint8 Dcm_TxBuf[DCM_TX_BUF_SIZE];
  *  フレームごとに Dcm_CopyTxData() で、この Dcm_TxBuf から取り出す。 */
 static PduLengthType Dcm_TxPos;
 
-/** 1 = 診断応答の TP 送信が進行中（CanTp_Transmit() の受け付けから、Dcm_TpTxConfirmation() まで）。
+/** 1 = 診断応答の TP 送信が進行中（PduR_DcmTransmit() の受け付けから、Dcm_TpTxConfirmation() まで）。
  *  進行中は新しい要求を受け付けない（[SWS_Dcm_00557]）。S3 タイマも止める（[SWS_Dcm_00141]）。 */
 static uint8 Dcm_TxInProgress;
 
@@ -360,7 +361,7 @@ typedef char Dcm_ReadBuf_Must_Fit_TestPattern[(DCM_DID_READ_MAX_LENGTH >= DCM_DI
 /* cppcheck-suppress misra-c2012-2.3 */
 typedef char Dcm_ReadBuf_Must_Fit_TxBuf[(DCM_TX_BUF_SIZE >= (DCM_DID_READ_MAX_LENGTH + 3U)) ? 1 : -1];
 
-/** CanTp_Transmit に渡す PDU 情報構造体 */
+/** PduR_DcmTransmit に渡す PDU 情報構造体 */
 static PduInfoType Dcm_TxPdu;
 
 /* ======================================================================
@@ -1055,7 +1056,7 @@ void Dcm_TpTxConfirmation(PduIdType id, Std_ReturnType result)
 /**
  * \brief   ComM のチャネルが COMM_NO_COMMUNICATION へ遷移したことを Dcm へ伝える。
  *
- * \details 応答の送信を禁止する（[SWS_Dcm_00148]/[SWS_Dcm_00152]。CanTp_Transmit() を呼ばず、応答は破棄する）。
+ * \details 応答の送信を禁止する（[SWS_Dcm_00148]/[SWS_Dcm_00152]。PduR_DcmTransmit() を呼ばず、応答は破棄する）。
  *          Dcm が扱わない ComM チャネルの通知は何もせず戻る（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
  *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
  *          本プロジェクトの ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は
@@ -1080,7 +1081,7 @@ void Dcm_ComM_NoComModeEntered(uint8 NetworkId)
 /**
  * \brief   ComM のチャネルが COMM_SILENT_COMMUNICATION へ遷移したことを Dcm へ伝える。
  *
- * \details 応答の送信を禁止する（[SWS_Dcm_00153]/[SWS_Dcm_00156]。CanTp_Transmit() を呼ばず、応答は破棄する）。
+ * \details 応答の送信を禁止する（[SWS_Dcm_00153]/[SWS_Dcm_00156]。PduR_DcmTransmit() を呼ばず、応答は破棄する）。
  *          Dcm が扱わない ComM チャネルの通知は何もせず戻る（[SWS_Dcm_01324]〜[SWS_Dcm_01326]）。
  *          ComM_BusSM_ModeIndication() が、チャネルのモードが通知されるたびに呼ぶ。
  *          本プロジェクトの ResponseOnEvent と周期送信（ReadDataByPeriodicIdentifier）は
@@ -1366,21 +1367,21 @@ static void Dcm_Transmit(void)
     if (Dcm_TxEnabled == 0U)
     {
         /* [SWS_Dcm_00148]/[SWS_Dcm_00153]: NO_COM / SILENT_COM の間は応答を送信しない
-         * （CanTp_Transmit() を呼ばない）。通常は到達しない
+         * （PduR_DcmTransmit() を呼ばない）。通常は到達しない
          * （Dcm_ProcessRequest() が、FULL_COM でないときは要求ごと破棄する）。到達するのは、要求の処理中に
          * ComM が NO_COM / SILENT_COM へ移ったときだけで、そのときは要求の処理は済んでおり、応答だけが破棄される。 */
         DET_LOGW(TAG, "response dropped (ComM channel is not in FULL_COM)");
         return;
     }
-    /* CanTp_Transmit() は、応答の長さだけを受け取る。データは、CanTp が Dcm_CopyTxData() で取りに来る
-     * （SF は CanTp_Transmit() の中で、MF は FF と各 CF の組み立ての時に）。進行中の印は、
+    /* PduR_DcmTransmit()（→ CanTp_Transmit()）は、応答の長さだけを受け取る。データは、CanTp が PduR 経由で
+     * Dcm_CopyTxData() に取りに来る（SF は CanTp_Transmit() の中で、MF は FF と各 CF の組み立ての時に）。進行中の印は、
      * CanTp_Transmit() の中で Dcm_TpTxConfirmation() が呼ばれる場合（SF）に備えて、呼ぶ前に立てる。 */
     PduInfoType info;
     info.SduDataPtr = NULL;
     info.SduLength  = Dcm_TxPdu.SduLength;
     Dcm_TxPos        = 0U;
     Dcm_TxInProgress = 1U;
-    if (CanTp_Transmit(CANTP_TX_SDU_ID, &info) != E_OK)
+    if (PduR_DcmTransmit(CANTP_DCM_TX_PDU_ID, &info) != E_OK)
     {
         Dcm_TxInProgress = 0U;   /* 受け付けられなかった（確認通知も来ない） */
     }

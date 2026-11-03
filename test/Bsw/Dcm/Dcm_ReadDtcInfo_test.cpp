@@ -31,6 +31,8 @@
 #include <gtest/gtest.h>
 
 extern "C" {
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Dcm.h"
 #include "Dcm_Cfg.h"
 #include "Dem.h"
@@ -79,6 +81,7 @@ protected:
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         CanTp_Init(NULL);
+        PduR_Init(&PduR_Config);
         NvMTest_ColdBoot();   // 空の EEPROM から NvM を初期化する（Dcm_Init() が失敗回数を NvM から復元するため）
         Dem_Init(NULL);
         Dcm_Init(NULL);

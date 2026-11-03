@@ -49,6 +49,9 @@ static uint8 PduR_GroupEnabled[PDUR_ROUTING_PATH_GROUP_MAX];
 
 static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId);
 static boolean PduR_IsRoutingPathEnabled(boolean isRx, PduIdType srcPduId);
+static const PduR_TpRxRoutingPathType* PduR_FindTpRxPath(PduIdType lowerPduId);
+static const PduR_TpTxRoutingPathType* PduR_FindTpTxPathByUpper(PduIdType upperPduId);
+static const PduR_TpTxRoutingPathType* PduR_FindTpTxPathByLower(PduIdType lowerPduId);
 
 /* ======================================================================
  * Functions
@@ -110,6 +113,39 @@ void PduR_Init(const PduR_PBConfigType* ConfigPtr)
             || ((group->TxPathCount > 0U) && (group->TxSrcPduIds == NULL)))
         {
             DET_LOGE(TAG, "Init E: group[%u] member ids NULL", (unsigned)g);
+            (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+            return;
+        }
+    }
+
+    /* TP のルーティングパスは、呼び出し先の関数ポインタを検査せずに呼ぶため、ここで NULL を弾く。 */
+    if (((ConfigPtr->TpRxPathCount > 0U) && (ConfigPtr->TpRxPaths == NULL))
+        || ((ConfigPtr->TpTxPathCount > 0U) && (ConfigPtr->TpTxPaths == NULL)))
+    {
+        DET_LOGE(TAG, "Init E: TP paths NULL");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+        return;
+    }
+
+    for (uint8 i = 0U; i < ConfigPtr->TpRxPathCount; i++)
+    {
+        const PduR_TpRxRoutingPathType* tp = &ConfigPtr->TpRxPaths[i];
+
+        if ((tp->StartOfReceptionFct == NULL) || (tp->CopyRxDataFct == NULL) || (tp->RxIndicationFct == NULL))
+        {
+            DET_LOGE(TAG, "Init E: TpRxPath[%u] callback NULL", (unsigned)i);
+            (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
+            return;
+        }
+    }
+
+    for (uint8 i = 0U; i < ConfigPtr->TpTxPathCount; i++)
+    {
+        const PduR_TpTxRoutingPathType* tp = &ConfigPtr->TpTxPaths[i];
+
+        if ((tp->TransmitFct == NULL) || (tp->CopyTxDataFct == NULL) || (tp->TxConfirmationFct == NULL))
+        {
+            DET_LOGE(TAG, "Init E: TpTxPath[%u] callback NULL", (unsigned)i);
             (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_INIT, PDUR_E_INIT_FAILED);
             return;
         }
@@ -294,8 +330,7 @@ void PduR_DisableRouting(PduR_RoutingPathGroupIdType id, boolean initialize)
  *          SrcPduId に一致する TX ルーティングパスを検索し、
  *          CanIf_Transmit() へ転送する。
  *          一致するパスが存在しない場合は即座に E_NOT_OK を返す。
- *          CanTp 向けの実体化である `PduR_CanTpTransmit()` は本関数と
- *          挙動が完全に同一のため、本関数へそのまま委譲する。
+ *          CanTp は PduR を経由せず CanIf_Transmit() を直接呼ぶ（Dcm → CanTp は PduR_DcmTransmit()）。
  *
  * \param[in]  SrcPduId    送信する Com 側 PDU の ID。
  *                         TX ルーティングパスの検索に使用する。
@@ -358,51 +393,14 @@ Std_ReturnType PduR_ComTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPt
 }
 
 /* ----------------------------------------------------------------------
- * PduR_CanTpTransmit
- * ---------------------------------------------------------------------- */
-
-/**
- * \brief   CanTp からの PDU 送信要求を CanIf へ転送する（[SWS_PduR_00406]、
- *          generic な PduR_<User:Up>Transmit テンプレートの CanTp 向け実体化）。
- *
- * \details Com 向けの `PduR_ComTransmit()` と挙動が完全に同一（同じ
- *          TX ルーティングテーブルを同じロジックで検索するだけで、CanTp
- *          固有の特別扱いは無い）ため、そのまま委譲する
- *          （`PduR_SecOCTxConfirmation()` が `PduR_CanIfTxConfirmation()` へ
- *          委譲するのと同じ方針。`PduR_SecOCTransmit()` が独自に本体を持つのは
- *          TransmitOverrideFct を評価しないという実際の挙動差があるためで、
- *          今回はそのような差が無い）。
- *
- * \param[in]  SrcPduId    送信する CanTp 側 PDU の ID。
- *                         TX ルーティングパスの検索に使用する。
- * \param[in]  PduInfoPtr  送信するデータと長さへのポインタ。NULL 禁止。
- *
- * \retval  E_OK      PDU が CanIf_Transmit() に正常に転送された。
- * \retval  E_NOT_OK  PduR 未初期化、PduInfoPtr が NULL、
- *                    一致する TX ルーティングパスなし、
- *                    または CanIf_Transmit() が失敗した。
- *
- * \pre        PduR_Init() が正常に完了していること。
- *
- * \AUTOSARReq     {SWS_PduR_00406}
- * \ServiceID      {0x49}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-Std_ReturnType PduR_CanTpTransmit(PduIdType SrcPduId, const PduInfoType* PduInfoPtr)
-{
-    return PduR_ComTransmit(SrcPduId, PduInfoPtr);
-}
-
-/* ----------------------------------------------------------------------
  * PduR_SecOCTransmit
  * ---------------------------------------------------------------------- */
 
 /**
  * \brief   SecOC が変換済みの Secured I-PDU を送信する際に呼ぶ、
- *          PduR_ComTransmit()/PduR_CanTpTransmit() とは別の TX エントリポイント。
+ *          PduR_ComTransmit() とは別の TX エントリポイント。
  *
- * \details PduR_ComTransmit()/PduR_CanTpTransmit() と異なり
+ * \details PduR_ComTransmit() と異なり
  *          TransmitOverrideFct を一切評価せず、常に
  *          CanIf_Transmit() へ直接転送する（SecOC は既に変換を終えた後にここへ
  *          来るため、再度 TransmitOverrideFct を評価すると SecOC_IfTransmit() を
@@ -463,10 +461,59 @@ Std_ReturnType PduR_SecOCTransmit(PduIdType SrcPduId, const PduInfoType* PduInfo
 }
 
 /* ----------------------------------------------------------------------
- * PduR_<User:Up>Transmit
+ * PduR_DcmTransmit
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dcm からの診断応答の送信要求を、CanTp へ転送する（[SWS_PduR_00406]、
+ *          generic な PduR_<User:Up>Transmit テンプレートの Dcm 向け実体化）。
+ *
+ * \details TP のルーティングパス（TpTxPaths）を、Dcm 側の PDU ID（SrcPduId）で検索し、
+ *          CanTp_Transmit() を、CanTp 側の N-SDU ID（DestPduId）で呼ぶ。
+ *          データは渡さない（CanTp が組み立て・送信の時に PduR_CanTpCopyTxData() で取りに来る）。
+ *
+ * \param[in]  id    送信する Dcm 側の PDU の ID。TP の TX ルーティングパスの検索に使用する。
+ * \param[in]  info  送信する N-SDU の長さ（SduLength）を持つ構造体へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      CanTp_Transmit() が要求を受け付けた。
+ * \retval  E_NOT_OK  PduR 未初期化、info が NULL、一致する TP の TX ルーティングパスなし、
+ *                    または CanTp_Transmit() が受け付けなかった。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00406}
+ * \ServiceID      {0x49}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType PduR_DcmTransmit(PduIdType id, const PduInfoType* info)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_UNINIT);
+        return E_NOT_OK;
+    }
+
+    if (info == NULL)
+    {
+        DET_LOGE(TAG, "TP TX E: info NULL");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PARAM_POINTER);
+        return E_NOT_OK;
+    }
+
+    const PduR_TpTxRoutingPathType* path = PduR_FindTpTxPathByUpper(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP TX no route src=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TRANSMIT, PDUR_E_PDU_ID_INVALID);
+        return E_NOT_OK;
+    }
+
+    DET_LOGD(TAG, "TP TX src=%u -> cantp=%u", (unsigned)id, (unsigned)path->DestPduId);
+
+    return path->TransmitFct(path->DestPduId, info);
+}
 
 /* ----------------------------------------------------------------------
  * PduR_<User:Up>CancelTransmit
@@ -752,34 +799,256 @@ Std_ReturnType PduR_CanIfTriggerTransmit(PduIdType TxPduId, PduInfoType* PduInfo
  * ====================================================================== */
 
 /* ----------------------------------------------------------------------
- * PduR_<User:LoTp>CopyRxData
+ * PduR_CanTpStartOfReception
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CanTp が N-SDU の受信を始めたことを、上位層（Dcm）へ伝える。
+ *
+ * \details TP の RX ルーティングパス（TpRxPaths）を、CanTp 側の ID（SrcPduId）で検索し、
+ *          上位層の StartOfReception（Dcm_StartOfReception()）を、上位層の PDU ID（DestPduId）で呼んで、
+ *          戻り値と bufferSizePtr をそのまま返す（[SWS_PduR_00507]）。
+ *
+ * \param[in]   id             CanTp が受信している N-SDU の ID（TP の RX ルーティングパスの SrcPduId）。
+ * \param[in]   info           SF/FF のペイロードと長さ。持たないときは NULL（そのまま上位層へ渡す）。
+ * \param[in]   TpSduLength    受信する N-SDU 全体の長さ。0 のときは、上位層の受信バッファの大きさを問い合わせるだけ。
+ * \param[out]  bufferSizePtr  上位層の受信バッファの空き。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK         上位層が受信を受け入れた。
+ * \retval  BUFREQ_E_NOT_OK   PduR 未初期化、bufferSizePtr が NULL、一致するパスなし、または上位層が拒否した。
+ * \retval  BUFREQ_E_OVFL     上位層に、必要な大きさのバッファがない。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00507}
+ * \ServiceID      {0x46}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType PduR_CanTpStartOfReception(PduIdType id, const PduInfoType* info, PduLengthType TpSduLength,
+                                             PduLengthType* bufferSizePtr)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if (bufferSizePtr == NULL)
+    {
+        DET_LOGE(TAG, "TP StartOfReception E: bufferSizePtr NULL");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    const PduR_TpRxRoutingPathType* path = PduR_FindTpRxPath(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP StartOfReception no route id=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_START_OF_RECEPTION, PDUR_E_PDU_ID_INVALID);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    DET_LOGD(TAG, "TP StartOfReception id=%u -> up=%u len=%u", (unsigned)id, (unsigned)path->DestPduId,
+             (unsigned)TpSduLength);
+
+    return path->StartOfReceptionFct(path->DestPduId, info, TpSduLength, bufferSizePtr);
+}
 
 /* ----------------------------------------------------------------------
- * PduR_<User:LoTp>RxIndication
+ * PduR_CanTpCopyRxData
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CanTp が受信したデータの一部を、上位層（Dcm）へ渡す。
+ *
+ * \details TP の RX ルーティングパスで、上位層の CopyRxData（Dcm_CopyRxData()）を、上位層の PDU ID で
+ *          呼んで、戻り値と bufferSizePtr をそのまま返す（[SWS_PduR_00512]）。
+ *
+ * \param[in]   id             CanTp が受信している N-SDU の ID（TP の RX ルーティングパスの SrcPduId）。
+ * \param[in]   info           コピー元のデータ（SduDataPtr）と長さ（SduLength）。NULL 禁止
+ *                             （SduLength が 0 の問い合わせでは、SduDataPtr は NULL でよい）。
+ * \param[out]  bufferSizePtr  データをコピーした後の、上位層の受信バッファの空き。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK        データをコピーした。
+ * \retval  BUFREQ_E_NOT_OK  PduR 未初期化、info か bufferSizePtr が NULL、一致するパスなし、またはコピーに失敗した。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00512}
+ * \ServiceID      {0x44}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType PduR_CanTpCopyRxData(PduIdType id, const PduInfoType* info, PduLengthType* bufferSizePtr)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_COPY_RX_DATA, PDUR_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if ((info == NULL) || (bufferSizePtr == NULL))
+    {
+        DET_LOGE(TAG, "TP CopyRxData E: NULL pointer");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_COPY_RX_DATA, PDUR_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    const PduR_TpRxRoutingPathType* path = PduR_FindTpRxPath(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP CopyRxData no route id=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_COPY_RX_DATA, PDUR_E_PDU_ID_INVALID);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    return path->CopyRxDataFct(path->DestPduId, info, bufferSizePtr);
+}
 
 /* ----------------------------------------------------------------------
- * PduR_<User:LoTp>StartOfReception
+ * PduR_CanTpRxIndication
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CanTp が N-SDU の受信を終えた（または中断した）ことを、上位層（Dcm）へ伝える。
+ *
+ * \details TP の RX ルーティングパスで、上位層の RxIndication（Dcm_TpRxIndication()）を、上位層の
+ *          PDU ID で呼ぶ（[SWS_PduR_00375]）。
+ *
+ * \param[in]  id      CanTp が受信した N-SDU の ID（TP の RX ルーティングパスの SrcPduId）。
+ * \param[in]  result  受信の結果。E_OK = 完了、E_NOT_OK = 中断。上位層へそのまま渡す。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00375}
+ * \ServiceID      {0x45}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void PduR_CanTpRxIndication(PduIdType id, Std_ReturnType result)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_RX_INDICATION, PDUR_E_UNINIT);
+        return;
+    }
+
+    const PduR_TpRxRoutingPathType* path = PduR_FindTpRxPath(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP RxIndication no route id=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_RX_INDICATION, PDUR_E_PDU_ID_INVALID);
+        return;
+    }
+
+    DET_LOGD(TAG, "TP RxIndication id=%u -> up=%u result=%u", (unsigned)id, (unsigned)path->DestPduId,
+             (unsigned)result);
+
+    path->RxIndicationFct(path->DestPduId, result);
+}
 
 /* ----------------------------------------------------------------------
- * PduR_<User:LoTp>CopyTxData
+ * PduR_CanTpCopyTxData
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CanTp が送信するデータの一部を、上位層（Dcm）から取り出す。
+ *
+ * \details TP の TX ルーティングパスを、CanTp 側の N-SDU ID（DestPduId）で検索し、上位層の CopyTxData
+ *          （Dcm_CopyTxData()）を、上位層の PDU ID（SrcPduId）で呼んで、戻り値と availableDataPtr を
+ *          そのまま返す（[SWS_PduR_00518]）。
+ *
+ * \param[in]   id                CanTp が送信している N-SDU の ID（TP の TX ルーティングパスの DestPduId）。
+ * \param[in]   info              コピー先のバッファ（SduDataPtr）と長さ（SduLength）。NULL 禁止
+ *                                （SduLength が 0 の問い合わせでは、SduDataPtr は NULL でよい）。
+ * \param[in]   retry             再送の指示。NULL なら、コピーしたデータをすぐに捨ててよい（そのまま渡す）。
+ * \param[out]  availableDataPtr  上位層の送信バッファに残るデータの量。NULL 禁止。
+ *
+ * \retval  BUFREQ_OK        データをコピーした。
+ * \retval  BUFREQ_E_BUSY    必要な量のデータがまだない（上位層が返した値）。
+ * \retval  BUFREQ_E_NOT_OK  PduR 未初期化、info か availableDataPtr が NULL、一致するパスなし、または失敗した。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00518}
+ * \ServiceID      {0x43}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+BufReq_ReturnType PduR_CanTpCopyTxData(PduIdType id, const PduInfoType* info, const RetryInfoType* retry,
+                                       PduLengthType* availableDataPtr)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_COPY_TX_DATA, PDUR_E_UNINIT);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    if ((info == NULL) || (availableDataPtr == NULL))
+    {
+        DET_LOGE(TAG, "TP CopyTxData E: NULL pointer");
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_COPY_TX_DATA, PDUR_E_PARAM_POINTER);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    const PduR_TpTxRoutingPathType* path = PduR_FindTpTxPathByLower(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP CopyTxData no route id=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_COPY_TX_DATA, PDUR_E_PDU_ID_INVALID);
+        return BUFREQ_E_NOT_OK;
+    }
+
+    return path->CopyTxDataFct(path->SrcPduId, info, retry, availableDataPtr);
+}
 
 /* ----------------------------------------------------------------------
- * PduR_<User:LoTp>TxConfirmation
+ * PduR_CanTpTxConfirmation
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   CanTp が N-SDU の送信を終えた（または中断した）ことを、上位層（Dcm）へ伝える。
+ *
+ * \details TP の TX ルーティングパスを、CanTp 側の N-SDU ID（DestPduId）で検索し、上位層の TxConfirmation
+ *          （Dcm_TpTxConfirmation()）を、上位層の PDU ID（SrcPduId）で呼ぶ（[SWS_PduR_00381]）。
+ *
+ * \param[in]  id      CanTp が送信した N-SDU の ID（TP の TX ルーティングパスの DestPduId）。
+ * \param[in]  result  送信の結果。E_OK = 完了、E_NOT_OK = 中断。上位層へそのまま渡す。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
+ * \AUTOSARReq     {SWS_PduR_00381}
+ * \ServiceID      {0x48}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void PduR_CanTpTxConfirmation(PduIdType id, Std_ReturnType result)
+{
+    if (PduR_ConfigPtr == NULL)
+    {
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_TX_CONFIRMATION, PDUR_E_UNINIT);
+        return;
+    }
+
+    const PduR_TpTxRoutingPathType* path = PduR_FindTpTxPathByLower(id);
+
+    if (path == NULL)
+    {
+        DET_LOGW(TAG, "TP TxConfirmation no route id=%u", (unsigned)id);
+        (void)Det_ReportError(PDUR_MODULE_ID, 0U, PDUR_API_ID_TP_TX_CONFIRMATION, PDUR_E_PDU_ID_INVALID);
+        return;
+    }
+
+    DET_LOGD(TAG, "TP TxConfirmation id=%u -> up=%u result=%u", (unsigned)id, (unsigned)path->SrcPduId,
+             (unsigned)result);
+
+    path->TxConfirmationFct(path->SrcPduId, result);
+}
 
 /* ======================================================================
  * Scheduled functions
@@ -812,6 +1081,73 @@ static const PduR_TxRoutingPathType* PduR_FindTxPath(PduIdType SrcPduId)
         if (PduR_ConfigPtr->TxPaths[i].SrcPduId == SrcPduId)
         {
             return &PduR_ConfigPtr->TxPaths[i];
+        }
+    }
+    return NULL;
+}
+
+/* ----------------------------------------------------------------------
+ * PduR_FindTpRxPath / PduR_FindTpTxPathByUpper / PduR_FindTpTxPathByLower
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   CanTp 側の ID に一致する、TP の RX ルーティングパスを検索する。
+ *
+ * \param[in]  lowerPduId  CanTp が PduR_CanTp*() へ渡した、受信 N-SDU の ID。
+ *
+ * \return  一致したパスへのポインタ。一致なしなら NULL。
+ *
+ * \pre        PduR_ConfigPtr != NULL であること（呼び出し元で保証済み）。
+ */
+static const PduR_TpRxRoutingPathType* PduR_FindTpRxPath(PduIdType lowerPduId)
+{
+    for (uint8 i = 0U; i < PduR_ConfigPtr->TpRxPathCount; i++)
+    {
+        if (PduR_ConfigPtr->TpRxPaths[i].SrcPduId == lowerPduId)
+        {
+            return &PduR_ConfigPtr->TpRxPaths[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * \brief   上位層（Dcm）側の ID に一致する、TP の TX ルーティングパスを検索する（送信要求の向き）。
+ *
+ * \param[in]  upperPduId  上位層が PduR_<User:Up>Transmit() へ渡した PDU ID。
+ *
+ * \return  一致したパスへのポインタ。一致なしなら NULL。
+ *
+ * \pre        PduR_ConfigPtr != NULL であること（呼び出し元で保証済み）。
+ */
+static const PduR_TpTxRoutingPathType* PduR_FindTpTxPathByUpper(PduIdType upperPduId)
+{
+    for (uint8 i = 0U; i < PduR_ConfigPtr->TpTxPathCount; i++)
+    {
+        if (PduR_ConfigPtr->TpTxPaths[i].SrcPduId == upperPduId)
+        {
+            return &PduR_ConfigPtr->TpTxPaths[i];
+        }
+    }
+    return NULL;
+}
+
+/**
+ * \brief   CanTp 側の ID に一致する、TP の TX ルーティングパスを検索する（CopyTxData/TxConfirmation の向き）。
+ *
+ * \param[in]  lowerPduId  CanTp が PduR_CanTp*() へ渡した、送信 N-SDU の ID。
+ *
+ * \return  一致したパスへのポインタ。一致なしなら NULL。
+ *
+ * \pre        PduR_ConfigPtr != NULL であること（呼び出し元で保証済み）。
+ */
+static const PduR_TpTxRoutingPathType* PduR_FindTpTxPathByLower(PduIdType lowerPduId)
+{
+    for (uint8 i = 0U; i < PduR_ConfigPtr->TpTxPathCount; i++)
+    {
+        if (PduR_ConfigPtr->TpTxPaths[i].DestPduId == lowerPduId)
+        {
+            return &PduR_ConfigPtr->TpTxPaths[i];
         }
     }
     return NULL;

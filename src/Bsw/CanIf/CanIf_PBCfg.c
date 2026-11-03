@@ -11,7 +11,7 @@
  *              CanId=0x200, DLC=6 (E2E 保護なし。byte[1] bit0=EngineState 単体の
  *              update-bit、byte[2]=警告灯3bitミラー、byte[3-4]=EngineSpeedミラー、
  *              byte[5]=CoolantTempミラー), HTH=0
- *            TX PDU (TxPduId=1): UDS 診断応答
+ *            TX PDU (TxPduId=1): UDS 診断応答 (CanTp、PduR を経由せず直接呼び出す)
  *              CanId=0x7E8, DLC=8, HTH=0
  *            TX PDU (TxPduId=2): NM フレーム (CanNm、PduR/Com を経由せず直接呼び出す)
  *              CanId=0x400, DLC=2, HTH=0
@@ -24,7 +24,7 @@
  *            RX PDU (RxPduId=0): EngineInfo  (エンジン ECU)
  *              CanId=0x100, HRH=0 → PduR RxPduId=0 → COM IPduId=0
  *            RX PDU (RxPduId=1): UDS 診断要求 (診断ツール)
- *              CanId=0x7E0, HRH=0 → PduR RxPduId=1 → CanTp
+ *              CanId=0x7E0, HRH=0 → CanTp_RxIndication（PduR を経由しない）
  *            RX PDU (RxPduId=2): AbsInfo     (ABS ECU)
  *              CanId=0x110, HRH=0 → PduR RxPduId=2 → COM IPduId=1
  *            RX PDU (RxPduId=3): ImmobilizerCmd (KeyFobEcu 想定、SecOC 保護)
@@ -71,6 +71,8 @@
 #include "CanNm.h"
 #include "CanNm_Cfg.h"
 #include "CanTSyn.h"
+#include "CanTp.h"
+#include "CanTp_Cfg.h"
 
 /* ======================================================================
  * Global Variables
@@ -101,18 +103,16 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         /* ---------------------------------------------------------------
          * TxPduId=1: UDS 診断応答フレーム
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/DiagResp_Tx
+         * CanTp.c は PduR を経由せず CanIf_Transmit(CANTP_CANIF_TX_PDU_ID, ...) を直接呼び出す
+         * （SWS_CanTp の N-PDU は、CanIf と CanTp が直接やり取りする）。
          * --------------------------------------------------------------- */
-        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_DiagResp_Tx, /* DaVinci: CanIfTxPduId */
-        .CanId             = 0x7E8U,                          /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 8U,                              /* DaVinci: CanIfTxPduDlc */
-        .Hth               = 0U,                              /* DaVinci: CanIfTxPduHthIdRef */
-        .TxConfirmFct      = PduR_CanIfTxConfirmation         /* DaVinci: CanIfTxPduUserTxConfirmationName
-                                                               *          PduR_PBCfg.c の TX パス(SrcPduId=1)は
-                                                               *          ConfFct=CanTp_TxConfirmation を設定済みだが、
-                                                               *          以前は本フィールドが NULL のため到達不能な配線に
-                                                               *          なっていた（CanTp_TxConfirmation 自体は意図的な
-                                                               *          no-op のため実害はなかったが、設定の一貫性として
-                                                               *          修正。2026-08 のスペック監査で発見） */
+        .UpperLayerTxPduId = CANTP_TX_NPDU_ID,    /* DaVinci: CanIfTxPduId
+                                                   *          CanTp 側の TX N-PDU の ID（CanTp.json の txNPduId、CanTp_Cfg.h の CANTP_TX_NPDU_ID） */
+        .CanId             = 0x7E8U,              /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 8U,                  /* DaVinci: CanIfTxPduDlc */
+        .Hth               = 0U,                  /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = CanTp_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
+                                                   *          CanTp_TxConfirmation() へ送信完了を通知する（CanTp 側は、現状 no-op） */
     },
     {
         /* ---------------------------------------------------------------
@@ -226,14 +226,15 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         /* ---------------------------------------------------------------
          * RxPduId=1: UDS 診断要求フレーム (診断ツール → メータ ECU)
          * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/DiagReq_Rx
+         * CanIf は PduR を経由せず CanTp_RxIndication() を直接呼び出す。
          * --------------------------------------------------------------- */
-        .CanId             = 0x7E0U,                         /* DaVinci: CanIfRxPduCanId */
-        .Hrh               = 0U,                             /* DaVinci: CanIfRxPduHrhIdRef */
-        .UpperLayerRxPduId = PduRConf_PduRSrcPdu_DiagReq_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
-                                                              *          → PduR RX パス 1 へのリンク */
-        .Dlc               = 8U,                             /* DaVinci: CanIfRxPduDataLength
-                                                              *          ISO 15765-2 診断フレームは常に8バイト */
-        .RxIndicationFct   = PduR_CanIfRxIndication          /* DaVinci: CanIfRxPduUserRxIndicationName */
+        .CanId             = 0x7E0U,            /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = CANTP_RX_NPDU_ID,  /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                 *          CanTp 側の RX N-PDU の ID（CanTp.json の rxNPduId、CanTp_Cfg.h の CANTP_RX_NPDU_ID） */
+        .Dlc               = 8U,                /* DaVinci: CanIfRxPduDataLength
+                                                 *          ISO 15765-2 診断フレームは常に8バイト */
+        .RxIndicationFct   = CanTp_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
     },
     {
         /* ---------------------------------------------------------------

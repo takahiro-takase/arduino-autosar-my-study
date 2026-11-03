@@ -432,6 +432,28 @@ TRANSITION/DATALOST/PARAM_BAUDRATE/ICOM_CONFIG_INVALID の9件）と値の並び
 `Can_MainFunction_Read()` が受信バッファのオーバーフローで `Det_ReportRuntimeError()` から報告するようにした。`Can_CheckWakeup`（0x0B）と、
 `Can_Write` の `sdu = NULL`（トリガ送信、[SWS_Can_00503-00506]）も実装した。`Can_CheckWakeup` から `EcuM_SetWakeupEvent()` を呼ぶ仕様の経路に合わせ、
 `EcuM_SetWakeupEvent`（0x0C）と `CanIf_CheckWakeup`（0x11）を追加し、`EcuM_CheckWakeup` は `CanIf_CheckWakeup()` を呼ぶだけの窓口にした。）
+（2026-11-03 追記: CanTp ↔ Dcm の TP の経路を、PduR 4.3.1 の 8.3.4 章（`PduR_<User:LoTp>Xxx`）に合わせた。`PduR_CanTpStartOfReception`（0x46）・
+`PduR_CanTpCopyRxData`（0x44）・`PduR_CanTpRxIndication`（0x45）・`PduR_CanTpCopyTxData`（0x43）・`PduR_CanTpTxConfirmation`（0x48）と、
+Dcm 向けの `PduR_DcmTransmit`（0x49）を追加し、`PduR_PBConfigType` に TP のルーティングパス（`TpRxPaths`・`TpTxPaths`）を持たせた。
+CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は `PduR_DcmTransmit()` → `CanTp_Transmit()`。）
+（2026-11-03 追記 2: CanTp ↔ CanIf 側も、仕様の直結に直した。CanTp は `CanIf_Transmit()` を直接呼び（`CANTP_CANIF_TX_PDU_ID`）、CanIf は `CanTp_RxIndication()`・
+`CanTp_TxConfirmation()` を直接呼ぶ（`CANTP_RX_NPDU_ID`・`CANTP_TX_NPDU_ID`。CanNm・CanTSyn と同じ形）。独自の `PduR_CanTpTransmit()` と、PduR の IF の経路
+（RX の `DiagReq_Rx`、TX の `DiagResp_Tx`）は廃止した。`PduR.json` の `srcPduId=1` は欠番のまま残した（Com などの既存の ID を変えないため）。
+`CanTp_TxConfirmation()` に、TX N-PDU の ID の検査（`CANTP_E_INVALID_TX_ID`）を追加した。）
+（2026-11-03 追記 3: CanTp の実装済みの動作を SWS_CanTp 4.3.1 と突き合わせ、小さい乖離 6 件を解消した。
+(1) 中断時の実行時エラー報告（[SWS_CanTp_00229]: `CANTP_E_RX_COM` 0xC0・`CANTP_E_TX_COM` 0xD0・`CANTP_E_COM` 0xB0）、
+(2) FC の送信失敗で受信を終了（[SWS_CanTp_00342]）、(3) `PduR_CanTpStartOfReception` の `info` に SF/FF の内容を渡す（[SWS_CanTp_00329]）、
+(4) 空きが受信済みデータより小さければ中断（[SWS_CanTp_00339]）、(5) パディングバイトを設定値化（`CanTpPaddingByte`、[SWS_CanTp_00059]）、
+(6) 最初の `CopyTxData` が BUSY なら、受け付けて再試行（[SWS_CanTp_00184]・[SWS_CanTp_00167]・[SWS_CanTp_00280]）。
+残る乖離: 受信側の BS≠0 の FC 再送（00278）、N_Br/FC(WAIT)/WFTmax（00082 ほか）、タイマの起点を送信確認にする件（00075 ほか）、
+機能アドレッシング・複数チャネル（00092・00096）、未実装 API（Shutdown・Cancel*・ChangeParameter・ReadParameter）。）
+（2026-11-03 追記 4: 受信側の BS≠0 の FC の再送（[SWS_CanTp_00278]・[SWS_CanTp_00067]）を実装した。BS は実行時の変数（`CanTp_RxBlockSize`）で持つ。
+タイマの起点を送信確認にする件（00075 ほか）は見送り: 本プロジェクトの `Can_Write()` は、mcp_can の `sendMsg()`（最大 2.5 ms、TXREQ のクリアまで待つ。送信は同期）で送るため、`E_OK` を返した時点で、実際の送信は終わっている（確認の通知は、`Can_MainFunction_Write()` へ遅らせるだけ）。送信の失敗（ACK なしなど）は、同期的な `E_NOT_OK` で分かる。このため、CanTp の N_As・N_Ar は、同期的な送信失敗で近似できている。仕様どおり、送信を非同期（バッファへ載せて返り、TXREQ のクリアを後で確認）にするには、mcp_can の公開 API が足りず（`sendMsg()` は private、レジスタ読み出しも private）、独自の SPI ドライバが要る。）
+（2026-11-03 追記 5: `CanIf_GetControllerMode()` を、`Can_GetControllerMode()` への転送に直した（[SWS_CANIF_00229]）。CanIf の記録 `CanIf_ControllerMode[]` は、CanIf 内部の判断用に残した。）
+（2026-11-03 追記 6: `Can_Write()` の送信失敗のとき、MCP2515 の送信バッファに残る未送信のフレームを取り消すようにした（`Can_Hw_AbortTx()`。各 TXBnCTRL の TXREQ を BIT MODIFY で消す）。
+以前は、失敗しても残り、バスの状況が変わると遅れて送出され、3 つ残ると以降の送信が常に失敗した。）
+（2026-11-03 追記 7: CanTp の CF の送信失敗の再送（[SWS_CanTp_00343] は即中断）は、意図的に残す判断とした。`Can_Write()` が同期で `CAN_BUSY` を返さず、CanIf に送信バッファが無いための補いで、Arduino のライブラリの制約が理由。
+CanTp_Notes と CanTp.c に理由を記録した。仕様の形にするには、`Can_Write()` の `CAN_BUSY` と CanIf の送信バッファが要る。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

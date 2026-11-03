@@ -48,6 +48,8 @@ extern uint32 FakeCanHw_SetModeCount;
 extern uint32 FakeCanHw_CheckReceiveCount;
 extern uint32 FakeCanHw_IsBusOffCount;
 extern uint32 FakeCanHw_TakeRxOverflowCount;
+/** Can_Hw_AbortTx() の呼び出し回数。 */
+extern uint32 FakeCanHw_AbortTxCount;
 extern uint32 FakeCanHw_GetErrorStateCount;
 extern uint32 FakeCanHw_IsWakeupPendingCount;
 extern uint32 FakeCanHw_AttachRxIsrCount;

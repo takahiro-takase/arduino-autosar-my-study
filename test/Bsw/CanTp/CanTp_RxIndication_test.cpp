@@ -14,6 +14,8 @@
 
 extern "C" {
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Fake_Det_Hw.h"
 #include "Fake_Millis.h"
 #include "Wrap_CanTp.h"
@@ -60,10 +62,11 @@ protected:
         WrapCanIf_Reset();
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
         WrapPduR_Reset();
-        FailFromCallCount_PduR_CanTpTransmit = 0U;   // 既定: CAN フレームの送信（PduR 経由）は成功する
-        ForcedReturn_PduR_CanTpTransmit      = E_OK;
+        FailFromCallCount_CanIf_Transmit = 0U;   // 既定: CAN フレームの送信（CanIf_Transmit）は成功する
+        ForcedReturn_CanIf_Transmit           = E_OK;
         Suppressed_ComM_DcmDiagnostic        = 1U;   // 本テストは通信管理(ComM/CanSM/CanNm)が対象外
         CanTp_Init(NULL);              // CfgPtr は常に NULL（CanTp.h 参照）
+        PduR_Init(&PduR_Config);
         Dem_Init(NULL);
         Dcm_Init(NULL);                // 上位層（Dcm）は実体。CanTp から渡るデータを、実際に受け取る・取り出す
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
@@ -77,7 +80,7 @@ protected:
         CanTp_Test_SetTxWaitFc();
         uint8 frame[8] = { 0x30U, 0x00U, raw, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
         return CanTp_Test_GetTxStMin();
     }
 
@@ -94,7 +97,7 @@ protected:
     {
         uint8 frame[8] = { 0x10U, 0x0AU, 0x3EU, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // CF（シーケンス番号 sn、データ部は 0）を、長さ len で受け取ったことにする。
@@ -102,7 +105,7 @@ protected:
     {
         uint8 frame[8] = { (uint8)(0x20U | sn), 0U, 0U, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, len };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // FC（フロー状態 fs、STmin 5）を受け取ったことにする。
@@ -110,7 +113,7 @@ protected:
     {
         uint8 frame[8] = { (uint8)(0x30U | fs), 0U, 5U, 0U, 0U, 0U, 0U, 0U };
         PduInfoType info = { frame, 8U };
-        CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+        CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
     }
 
     // CanTp に DeInit() は無いため、未初期化状態が必要なテストは各自
@@ -133,7 +136,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_Uninit)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -152,7 +155,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_InvalidRxPduId)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID + 1U, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID + 1U, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -170,7 +173,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_NullPduInfoPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, NULL);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, NULL);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -188,7 +191,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_NullSduDataPtr)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -207,7 +210,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfPayloadLengthZero)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -228,7 +231,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfPayloadLengthAboveMax)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -247,7 +250,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfFrameShorterThanDeclared
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -266,7 +269,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfShorterThanEightBytesIsR
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -287,7 +290,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfMessageLengthFitsSingleF
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -306,7 +309,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfFrameShorterThanEightByt
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -452,7 +455,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcShorterThanEightBytesAbo
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -482,6 +485,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FcOverflowAbortsTransmissi
     /* ----------------------- */
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);
     EXPECT_EQ(LastResult_Dcm_TpTxConfirmation, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_COM);   // タイムアウト以外の中断
     EXPECT_FALSE(CanTp_Test_IsTxBusy());
 }
 
@@ -496,7 +500,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_UnknownFrameTypeIsIgnored)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -517,7 +521,7 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_EmptyFrameIsIgnored)
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
@@ -558,13 +562,16 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_SfValidFrameStartsReceptio
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_Dcm_StartOfReception, 1U);
     EXPECT_EQ(LastTpSduLength_Dcm_StartOfReception, 2U);   // SF のペイロード長（PCI の下位 4 ビット）
+    EXPECT_EQ(CallCount_PduR_CanTpStartOfReception, 1U);   // 上位層（Dcm）へは、PduR を経由して渡す
+    EXPECT_EQ(CallCount_PduR_CanTpCopyRxData, 1U);
+    EXPECT_EQ(CallCount_PduR_CanTpRxIndication, 1U);
 }
 
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FfValidFrameStartsReception)
@@ -578,13 +585,297 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FfValidFrameStartsReceptio
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    CanTp_RxIndication(CANTP_RX_SDU_ID, &info);
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
     EXPECT_EQ(CallCount_Dcm_StartOfReception, 1U);
     EXPECT_EQ(LastTpSduLength_Dcm_StartOfReception, 20U);   // FF の長さ欄（12 ビット）
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfFlowControlSendFailureAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_Transmit = 1U;   // FC の送信が失敗する（[SWS_CanTp_00342]）
+    ForcedReturn_CanIf_Transmit      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);   // 受信を終了し、上位層へ通知する
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_COM);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_CfWithWrongSequenceNumberReportsCom)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);   // 次に受け取るべき番号は 1
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_COM);   // [SWS_CanTp_00229]: タイムアウト以外の中断
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_SfWithSmallerBufferThanReceivedDataIsAborted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // StartOfReception は受け入れる（BUFREQ_OK）が、空き（bufferSize）は 0 のまま返す（[SWS_CanTp_00339]）。
+    FailFromCallCount_PduR_CanTpStartOfReception = 1U;
+    ForcedReturn_PduR_CanTpStartOfReception      = BUFREQ_OK;
+    uint8 frame[8] = { 0x02U, 0x10U, 0x01U, 0x00U, 0x00U, 0x00U, 0x00U, 0x00U };
+    PduInfoType info = { frame, 8U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_PduR_CanTpCopyRxData, 0U);   // データは渡さない
+    EXPECT_EQ(CallCount_PduR_CanTpRxIndication, 1U);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_COM);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FfWithSmallerBufferThanReceivedDataIsAborted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_PduR_CanTpStartOfReception = 1U;
+    ForcedReturn_PduR_CanTpStartOfReception      = BUFREQ_OK;   // 空きは 0 のまま
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_PduR_CanTpCopyRxData, 0U);
+    EXPECT_EQ(CallCount_PduR_CanTpRxIndication, 1U);
+    EXPECT_EQ(CallCount_CanIf_Transmit, 0U);   // FC は送らない
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_SfPassesPayloadToStartOfReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 frame[8] = { 0x03U, 0x22U, 0xF1U, 0x90U, 0xAAU, 0xAAU, 0xAAU, 0xAAU };
+    PduInfoType info = { frame, 8U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    EXPECT_EQ(LastInfoNull_Dcm_StartOfReception, 0U);   // [SWS_CanTp_00329]: SF の内容を渡す
+    EXPECT_EQ(LastInfoLength_Dcm_StartOfReception, 3U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[0], 0x22U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[1], 0xF1U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[2], 0x90U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FfPassesFirstSixBytesToStartOfReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 frame[8] = { 0x10U, 0x14U, 0x01U, 0x02U, 0x03U, 0x04U, 0x05U, 0x06U };
+    PduInfoType info = { frame, 8U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    EXPECT_EQ(LastInfoNull_Dcm_StartOfReception, 0U);
+    EXPECT_EQ(LastInfoLength_Dcm_StartOfReception, 6U);   // FF の先頭 6 バイト
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[0], 0x01U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[5], 0x06U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FlowControlIsPaddedWithConfiguredByte)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    // 準備なし（FF を受け取ると、CanTp が FC を送る）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFirstFrame();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x30U);   // FC(CTS)
+    for (uint8 i = 3U; i < 8U; i++)
+    {
+        EXPECT_EQ(LastData_CanIf_Transmit[i], CANTP_PADDING_BYTE);   // [SWS_CanTp_00347]
+    }
+}
+
+// FF（総長 total、先頭 6 バイトは 0）を受け取ったことにする。
+static void ReceiveFirstFrameOfLength(uint16 total)
+{
+    uint8 frame[8] = { (uint8)(0x10U | (uint8)(total >> 8U)), (uint8)(total & 0xFFU), 0U, 0U, 0U, 0U, 0U, 0U };
+    PduInfoType info = { frame, 8U };
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FlowControlIsSentAfterEachBlockOfConsecutiveFrames)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetRxBlockSize(2U);
+    ReceiveFirstFrameOfLength(27U);   // FF の 6 バイト + CF 3 本（7 バイトずつ）
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);   // FF の後の FC
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 2U); // FC の BS
+    ReceiveConsecutiveFrame(1U, 8U);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);   // ブロックの途中では、FC を送らない
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);   // ブロックの最後の CF（続きがある）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_Transmit, 2U);   // [SWS_CanTp_00278]: 次のブロックのための FC
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x30U);
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 2U);   // [SWS_CanTp_00067]: BS は、どの FC も同じ値
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);
+
+    ReceiveConsecutiveFrame(3U, 8U);   // 次のブロックの CF（最後）
+    EXPECT_NE(LastData_CanIf_Transmit[0] & 0xF0U, 0x30U);   // 受信が完了したので、FC は送らない（最後の送信は、Dcm の応答）
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_NoFlowControlWhenMessageEndsAtBlockEnd)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetRxBlockSize(2U);
+    ReceiveFirstFrameOfLength(20U);   // FF の 6 バイト + CF 2 本（ちょうど 1 ブロック）
+    ReceiveConsecutiveFrame(1U, 8U);
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);   // ブロックの最後で、メッセージの最後
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_NE(LastData_CanIf_Transmit[0] & 0xF0U, 0x30U);   // FC は送らない（最後の送信は、Dcm の応答）
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_BlockEndFlowControlSendFailureAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    CanTp_Test_SetRxBlockSize(2U);
+    ReceiveFirstFrameOfLength(27U);
+    ReceiveConsecutiveFrame(1U, 8U);
+    FailFromCallCount_CanIf_Transmit = 2U;   // 2 回目の送信（ブロック終わりの FC）が失敗する
+    ForcedReturn_CanIf_Transmit      = E_NOT_OK;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(2U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);   // [SWS_CanTp_00342]: 受信を終了する
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+    EXPECT_EQ(FakeDetHw_LastErrorId, CANTP_E_COM);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_BlockSizeZeroSendsOnlyOneFlowControl)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrameOfLength(27U);   // 既定のブロックサイズ（0）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+    ReceiveConsecutiveFrame(2U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // FF の後の FC だけ（ブロックごとの FC は送らない）
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 0U);
+
+    ReceiveConsecutiveFrame(3U, 8U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_BlockSizeChangeDoesNotAffectReceptionInProgress)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    ReceiveFirstFrameOfLength(27U);   // ブロックサイズ 0 で、受信が始まる
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    CanTp_Test_SetRxBlockSize(2U);   // 受信の途中で、変わる（[SWS_CanTp_00067]: 受信の途中の FC には、反映しない）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveConsecutiveFrame(1U, 8U);
+    ReceiveConsecutiveFrame(2U, 8U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_Transmit, 1U);   // ブロックごとの FC は送らない
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 0U);
 }
 
 TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FcStMinDirectValueIsKept)

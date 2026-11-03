@@ -510,8 +510,8 @@
         ],
         "pduRId": [
           "DaVinci: ComIPduPduRef    - PduR TX パス 2 へのリンク",
-          "(PduR_ComTransmit/PduR_CanTpTransmit の SrcPduId は COM/CanTp で共通の名前空間のため、",
-          "CanTp が使用する 1U と衝突しないよう 2U を割り当てる)"
+          "(PduR_ComTransmit の SrcPduId は PduR.json の txPaths の srcPduId。",
+          "1U は、かつて CanTp の診断応答に使っていた欠番のため、2U を割り当てる)"
         ],
         "timeoutMs": [
           "TX I-PDU のため監視無効"

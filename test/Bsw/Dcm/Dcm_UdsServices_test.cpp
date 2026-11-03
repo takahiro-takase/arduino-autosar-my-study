@@ -25,6 +25,8 @@ extern "C" {
 #include "KeyM.h"
 #include "KeyM_Cfg.h"
 #include "CanTp.h"
+#include "PduR.h"
+#include "PduR_PBCfg.h"
 #include "Wrap_CanTp.h"
 #include "Wrap_Dem.h"
 #include "Wrap_Dcm.h"
@@ -73,6 +75,7 @@ protected:
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
 
         CanTp_Init(NULL);
+        PduR_Init(&PduR_Config);
         NvMTest_ColdBoot();   // 空の EEPROM から NvM を初期化する（Dcm_Init() が失敗回数を NvM から復元するため）
         Dem_Init(NULL);
         Dcm_Init(NULL);

@@ -54,6 +54,9 @@ Std_ReturnType ForcedReturn_Dcm_GetActiveProtocol     = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dcm_ResetToDefaultSession = E_NOT_OK;
 
 PduLengthType  LastTpSduLength_Dcm_StartOfReception = 0U;
+uint8          LastInfoNull_Dcm_StartOfReception    = 1U;
+PduLengthType  LastInfoLength_Dcm_StartOfReception  = 0U;
+uint8          LastInfoData_Dcm_StartOfReception[8] = { 0U };
 Std_ReturnType LastResult_Dcm_TpRxIndication        = E_OK;
 Std_ReturnType LastResult_Dcm_TpTxConfirmation      = E_OK;
 
@@ -90,6 +93,12 @@ void WrapDcm_Reset(void)
     ForcedReturn_Dcm_ResetToDefaultSession = E_NOT_OK;
 
     LastTpSduLength_Dcm_StartOfReception = 0U;
+    LastInfoNull_Dcm_StartOfReception    = 1U;
+    LastInfoLength_Dcm_StartOfReception  = 0U;
+    for (uint8 i = 0U; i < 8U; i++)
+    {
+        LastInfoData_Dcm_StartOfReception[i] = 0U;
+    }
     LastResult_Dcm_TpRxIndication        = E_OK;
     LastResult_Dcm_TpTxConfirmation      = E_OK;
 }
@@ -294,6 +303,13 @@ BufReq_ReturnType __wrap_Dcm_StartOfReception(PduIdType id, const PduInfoType* i
 {
     CallCount_Dcm_StartOfReception++;
     LastTpSduLength_Dcm_StartOfReception = TpSduLength;
+    LastInfoNull_Dcm_StartOfReception    = (info == NULL) ? 1U : 0U;
+    LastInfoLength_Dcm_StartOfReception  = (info != NULL) ? info->SduLength : 0U;
+    for (uint8 i = 0U; i < 8U; i++)   // 前の呼び出しの内容が残らないよう、毎回すべて書き直す
+    {
+        LastInfoData_Dcm_StartOfReception[i] =
+            ((info != NULL) && (i < info->SduLength)) ? info->SduDataPtr[i] : 0U;
+    }
     Log_Write(LOG_T, TAG, "Dcm_StartOfReception", "called %u times", CallCount_Dcm_StartOfReception);
 
     return __real_Dcm_StartOfReception(id, info, TpSduLength, bufferSizePtr);

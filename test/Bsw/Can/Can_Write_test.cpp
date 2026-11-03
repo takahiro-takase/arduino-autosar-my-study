@@ -369,6 +369,33 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails)
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(Can_Test_GetTxErrCount(), 1U);
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 0U);  // 閾値未満のため BusOff 通知はまだ来ない
+    EXPECT_EQ(FakeCanHw_AbortTxCount, 1U);            // 失敗したフレームを、送信バッファから取り消す
+}
+
+TEST_F(Can_Write_Test, Can_Write_OK_DoesNotAbortTxBuffers)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
+    Can_PduType pdu;
+    pdu.id = 0x123U;
+    pdu.length = 8U;
+    uint8_t sdu[8] = {0};
+    pdu.sdu = sdu;
+    pdu.swPduHandle = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = Can_Write(0U, &pdu);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(FakeCanHw_AbortTxCount, 0U);   // 送れたときは、取り消さない
 }
 
 TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
@@ -404,6 +431,7 @@ TEST_F(Can_Write_Test, Can_Write_NG_HwSendFails_ReachesBusOffThreshold)
     EXPECT_EQ(Can_Test_GetTxErrCount(), 0U);  // 閾値到達時に 0 へリセットされる（Can.c 実装参照）
     EXPECT_EQ(CallCount_CanIf_ControllerBusOff, 1U);
     EXPECT_EQ(LastControllerId_CanIf_ControllerBusOff, 0U);
+    EXPECT_EQ(FakeCanHw_AbortTxCount, 5U);   // 失敗のたびに取り消す（閾値に達した回も）
 }
 
 TEST_F(Can_Write_Test, Can_Write_OK_ResetsTxErrCountAfterPriorFailure)

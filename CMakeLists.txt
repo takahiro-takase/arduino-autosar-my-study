@@ -374,6 +374,7 @@ set(NATIVE_CHAIN_STUB_SOURCES
     stub/Bsw/MemIf/Wrap_MemIf.c
     stub/Bsw/Csm/Wrap_Csm.c
     stub/Bsw/Nm/Wrap_Nm.c
+    stub/Bsw/PduR/Fake_PduR_PBCfg.c
     stub/Bsw/PduR/Wrap_PduR.c
     stub/Bsw/Port/Wrap_Port.c
     stub/Bsw/WdgM/Wrap_WdgM.c
@@ -675,11 +676,16 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     PduR_Init
     PduR_GetVersionInfo
     PduR_ComTransmit
-    PduR_CanTpTransmit
     PduR_SecOCTransmit
     PduR_ComRxIndication
     PduR_CanIfTxConfirmation
     PduR_SecOCTxConfirmation
+    PduR_DcmTransmit
+    PduR_CanTpStartOfReception
+    PduR_CanTpCopyRxData
+    PduR_CanTpRxIndication
+    PduR_CanTpCopyTxData
+    PduR_CanTpTxConfirmation
     # Port.h の公開API全5関数（Wrap_Port.h/.c 参照）。
     Port_Init
     Port_SetPinDirection

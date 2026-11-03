@@ -26,13 +26,33 @@
 Com と CanTp は同じ `SrcPduId` の空間を共有するため、衝突しないよう値を割り当てています
 （WarningStatus が 2、CanTp の応答が 1）。
 
+### TP のルーティング（CanTp ↔ Dcm。`PduR.json` の `tpRxPaths`・`tpTxPaths`）
+
+診断の N-SDU（複数フレームの UDS 要求・応答）は、上の IF の経路とは別に、TP のルーティングパスで運びます
+（2026-11 追加。仕様 8.3.4 章の `PduR_<User:LoTp>Xxx`、[SWS_PduR_00406] の Dcm 向け）。
+IF の表の「CanTp」行（RX 1、TX 1）は、CanIf と CanTp の間の CAN フレームの経路で、これとは別です。
+
+| 方向 | 下位層（CanTp）側の ID | 上位層（Dcm）側の ID | 呼ぶ関数 |
+|------|----------|----------|------|
+| RX | `CANTP_RX_SDU_ID`（0。TP の RX パスの `SrcPduId`） | `CANTP_DCM_RX_PDU_ID`（0） | `Dcm_StartOfReception` / `Dcm_CopyRxData` / `Dcm_TpRxIndication` |
+| TX | `CANTP_TX_SDU_ID`（0。TP の TX パスの `DestPduId`） | `CANTP_DCM_TX_PDU_ID`（0。TP の TX パスの `SrcPduId`） | `CanTp_Transmit`（要求）、`Dcm_CopyTxData` / `Dcm_TpTxConfirmation` |
+
+- **ID の向き**: 下位層（CanTp）が呼ぶ API（`PduR_CanTp*()`）の `id` は CanTp 側の ID、上位層（Dcm）が呼ぶ `PduR_DcmTransmit()` の `id` は Dcm 側の ID です。
+  PduR は、パスを探して、反対側の ID へ変換して転送します。本番の設定は、どちらも 0 ですが、単体テストは、取り違えを検出できるよう、わざと別の値にしています。
+- **`PduR_DcmTransmit()`**（0x49）: TP の TX パスを `SrcPduId` で探し、`CanTp_Transmit()` を `DestPduId` で呼びます。データは渡しません（CanTp が `PduR_CanTpCopyTxData()` で取りに来る）。
+- **`PduR_CanTpStartOfReception()`**（0x46）/ **`PduR_CanTpCopyRxData()`**（0x44）/ **`PduR_CanTpRxIndication()`**（0x45）: TP の RX パスを探し、Dcm の関数へ転送します。戻り値と `bufferSizePtr` は、そのまま返します。
+- **`PduR_CanTpCopyTxData()`**（0x43）/ **`PduR_CanTpTxConfirmation()`**（0x48）: TP の TX パスを `DestPduId` で探し、Dcm の関数へ転送します。`BUFREQ_E_BUSY` も、そのまま返します（CanTp が再試行できるよう）。
+- **エラー**: 未初期化は `PDUR_E_UNINIT`、パスなしは `PDUR_E_PDU_ID_INVALID`、NULL のポインタは `PDUR_E_PARAM_POINTER`（`info` が NULL でよい `PduR_CanTpStartOfReception()` を除く）。BUFREQ を返す関数は `BUFREQ_E_NOT_OK`。
+- **`PduR_Init()`** は、TP のパスの関数ポインタが NULL の設定を弾きます（検査せずに呼ぶため）。
+- ルーティングパスグループによる TP の有効・無効は、持ちません（IF の経路だけが対象）。
+
 ## RX / TX / 送信確認の流れ
 
 - **RX**（`PduR_ComRxIndication()`。CanIf からは別名 `PduR_CanIfRxIndication` として呼ばれる
   マクロ）: `SrcPduId` に一致する経路を探し、その経路に登録された**全ての宛先**の
   `RxIndFct` を順に呼びます（1 つの受信 PDU を複数の上位層へ配信できる）。一致する経路が
   なければ `PDUR_E_PDU_ID_INVALID` を報告します。
-- **TX**（`PduR_ComTransmit()`、`PduR_CanTpTransmit()`。後者は前者と完全に同じ）: `SrcPduId`
+- **TX**（`PduR_ComTransmit()`）: `SrcPduId`
   に一致する経路を探し、`TransmitOverrideFct` が設定されていればそちら（中間モジュール）へ、
   無ければ `CanIf_Transmit(CanIfTxPduId)` へ転送します。現在 `TransmitOverrideFct` を使う
   経路はありません（SecOC の TX を撤去したため。機構自体は学習用に残している）。
@@ -79,9 +99,11 @@ SecOC が組み立てて保持している Secured I-PDU を、下位層へ複�
 
 - `PduR_Init()` と `PduR_GetVersionInfo()` 以外は、未初期化なら `PDUR_E_UNINIT` を報告します
   （[SWS_PduR_00338]）。NULL のポインタは `PDUR_E_PARAM_POINTER` です。
-- ゲートウェイ（PDU を別のバスへ中継する機能）、`PduR_*StartOfReception` / `CopyRxData` などの
-  トランスポートプロトコル用の段階受理 API は実装していません
-  （CanTp との連携は、CanTp が組み立て済みの PDU を渡す簡略化した形）。
+- ゲートウェイ（PDU を別のバスへ中継する機能）は実装していません。トランスポートプロトコル用の API
+  （`PduR_CanTpStartOfReception` / `CopyRxData` / `RxIndication` / `CopyTxData` / `TxConfirmation`）は、
+  CanTp ↔ Dcm の 1 本の診断の経路だけを持ちます（上の「TP のルーティング」）。`PduR_<User:Up>CancelTransmit` /
+  `CancelReceive` / `ChangeParameter` は未実装です。CanTp の CAN フレーム（N-PDU）の送受信は、仕様どおり、
+  CanTp と CanIf が PduR を経由せず直接やり取りします（独自の `PduR_CanTpTransmit()` と、PduR の IF の経路は廃止しました）。
   トリガ送信（`PduR_CanIfTriggerTransmit()`）は、上位層の送信データを取りに行く経路だけを持ちます
   （ゲートウェイの FIFO やバッファを返す動作は、持ちません）。
 - 単体テストからだけ使える `PduR_Test_ResetInitState()`（`PDUR_UNIT_TEST`）で、未初期化状態へ

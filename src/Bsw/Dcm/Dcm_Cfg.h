@@ -430,10 +430,9 @@
 #define DCM_SESSION_P2X_LOW   0xF4U
 
 /* -----------------------------------------------------------------------
- * CanTp 送信 N-SDU ID (DCM 診断応答)
- * CanTp_Cfg.h の CANTP_TX_SDU_ID と同値。CanTp_Transmit() 呼び出しに使用する。
+ * 診断応答の TX I-PDU ID (DCM)
+ * PduR_DcmTransmit() 呼び出しに使用する。DCM は CanTp_Cfg.h をインクルードして
+ * CANTP_DCM_TX_PDU_ID を直接参照するため、ここでは重複定義を避ける。
  * ----------------------------------------------------------------------- */
-/* DCM は CanTp_Cfg.h をインクルードして CANTP_TX_SDU_ID を直接参照するため、
- * ここでは重複定義を避ける。                                                 */
 
 #endif /* DCM_CFG_H */

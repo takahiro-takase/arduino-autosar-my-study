@@ -7,23 +7,65 @@
 CanTp モジュールが ISO 15765-2 のフレーム処理を担い、
 DCM は PCI バイトを意識せず生 UDS ペイロードのみを扱います。
 
+## 下位層（CanIf）との受け渡し（N-PDU）
+
+CanTp は、下位層の CanIf と、PduR を経由せず直接やり取りします（仕様どおり。2026-11 に、独自の `PduR_CanTpTransmit()` と
+PduR の IF の経路を廃止しました。CanNm・CanTSyn と同じ形です）。
+
+| 方向 | 呼び出し | ID |
+|------|------|------|
+| 送信 | CanTp が `CanIf_Transmit()` を呼ぶ | `CANTP_CANIF_TX_PDU_ID`（CanIf の TX PDU `DiagResp_Tx`。CAN 0x7E8） |
+| 送信完了 | CanIf が `CanTp_TxConfirmation()` を呼ぶ | `CANTP_TX_NPDU_ID`（CanIf の設定が渡す） |
+| 受信 | CanIf が `CanTp_RxIndication()` を呼ぶ | `CANTP_RX_NPDU_ID`（CanIf の設定が渡す。CAN 0x7E0） |
+
+N-PDU の ID は、PduR へ渡す N-SDU の ID（`CANTP_RX_SDU_ID`・`CANTP_TX_SDU_ID`）とは別の名前空間です（値も、わざと変えています。
+取り違えたときに、DET（`CANTP_E_INVALID_RX_ID`・`CANTP_E_INVALID_TX_ID`）で検出できます）。いずれも `CanTp.json`（`canIfTxPdu`・
+`txNPduId`・`rxNPduId`）が正本で、`CanIf.json` の `DiagResp_Tx`（`txConfirm`=`CANTP`）・`DiagReq_Rx`（`rxIndication`=`CANTP`）が、これらを参照します。
+
 ## 上位層（Dcm）との受け渡し（TP の API）
 
-CanTp は、組み立て・分割用のバッファを持ちません。フレームごとに、Dcm と TP の API でやり取りします
-（2026-10 に、独自の `Dcm_ComIndication()` から、仕様の関数へ置き換えました）。
-仕様では PduR を経由しますが（`PduR_CanTpStartOfReception` など）、本プロジェクトは PduR に TP の経路を持たないので、
-CanTp が Dcm を直接呼びます。
+CanTp は、組み立て・分割用のバッファを持ちません。フレームごとに、PduR の TP の API でやり取りします
+（2026-10 に、独自の `Dcm_ComIndication()` から、仕様の関数へ置き換え、2026-11 に、仕様どおり PduR 経由にしました）。
+CanTp は `PduR_CanTpStartOfReception` などを呼び、PduR が、TP のルーティングパス（`PduR.json` の `tpRxPaths`・`tpTxPaths`）で
+Dcm の PDU ID へ変換して、Dcm の関数（下の表の `Dcm_...`）を呼びます。Dcm が応答を送るときは、`PduR_DcmTransmit()` が
+`CanTp_Transmit()` へ転送します。表の `Dcm_...` は、実際には、PduR が呼ぶ関数です。
+
+| CanTp が呼ぶ（PduR の API） | PduR が呼ぶ（Dcm の関数） |
+|------|------|
+| `PduR_CanTpStartOfReception` | `Dcm_StartOfReception` |
+| `PduR_CanTpCopyRxData` | `Dcm_CopyRxData` |
+| `PduR_CanTpRxIndication` | `Dcm_TpRxIndication` |
+| `PduR_CanTpCopyTxData` | `Dcm_CopyTxData` |
+| `PduR_CanTpTxConfirmation` | `Dcm_TpTxConfirmation` |
+
+CanTp が PduR へ渡す ID は、CanTp の受信・送信の N-SDU の ID（`CANTP_RX_SDU_ID`・`CANTP_TX_SDU_ID`）です。
+Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は、PduR が行います。
 
 | 方向 | 順序 | 内容 |
 |------|------|------|
-| 受信 | `Dcm_StartOfReception(id, NULL, 長さ, &空き)` | SF/FF の受信時。Dcm が受け入れるかを返す（`BUFREQ_OK` / `BUFREQ_E_NOT_OK` / `BUFREQ_E_OVFL`）。`BUFREQ_E_OVFL` なら CanTp は FC(OVFLW) を返す |
+| 受信 | `Dcm_StartOfReception(id, {SF/FF のデータ, 長さ}, 長さ, &空き)` | SF/FF の受信時。Dcm が受け入れるかを返す（`BUFREQ_OK` / `BUFREQ_E_NOT_OK` / `BUFREQ_E_OVFL`）。`BUFREQ_E_OVFL` なら CanTp は FC(OVFLW) を返す。データ（`info`）は、通知だけで、コピーは続く `CopyRxData` が行う |
 | | `Dcm_CopyRxData(id, {データ, 長さ}, &空き)` | SF のデータ、FF の先頭 6 バイト、各 CF のデータを、Dcm の受信バッファ（`DCM_RX_BUF_SIZE`＝32）へ直接コピーする |
 | | `Dcm_TpRxIndication(id, E_OK / E_NOT_OK)` | 受信の完了（E_OK）、または中断（N_Cr タイムアウト、シーケンス番号の誤り、別の SF/FF による中断。E_NOT_OK） |
 | 送信 | `CanTp_Transmit(id, {長さ})` | Dcm は応答の長さだけを渡す（`SduDataPtr` は使わない） |
 | | `Dcm_CopyTxData(id, {コピー先, 長さ}, 再送指示, &残り)` | SF（`CanTp_Transmit()` の中）、FF の先頭 6 バイト、各 CF の組み立ての時に、Dcm の応答バッファから取り出す |
 | | `Dcm_TpTxConfirmation(id, E_OK / E_NOT_OK)` | 送信の完了（最後のフレームを送った時。E_OK）、または中断（N_Bs・N_As タイムアウト、FC(OVFLW)、CopyTxData の失敗。E_NOT_OK） |
 
-- CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。
+- CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。失敗が N_As 相当（1000 ms）続いたら、中断します。
+  **仕様（[SWS_CanTp_00343]）は、失敗したら、すぐ接続を打ち切ること**ですが、意図的に再送しています（2026-11-03 判断）。理由:
+  `CanIf_Transmit()` が `E_NOT_OK` になる主な原因は、`Can_Write()` の同期の時間切れ（mcp_can の `sendMsg()` が、TXREQ のクリアまで最大 2.5 ms 待つ）で、
+  バスが混んでいて送り終わらない場合です。仕様では、この状態は `Can_Write()` が `CAN_BUSY` を返し、CanIf が送信バッファ（CanIfTxBuffer）で溜めて再送するため、
+  CanTp には見えません。本プロジェクトは `CAN_BUSY` を返さず、CanIf にも送信バッファが無いので、CanTp が、その代わりをしています
+  （Arduino のライブラリの制約が理由の補い）。仕様の形にするには、`Can_Write()` の `CAN_BUSY` と CanIf の送信バッファが要ります（大きい）。
+- SF/FF の最初の `Dcm_CopyTxData()` が `BUFREQ_E_BUSY`（送信データがまだ無い）のときは、`CanTp_Transmit()` は要求を受け付け（`E_OK`）、
+  `CanTp_MainFunction()` で再試行します。N_Cs 相当（`CANTP_N_AS_TIMEOUT_MS`）を超えても用意されなければ、`E_NOT_OK` で中断します。
+  待っている間も、チャネルは使用中で、新しい送信要求は拒否します。
+- `StartOfReception` が受け入れても、空きが、受信済みのデータ（SF の長さ、FF の 6 バイト）より小さいときは、受信を中断します。
+- FC の送信が失敗したら、受信を終了し、上位へ `E_NOT_OK` を通知します。
+- 受信側のブロックサイズ（BS。`CANTP_BLOCK_SIZE`、現在は 0）が 0 以外のときは、FF の後と、各ブロック（BS 本の CF）の最後の CF の後（続きがあるとき）に、同じ BS・STmin の FC(CTS) を送ります（[SWS_CanTp_00278]、[SWS_CanTp_00067]）。
+  BS は上限で、実行時の変数（`CanTp_RxBlockSize`。`CanTp_Init()` が設定値へ戻す）で持ちます（[SWS_CanTp_00091]）。
+- パディングは `CANTP_PADDING_BYTE`（`CanTp.json` の `paddingByte`。既定 0xAA）で埋めます（SF、最後の CF、FC）。
+- 中断したときは、DET の実行時エラーを報告します（[SWS_CanTp_00229]）: タイムアウト（N_Cr は `CANTP_E_RX_COM`、N_Bs・N_As・N_Cs は `CANTP_E_TX_COM`）、
+  それ以外（シーケンス番号の誤り、上位層の失敗、FC の OVFLW、FC の送信失敗など）は `CANTP_E_COM`。
 - `CanTp_Transmit()` が `E_NOT_OK` を返した（受け付けなかった）ときは、`Dcm_TpTxConfirmation()` は呼びません。
 - FC の送信には、CF の組み立て済みフレームを壊さないよう、別のバッファ（`fcFrame`）を使います。
 - 送信できる N-SDU の最大長は、FF の長さ欄（12 bit）で決まる 4095 バイトです。実際の上限は、Dcm の応答バッファ（`DCM_TX_BUF_SIZE`）です。
