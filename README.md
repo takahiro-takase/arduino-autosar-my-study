@@ -201,40 +201,40 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | App_<br>WarningIndicator | — | — | 警告灯制御 SWC (LED 3灯)<br>（[詳細](docs/modules/App_WarningIndicator_Notes.md)） |
 | RTE | Rte | — | — | SWC 間シグナル仲介 (RTE ミラー)・COM コールバック (`Rte_Cbk.h`)<br>（[詳細](docs/modules/Rte_Notes.md)） |
 | OS | Os | — | SWS_Os<br>API 数は対象外<br>(協調スケジューラ。OSEK の API は未実装で、カウンタ API のみ実装) | タイムトリガスケジューラ・カウンタ API (`GetCounterValue` / `GetElapsedValue`、BSW の時刻取得窓口)<br>（[詳細](docs/modules/Os_Notes.md)） |
-| BSW | Adc | 123 | SWS_Adc<br>API実装: 6 / 18<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
-|  | BswM | 42 | SWS_BswM<br>API実装: 6 / 32<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
-|  | Can | 80 | SWS_Can<br>API実装: 10 / 16 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
-|  | CanIf | 60 | SWS_CanIf<br>API実装: 17 / 35 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
-|  | CanNm | 31 | SWS_CanNM<br>API実装: 14 / 24 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
-|  | CanSM | 140 | SWS_CanSM<br>API実装: 8 / 19 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
+| BSW | Adc | 123 | SWS_Adc<br>API実装: 7 / 18<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
+|  | BswM | 42 | SWS_BswM<br>API実装: 7 / 32<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
+|  | Can | 80 | SWS_Can<br>API実装: 15 / 19 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
+|  | CanIf | 60 | SWS_CanIf<br>API実装: 21 / 35 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
+|  | CanNm | 31 | SWS_CanNM<br>API実装: 16 / 24 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
+|  | CanSM | 140 | SWS_CanSM<br>API実装: 10 / 19 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
 |  | CanTp | 35 | SWS_CanTp<br>API実装: 4 / 9<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
 |  | CanTSyn | 161 | SWS_CanTSyn<br>API実装: 6 / 6<br>(OFS/OFNS・CAN FD は対象外) | CAN 時刻同期 (SYNC/FUP の送信・受信)<br>（[詳細](docs/modules/CanTSyn_Notes.md)） |
-|  | Com | 50 | SWS_Com<br>API実装: 22 / 32 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
-|  | ComM | 12 | SWS_ComM<br>API実装: 17 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
+|  | Com | 50 | SWS_Com<br>API実装: 24 / 32 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
+|  | ComM | 12 | SWS_ComM<br>API実装: 18 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
 |  | CryIf | 112 | SWS_CryptoInterface<br>API実装: 6 / 17<br>パススルー<br>(下位が1個のため) | 暗号ドライバへのルーティング層<br>（[詳細](docs/modules/CryIf_Notes.md)） |
 |  | Crypto | 114 | SWS_CryptoDriver<br>API実装: 6 / 18<br>(一部意図的に簡略化) | 暗号処理ドライバ (AES-128-CMAC)<br>（[詳細](docs/modules/Crypto_Notes.md)） |
 |  | Csm | 110 | SWS_CryptoServiceManager<br>API実装: 7 / 74<br>(一部意図的に簡略化) | 暗号サービスマネージャ<br>（[詳細](docs/modules/Csm_Notes.md)） |
 |  | Dcm | 53 | SWS_Dcm<br>API実装: 16 / 26<br>(一部意図的に簡略化) | UDS 診断通信マネージャ<br>（[詳細](docs/modules/Dcm_Notes.md)） |
-|  | Dem | 54 | SWS_Dem<br>API実装: 15 / 108 | 診断イベント管理 (DTC)<br>（[詳細](docs/modules/Dem_Notes.md)） |
+|  | Dem | 54 | SWS_Dem<br>API実装: 21 / 108 | 診断イベント管理 (DTC)<br>（[詳細](docs/modules/Dem_Notes.md)） |
 |  | Det | — | SWS_Det<br>API実装: 6 / 6<br>(一部意図的に簡略化) | 開発時エラー検出・ロギング<br>（[詳細](docs/modules/Det_Notes.md)） |
 |  | Dio | — | SWS_Dio<br>API実装: 8 / 8<br>(一部意図的に簡略化) | デジタル入出力ドライバ<br>（[詳細](docs/modules/Dio_Notes.md)） |
 |  | E2E | — | SWS_E2E<br>API実装: 13 / 43<br>(一部意図的に簡略化) | エンドツーエンド保護ライブラリ (Profile01/05)<br>（[詳細](docs/modules/E2E_Notes.md)） |
 |  | E2EXf | 176 | SWS_E2ELibrary 12.4<br>(E2E Transformer)<br>API 数は対象外<br>(一部意図的に簡略化) | E2E トランスフォーマ (Rte⇔E2E ライブラリ統合)<br>（[詳細](docs/modules/E2EXf_Notes.md)） |
 |  | E2EMon | — | — (独自 CDD 相当) | ネットワーク健全性モニタ (独自 CDD)<br>（[詳細](docs/modules/E2EMon_Notes.md)） |
-|  | EcuM | 10 | SWS_EcuStateManager<br>API実装: 9 / 53 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
+|  | EcuM | 10 | SWS_EcuStateManager<br>API実装: 17 / 53 | ECU ステートマネージャ (起動・シャットダウン制御)<br>（[詳細](docs/modules/EcuM_Notes.md)） |
 |  | Fee | 21 | SWS_Fee<br>API実装: 9 / 13<br>(一部意図的に簡略化) | フラッシュエミュレーション EEPROM ドライバ<br>（[詳細](docs/modules/Fee_Notes.md)） |
-|  | FiM | 11 | SWS_FiM<br>API実装: 4 / 6<br>(一部意図的に簡略化) | 機能抑止マネージャ<br>（[詳細](docs/modules/FiM_Notes.md)） |
+|  | FiM | 11 | SWS_FiM<br>API実装: 5 / 6<br>(一部意図的に簡略化) | 機能抑止マネージャ<br>（[詳細](docs/modules/FiM_Notes.md)） |
 |  | Gpt | 100 | SWS_Gpt<br>API実装: 9 / 14<br>(一部意図的に簡略化) | 汎用タイマドライバ<br>（[詳細](docs/modules/Gpt_Notes.md)） |
 |  | IoHwAb | 254 | AUTOSAR 抽象化層 | ボタン入力・センサ電圧のハードウェア抽象化<br>（[詳細](docs/modules/IoHwAb_Notes.md)） |
 |  | KeyM | 116<br>(仮) | SWS_KeyManager<br>(Release 4.4.0)<br>API 数は対象外<br>(一部意図的に簡略化) | 鍵管理マネージャ<br>（[詳細](docs/modules/KeyM_Notes.md)） |
 |  | Mcu | 101 | SWS_Mcu<br>API実装: 5 / 11<br>(一部意図的に簡略化) | マイコン初期化・リセット要因管理<br>（[詳細](docs/modules/Mcu_Notes.md)） |
 |  | MemIf | 22 | SWS_MemIf<br>API実装: 7 / 9<br>パススルー<br>(下位が1個のため) | 不揮発メモリ抽象化層<br>（[詳細](docs/modules/MemIf_Notes.md)） |
-|  | Nm | 29 | SWS_NetworkManagementInterface<br>API実装: 14 / 30<br>(一部意図的に簡略化) | ネットワークマネジメントインタフェース (ComM と CanNm の中継層。単一ネットワーク構成のため NM Coordinator は対応除外) |
+|  | Nm | 29 | SWS_NetworkManagementInterface<br>API実装: 15 / 30<br>(一部意図的に簡略化) | ネットワークマネジメントインタフェース (ComM と CanNm の中継層。単一ネットワーク構成のため NM Coordinator は対応除外) |
 |  | NvM | 20 | SWS_NvM<br>API実装: 8 / 23<br>(一部意図的に簡略化) | 不揮発メモリマネージャ<br>（[詳細](docs/modules/NvM_Notes.md)） |
 |  | PduR | 51 | SWS_PduR<br>API 数は対象外<br>(一部意図的に簡略化) | PDU ルーティング層<br>（[詳細](docs/modules/PduR_Notes.md)） |
 |  | Port | — | SWS_Port<br>API実装: 5 / 5<br>(一部意図的に簡略化) | ピン設定管理<br>（[詳細](docs/modules/Port_Notes.md)） |
 |  | SchM | — | SWS_SchM<br>API 数は対象外<br>(一部意図的に簡略化) | 排他制御 (スケジューラマネージャ)<br>（[詳細](docs/modules/SchM_Notes.md)） |
-|  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>API実装: 7 / 27<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
+|  | SecOC | 150 | SWS_SecureOnboard<br>Communication<br>API実装: 8 / 27<br>(一部意図的に簡略化) | メッセージ認証 (改ざん・なりすまし対策)<br>（[詳細](docs/modules/SecOC_Notes.md)） |
 |  | StbM | 160 | SWS_SynchronizedTime<br>BaseManager<br>API実装: 9 / 30<br>(最小版) | 同期時間ベースマネージャ (全域時間の保持・提供)<br>（[詳細](docs/modules/StbM_Notes.md)） |
 |  | Wdg | 102 | SWS_Wdg<br>API実装: 4 / 4<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
 |  | WdgIf | 43 | SWS_WdgIf<br>API実装: 3 / 3<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
@@ -324,7 +324,7 @@ python tools/api_coverage/api_coverage.py --update-readme # README の表の数�
 
 実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
 単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
-`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-10 時点で 908 件）。
+`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-11 時点で 1915 件）。
 
 ビルドは PlatformIO ではなく CMake + clang++（llvm-mingw）です。事前に環境変数
 `LLVM_MINGW_BIN` へ llvm-mingw の `bin` ディレクトリを設定してください。
@@ -451,6 +451,14 @@ CanTp が ISO 15765-2 のフレーム分割・組立を担い、Dcm が UDS サ�
 Dem は故障情報を DTC として管理し、NvM 経由で EEPROM に永続化します。
 FiM は Dem が確定した DTC をもとにアプリ機能の実行許可を判定します。
 診断フレームはアプリデータ（0x100 / 0x110 / 0x200）とは独立した CAN ID（0x7E0 / 0x7E8）で通信します。
+
+```
+  受信: Can → CanIf → CanTp → PduR → Dcm
+  送信: Dcm → PduR → CanTp → CanIf → Can
+```
+
+仕様どおり、CanTp は、下位の CanIf と PduR を経由せず直接やり取りし（N-PDU）、上位の Dcm とは PduR の TP ルーティング
+（`PduR_CanTp*()` / `PduR_DcmTransmit()`）を経由します（N-SDU）。
 
 対応している UDS サービスの一覧は、「[対応している UDS サービス](#uds-services)」を参照してください。
 

@@ -83,6 +83,21 @@ extern "C" {
 void CanTp_Init(const CanTp_ConfigType* CfgPtr);
 
 /**
+ * \brief   CanTp モジュールのバージョン情報を取得する。
+ *
+ * \details CanTp_Init と並び、未初期化時でも CANTP_E_UNINIT を報告しない
+ *          例外 API（CanTp_Cfg.h 冒頭コメント参照）のため、初期化状態は
+ *          確認せず NULL ポインタチェックのみ行う。
+ *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
+ * \ServiceID      {0x07}
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
+
+/**
  * \brief   DCM の UDS 応答を CAN トランスポートフレームに分割して送信する。
  *
  * \details PduInfoPtr の SduLength <= 7 なら Single Frame として送信
@@ -119,21 +134,6 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
  * \Synchronicity  {Synchronous}
  */
 void CanTp_MainFunction(void);
-
-/**
- * \brief   CanTp モジュールのバージョン情報を取得する。
- *
- * \details CanTp_Init と並び、未初期化時でも CANTP_E_UNINIT を報告しない
- *          例外 API（CanTp_Cfg.h 冒頭コメント参照）のため、初期化状態は
- *          確認せず NULL ポインタチェックのみ行う。
- *
- * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
- *
- * \ServiceID      {0x07}
- * \Reentrancy     {Reentrant}
- * \Synchronicity  {Synchronous}
- */
-void CanTp_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 /* ======================================================================
  * Callback Functions and Notifications
