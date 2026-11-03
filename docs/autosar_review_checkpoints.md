@@ -469,6 +469,9 @@ GetStatusOfDTC → SelectExtendedDataRecord → GetSizeOf… → GetNext… の�
 `Rte_Call_DataServices_*_ReadData`（Rte.c。DemDataElementReadFnc に相当）で、確定 FAILED の瞬間に Dem が読む（以前は、App が毎周期、値を渡していた）。
 Dcm の 0x19/04 と 0x19/06 は、共通の `Dcm_ReadDtcRecord()` で、Dem の選択 API を呼ぶ。`DCM_FREEZEFRAME_*`・`DCM_RECORD_NUMBER_ALL` は、Dem_Cfg.h の定数へ移した。
 残り: `Dem_Disable/EnableDTCRecordUpdate`（第 4 段）。）
+（2026-11-03 追記 11: Dem の第 4 段。`Dem_DisableDTCRecordUpdate`（0x1a）・`Dem_EnableDTCRecordUpdate`（0x1b）を実装した。止めている間、そのイベントの FreezeFrame の取り直しと故障確定回数の加算、
+`Dem_ClearDTC()` の消去は、戻すときに、保留した順に行う（捨てない）。UDS ステータスには影響しない。同じクライアントが別の DTC を止めると、`DEM_E_WRONG_CONDITION`（[SWS_Dem_00648]）。
+Dcm の 0x19/04・06 は、読む前後で呼ぶ。これで、Dem の独自関数の、仕様の API への置き換え（第 1〜4 段）は、すべて完了した。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

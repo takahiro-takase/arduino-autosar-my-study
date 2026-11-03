@@ -844,6 +844,8 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_OK_ReadsThroughTheDemSelectionA
     EXPECT_EQ(CallCount_Dem_SelectExtendedDataRecord, 1U);
     EXPECT_EQ(CallCount_Dem_GetSizeOfExtendedDataRecordSelection, 1U);
     EXPECT_EQ(CallCount_Dem_GetNextExtendedDataRecord, 1U);
+    EXPECT_EQ(CallCount_Dem_DisableDTCRecordUpdate, 1U);   // 読む間、レコードを守る
+    EXPECT_EQ(CallCount_Dem_EnableDTCRecordUpdate, 1U);    // 読み終えたら、戻す
     ASSERT_EQ(LastLength_CanTp_Transmit, 8U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_EXTENDED_DATA_RECORD_NUMBER);   // 要求の 0xFF ではなく、実際のレコード番号
@@ -873,6 +875,7 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcExtendedData_NG_DemSelectionFailureReturnsRe
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_EnableDTCRecordUpdate, 1U);   // 読み出しが失敗しても、止めは必ず戻す
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);
@@ -905,6 +908,8 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_OK_ReadsThroughTheDemSelectionApis)
     EXPECT_EQ(CallCount_Dem_SelectFreezeFrameData, 1U);
     EXPECT_EQ(CallCount_Dem_GetSizeOfFreezeFrameSelection, 1U);
     EXPECT_EQ(CallCount_Dem_GetNextFreezeFrameData, 1U);
+    EXPECT_EQ(CallCount_Dem_DisableDTCRecordUpdate, 1U);   // 読む間、レコードを守る
+    EXPECT_EQ(CallCount_Dem_EnableDTCRecordUpdate, 1U);    // 読み終えたら、戻す
     ASSERT_EQ(LastLength_CanTp_Transmit, 18U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], 0x59U);
     EXPECT_EQ(LastData_CanTp_Transmit[6], DEM_FREEZE_FRAME_RECORD_NUMBER);   // 要求の 0xFF ではなく、実際のレコード番号
@@ -936,6 +941,7 @@ TEST_F(Dcm_ReadDtcInfo_Test, ReadDtcSnapshot_NG_DemSelectionFailureReturnsReques
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
+    EXPECT_EQ(CallCount_Dem_EnableDTCRecordUpdate, 1U);   // 読み出しが失敗しても、止めは必ず戻す
     ASSERT_EQ(LastLength_CanTp_Transmit, 3U);
     EXPECT_EQ(LastData_CanTp_Transmit[0], DCM_SID_NEGATIVE_RESP);
     EXPECT_EQ(LastData_CanTp_Transmit[2], DCM_NRC_REQUEST_OUT_OF_RANGE);

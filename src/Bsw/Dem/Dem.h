@@ -599,6 +599,51 @@ Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFo
 Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStatus);
 
 /**
+ * \brief   選んだ DTC のレコード（FreezeFrame・ExtendedData）の更新と削除を止める（[SWS_Dem_00233]）。
+ *
+ * \details Dcm が、Dem_SelectFreezeFrameData() / Dem_SelectExtendedDataRecord() で読む前に呼び、読み終えてから
+ *          Dem_EnableDTCRecordUpdate() で戻す（[SWS_Dem_00270]）。止めている間、その DTC のイベントが
+ *          確定 FAILED になっても、FreezeFrame の取り直しと故障確定回数の加算は、止めている間は行わず、
+ *          Dem_EnableDTCRecordUpdate() が戻したときに行う（捨てない）。Dem_ClearDTC() が消去しても、そのレコードは
+ *          消さず、戻したときに消す（消去のあとに確定していれば、消してから、更新する）。
+ *          UDS ステータスの更新には影響しない。他のイベントのレコードも、影響を受けない。
+ *          同じクライアントが、1 つしか止められない（[SWS_Dem_00648]）。DTC グループは止められない。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK                 止めた。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、すでに
+ *                               同じクライアントが別の DTC を止めている（DEM_E_WRONG_CONDITION）。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00233, SWS_Dem_00270, SWS_Dem_00648}
+ * \ServiceID      {0x1a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_PENDING・DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_DisableDTCRecordUpdate(uint8 ClientId);
+
+/**
+ * \brief   Dem_DisableDTCRecordUpdate() で止めたレコードの更新と削除を、元に戻す（[SWS_Dem_00234]）。
+ *
+ * \details 止めている間に Dem_ClearDTC() が消去していたレコードは消し、止めている間に確定 FAILED になっていたときは、
+ *          FreezeFrame と故障確定回数を更新する（消去と更新は、保留した順に、NvM への書き込みを積む）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
+ *
+ * \retval  E_OK      戻した。
+ * \retval  E_NOT_OK  未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、止めている DTC が
+ *                    無い（DEM_E_WRONG_CONDITION）。
+ *
+ * \AUTOSARReq     {SWS_Dem_00234, SWS_Dem_00271}
+ * \ServiceID      {0x1b}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous（本実装は同期的に完了するため DEM_BUSY は返さない）}
+ */
+Std_ReturnType Dem_EnableDTCRecordUpdate(uint8 ClientId);
+
+/**
  * \brief   ExtendedData のレコードを選ぶ（[SWS_Dem_91017]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
  *
  * \details 以降の Dem_GetSizeOfExtendedDataRecordSelection() と Dem_GetNextExtendedDataRecord() が、この選択を使う

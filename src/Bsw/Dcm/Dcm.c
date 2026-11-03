@@ -2095,7 +2095,8 @@ typedef Std_ReturnType (*Dcm_DemGetNextFncType)(uint8 ClientId, uint8* DestBuffe
  * \brief   SID 0x19 subFunc 0x04 / 0x06 の共通の処理。DTC のレコード（FreezeFrame / ExtendedData）を、Dem から取得して返す。
  *
  * \details 要求された DTC とレコードを、Dem の選択 API で取得する
- *          （Dem_SelectDTC() → Dem_GetDTCSelectionResult() → Dem_GetStatusOfDTC() → select → getSize → getNext）。
+ *          （Dem_SelectDTC() → Dem_GetDTCSelectionResult() → Dem_GetStatusOfDTC() → Dem_DisableDTCRecordUpdate() →
+ *          select → getSize → getNext → Dem_EnableDTCRecordUpdate()）。
  *          レコード番号の判定と、レコードの形式（FreezeFrame は {レコード番号, DID 数, DID, データ...}、
  *          ExtendedData は {レコード番号, データ...}）は、Dem が決める。Dcm は、要求の recordNumber を
  *          そのまま Dem へ渡し、Dem が書き出したレコードを、DTC とステータスの後ろへ、そのまま付ける。
@@ -2142,6 +2143,13 @@ static void Dcm_ReadDtcRecord(const uint8* uds, uint8 udsLen, uint8 subFunc,
     {
         ret = Dem_GetStatusOfDTC(DCM_DEM_CLIENT_ID, &statusByte);
     }
+    /* 読んでいる間、その DTC のレコードを、更新・削除から守る（[SWS_Dem_00270]）。止められたときは、必ず戻す */
+    boolean recordUpdateDisabled = FALSE;
+    if (ret == E_OK)
+    {
+        ret                  = Dem_DisableDTCRecordUpdate(DCM_DEM_CLIENT_ID);
+        recordUpdateDisabled = (ret == E_OK) ? TRUE : FALSE;
+    }
     if (ret == E_OK)
     {
         ret = select(DCM_DEM_CLIENT_ID, recordNumber);
@@ -2157,6 +2165,10 @@ static void Dcm_ReadDtcRecord(const uint8* uds, uint8 udsLen, uint8 subFunc,
     else
     {
         ret = E_NOT_OK;   /* 失敗、またはレコードが応答の領域に収まらない */
+    }
+    if (recordUpdateDisabled)
+    {
+        (void)Dem_EnableDTCRecordUpdate(DCM_DEM_CLIENT_ID);
     }
 
     if ((ret != E_OK) || (bufSize == 0U))

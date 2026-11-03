@@ -580,6 +580,8 @@ set(NATIVE_CHAIN_WRAP_SYMBOLS
     Dem_SelectFreezeFrameData
     Dem_GetSizeOfFreezeFrameSelection
     Dem_GetNextFreezeFrameData
+    Dem_DisableDTCRecordUpdate
+    Dem_EnableDTCRecordUpdate
     Dem_GetTranslationType
     Dem_GetFaultDetectionCounter
     Dem_EnableDTCSetting

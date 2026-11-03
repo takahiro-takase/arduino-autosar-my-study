@@ -301,7 +301,10 @@ FreezeFrame ともに未記録状態へ戻す（他の DTC には影響しない
 | `Dem_SelectFreezeFrameData(ClientId, 番号)` | FreezeFrame のレコードを選ぶ（番号 0xFF は全レコード） |
 | `Dem_GetSizeOfFreezeFrameSelection` | 選んだレコードの大きさ（記録が無ければ `E_OK` で 0） |
 | `Dem_GetNextFreezeFrameData(ClientId, buf, &size)` | `{レコード番号, DID 数, DID, データ, ...}` を書き出す（戻り値は、ExtendedData と同じ） |
+| `Dem_DisableDTCRecordUpdate(ClientId)` | 選んだ DTC のレコード（FreezeFrame・ExtendedData）の更新と削除を止める。読んでいる最中に、レコードが変わらないようにする（[SWS_Dem_00270]）。クライアントごとに 1 つだけ（[SWS_Dem_00648]）。グループは止められない |
+| `Dem_EnableDTCRecordUpdate(ClientId)` | 止めたレコードを戻す。止めている間に `Dem_ClearDTC()` が消去していたレコードは消し、止めている間に確定していた更新は、ここで反映する |
 
+- Dcm の 0x19/04・06 は、`Dem_DisableDTCRecordUpdate()` で止めてから読み、`Dem_EnableDTCRecordUpdate()` で戻す（読み出しが失敗しても、必ず戻す）。止めている間、そのイベントの確定 FAILED は、UDS ステータスだけをすぐ更新し、FreezeFrame の取り直しと故障確定回数の加算は、止めを戻すときに行う（保留し、捨てない）。止めている間の消去も、戻すときに反映する（保留した順に、消去、確定の更新）。
 - `DEM_GROUP_ALL_DTCS`（0xFFFFFF）は、全 DTC のグループです。本プロジェクトの DTC グループは、これだけです。
 - 範囲外の `ClientId` は `DEM_E_WRONG_CONFIGURATION`、`Dem_SelectDTC()` を呼ばずに、選択を前提とする API を呼ぶと、`DEM_E_WRONG_CONDITION`（[SWS_Dem_01255]）と `E_NOT_OK` です。
 - 簡略化: 常に同期的に完了するため、`DEM_PENDING` と `DEM_BUSY` は返しません。

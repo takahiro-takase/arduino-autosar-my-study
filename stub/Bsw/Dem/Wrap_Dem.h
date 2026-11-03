@@ -121,6 +121,8 @@ extern uint32 CallCount_Dem_GetNextExtendedDataRecord;
 extern uint32 CallCount_Dem_SelectFreezeFrameData;
 extern uint32 CallCount_Dem_GetSizeOfFreezeFrameSelection;
 extern uint32 CallCount_Dem_GetNextFreezeFrameData;
+extern uint32 CallCount_Dem_DisableDTCRecordUpdate;
+extern uint32 CallCount_Dem_EnableDTCRecordUpdate;
 
 /** `Dem_SetEventStatus` のみの直近呼び出し引数（既存の特別扱い、上記コメント参照）。 */
 extern Dem_EventIdType     LastEventId_Dem_SetEventStatus;
@@ -162,6 +164,8 @@ extern uint32 FailFromCallCount_Dem_GetNextExtendedDataRecord;
 extern uint32 FailFromCallCount_Dem_SelectFreezeFrameData;
 extern uint32 FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection;
 extern uint32 FailFromCallCount_Dem_GetNextFreezeFrameData;
+extern uint32 FailFromCallCount_Dem_DisableDTCRecordUpdate;
+extern uint32 FailFromCallCount_Dem_EnableDTCRecordUpdate;
 extern uint32 FailFromCallCount_Dem_SetDTCFilter;
 extern uint32 FailFromCallCount_Dem_GetNumberOfFilteredDTC;
 extern uint32 FailFromCallCount_Dem_GetNextFilteredDTC;
@@ -193,6 +197,8 @@ extern Std_ReturnType ForcedReturn_Dem_GetNextExtendedDataRecord; /**< 既定 E_
 extern Std_ReturnType ForcedReturn_Dem_SelectFreezeFrameData; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetSizeOfFreezeFrameSelection; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetNextFreezeFrameData; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_DisableDTCRecordUpdate; /**< 既定 E_NOT_OK */
+extern Std_ReturnType ForcedReturn_Dem_EnableDTCRecordUpdate; /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_SetDTCFilter;    /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetNumberOfFilteredDTC;    /**< 既定 E_NOT_OK */
 extern Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC;    /**< 既定 E_NOT_OK */

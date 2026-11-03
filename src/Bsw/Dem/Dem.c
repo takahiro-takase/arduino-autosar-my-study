@@ -191,12 +191,30 @@ typedef struct
 
 static Dem_SelectionType Dem_Selection[DEM_CLIENT_COUNT];
 
+/** Dem_DisableDTCRecordUpdate() で止めている DTC（クライアントごとに 1 つ、[SWS_Dem_00648]）。 */
+typedef struct
+{
+    uint8           locked;    /**< 1 = 止めている */
+    Dem_EventIdType eventId;   /**< 止めているイベント（locked が 1 のときだけ有効） */
+} Dem_RecordLockType;
+
+static Dem_RecordLockType Dem_RecordLock[DEM_CLIENT_COUNT];
+
+/** 1 = 止めている間に Dem_ClearDTC() が消去したため、止めを戻すときに、レコードを消す */
+static uint8 Dem_RecordClearPending[DEM_EVENT_COUNT];
+
+/** 1 = 止めている間に確定 FAILED になったため、止めを戻すときに、FreezeFrame と故障確定回数を更新する（[SWS_Dem_00270]: 更新は、止めるだけで、捨てない） */
+static uint8 Dem_RecordCapturePending[DEM_EVENT_COUNT];
+
 /* ======================================================================
  * Function Prototypes
  * ====================================================================== */
 
 static uint8 Dem_ClearOne(Dem_EventIdType EventId);
 static boolean Dem_FindEventOfDtc(uint32 DTC, Dem_EventIdType* EventId);
+static boolean Dem_IsRecordLocked(Dem_EventIdType EventId);
+static void Dem_StoreRecords(Dem_EventIdType EventId);
+static void Dem_DiscardRecords(Dem_EventIdType EventId);
 static Std_ReturnType Dem_CheckClient(uint8 ClientId, uint8 apiId);
 static Std_ReturnType Dem_CheckSelected(uint8 ClientId, uint8 apiId);
 static Std_ReturnType Dem_CheckRecordSelection(uint8 ClientId, uint8 apiId, Dem_RecordKindType kind, uint16* RecordSize);
@@ -315,7 +333,9 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
      * （デバウンスカウンタは、Dem_BeginOperationCycle() が 0 へ戻す） */
     for (uint8 i = 0U; i < DEM_EVENT_COUNT; i++)
     {
-        Dem_FreezeFrameValid[i]  = 0U;
+        Dem_FreezeFrameValid[i]    = 0U;
+        Dem_RecordClearPending[i]  = 0U;
+        Dem_RecordCapturePending[i] = 0U;
     }
 
     Dem_DTCSettingEnabled = 1U;
@@ -326,6 +346,8 @@ void Dem_Init(const Dem_ConfigType* ConfigPtr)
         Dem_Selection[c].dtc      = 0U;
         Dem_Selection[c].eventId  = 0U;
         Dem_Selection[c].result   = E_NOT_OK;
+        Dem_RecordLock[c].locked  = 0U;
+        Dem_RecordLock[c].eventId = 0U;
         for (uint8 k = 0U; k < (uint8)DEM_RECORD_KIND_COUNT; k++)
         {
             Dem_Selection[c].record[k].selected  = 0U;
@@ -1192,20 +1214,18 @@ Std_ReturnType Dem_SetEventStatus(Dem_EventIdType EventId,
     {
         Dem_StatusTable[EventId] = status;
 
+        /* デバウンス確定 FAILED の瞬間にのみ FreezeFrame と ExtendedData を更新する。レコードの更新を止められている DTC は、
+         * UDS ステータスだけを更新し、レコードの更新は、止めを戻すとき（Dem_EnableDTCRecordUpdate()）まで保留する（[SWS_Dem_00270]） */
         if ((nowFailedConfirmed) != 0U)
         {
-            /* デバウンス確定 FAILED の瞬間にのみ FreezeFrame を更新する */
-            Dem_CaptureFreezeFrame(EventId);
-            DET_LOGI(TAG, "FreezeFrame ev=%u captured", (unsigned)EventId);
-
-            /* ExtendedData: 確定 FAILED の累積回数を +1 (0xFF で飽和) */
-            if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+            if (Dem_IsRecordLocked(EventId))
             {
-                Dem_OccurrenceCounter[EventId]++;
+                Dem_RecordCapturePending[EventId] = 1U;
             }
-            (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
-            DET_LOGI(TAG, "ExtendedData ev=%u occurrence=%u",
-                     (unsigned)EventId, (unsigned)Dem_OccurrenceCounter[EventId]);
+            else
+            {
+                Dem_StoreRecords(EventId);
+            }
         }
 
         (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_STATUS, Dem_StatusTable);
@@ -1742,13 +1762,105 @@ Std_ReturnType Dem_GetNextFilteredDTCAndFDC(uint8 ClientId, uint32* DTC, sint8* 
  * Dem_DisableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   選んだ DTC のレコードの更新と削除を止める（[SWS_Dem_00233]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK                 止めた。
+ * \retval  E_NOT_OK             未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、すでに別の DTC を止めている。
+ * \retval  DEM_WRONG_DTC        一致するイベントが無い、DTCFormat が UDS 以外、または DTC グループを選んでいる。
+ * \retval  DEM_WRONG_DTCORIGIN  選んだ DTCOrigin が非対応。
+ *
+ * \AUTOSARReq     {SWS_Dem_00233, SWS_Dem_00270, SWS_Dem_00648}
+ * \ServiceID      {0x1a}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_DisableDTCRecordUpdate(uint8 ClientId)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_DISABLE_DTC_RECORD_UPDATE) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    const Dem_SelectionType* sel  = &Dem_Selection[ClientId];
+    Dem_RecordLockType*      lock = &Dem_RecordLock[ClientId];
+
+    if (lock->locked != 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_DISABLE_DTC_RECORD_UPDATE, DEM_E_WRONG_CONDITION);   /* [SWS_Dem_00648] */
+        return E_NOT_OK;
+    }
+
+    if (sel->result != E_OK)
+    {
+        return sel->result;
+    }
+
+    if (sel->dtc == DEM_GROUP_ALL_DTCS)
+    {
+        return DEM_WRONG_DTC;   /* グループは、止められない */
+    }
+
+    lock->locked  = 1U;
+    lock->eventId = sel->eventId;
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_EnableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+/**
+ * \brief   Dem_DisableDTCRecordUpdate() で止めたレコードの更新と削除を、元に戻す（[SWS_Dem_00234]、Dem.h 参照）。
+ *
+ * \param[in]  ClientId  呼び出し元のクライアント識別子（DEM_CLIENT_COUNT 未満）。
+ *
+ * \retval  E_OK      戻した。
+ * \retval  E_NOT_OK  未初期化、ClientId が範囲外、Dem_SelectDTC() が呼ばれていない、または、止めている DTC が無い。
+ *
+ * \AUTOSARReq     {SWS_Dem_00234, SWS_Dem_00271}
+ * \ServiceID      {0x1b}
+ * \Reentrancy     {Non Reentrant}
+ * \Synchronicity  {Asynchronous}
+ */
+Std_ReturnType Dem_EnableDTCRecordUpdate(uint8 ClientId)
+{
+    if (Dem_CheckSelected(ClientId, DEM_API_ID_ENABLE_DTC_RECORD_UPDATE) != E_OK)
+    {
+        return E_NOT_OK;
+    }
+
+    Dem_RecordLockType* lock = &Dem_RecordLock[ClientId];
+
+    if (lock->locked == 0U)
+    {
+        (void)Det_ReportError(DEM_MODULE_ID, 0U, DEM_API_ID_ENABLE_DTC_RECORD_UPDATE, DEM_E_WRONG_CONDITION);
+        return E_NOT_OK;
+    }
+
+    const Dem_EventIdType eventId = lock->eventId;
+    lock->locked = 0U;
+
+    /* 止めている間に消去されていたレコードを、ここで消す（別のクライアントが同じイベントを止めているときは、そちらが戻すまで待つ） */
+    if (!Dem_IsRecordLocked(eventId))
+    {
+        /* 先に消去を、次に、消去のあとの確定の更新を、保留していた順に反映する */
+        if (Dem_RecordClearPending[eventId] != 0U)
+        {
+            Dem_RecordClearPending[eventId] = 0U;
+            Dem_DiscardRecords(eventId);
+            (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+        }
+        if (Dem_RecordCapturePending[eventId] != 0U)
+        {
+            Dem_RecordCapturePending[eventId] = 0U;
+            Dem_StoreRecords(eventId);
+        }
+    }
+    return E_OK;
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSizeOfExtendedDataRecordSelection
@@ -2277,6 +2389,74 @@ Std_ReturnType Dem_EnableDTCSetting(uint8 ClientId)
  * ----------------------------------------------------------------------- */
 
 /* ----------------------------------------------------------------------
+ * Dem_DiscardRecords
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   イベントのレコード（故障確定回数と FreezeFrame）を捨てる（NvM への書き込みは、呼び出し元の責務）。
+ *
+ * \details Dem_ClearOne()（止められていないとき）と、Dem_EnableDTCRecordUpdate()（保留していた消去）が呼ぶ。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ */
+static void Dem_DiscardRecords(Dem_EventIdType EventId)
+{
+    Dem_OccurrenceCounter[EventId] = 0U;
+    Dem_FreezeFrameValid[EventId]  = 0U;
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_StoreRecords
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   確定 FAILED のレコードを更新する: FreezeFrame を取り、故障確定回数を +1 する（0xFF で飽和）。
+ *
+ * \details Dem_SetEventStatus()（確定の瞬間）と、Dem_EnableDTCRecordUpdate()（止めている間に確定していたとき）が呼ぶ。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ */
+static void Dem_StoreRecords(Dem_EventIdType EventId)
+{
+    Dem_CaptureFreezeFrame(EventId);
+    DET_LOGI(TAG, "FreezeFrame ev=%u captured", (unsigned)EventId);
+
+    if (Dem_OccurrenceCounter[EventId] < 0xFFU)
+    {
+        Dem_OccurrenceCounter[EventId]++;
+    }
+    (void)NvM_WriteBlock(NVM_BLOCK_ID_DEM_EXTENDED, Dem_OccurrenceCounter);
+    DET_LOGI(TAG, "ExtendedData ev=%u occurrence=%u",
+             (unsigned)EventId, (unsigned)Dem_OccurrenceCounter[EventId]);
+}
+
+/* ----------------------------------------------------------------------
+ * Dem_IsRecordLocked
+ * ---------------------------------------------------------------------- */
+
+/**
+ * \brief   いずれかのクライアントが、そのイベントのレコードの更新を止めているか。
+ *
+ * \param[in]  EventId  イベント ID（範囲チェックは呼び出し元の責務）。
+ *
+ * \retval  TRUE   止められている（Dem_DisableDTCRecordUpdate()）。
+ * \retval  FALSE  止められていない。
+ */
+static boolean Dem_IsRecordLocked(Dem_EventIdType EventId)
+{
+    boolean locked = FALSE;
+
+    for (uint8 c = 0U; c < DEM_CLIENT_COUNT; c++)
+    {
+        if ((Dem_RecordLock[c].locked != 0U) && (Dem_RecordLock[c].eventId == EventId))
+        {
+            locked = TRUE;
+        }
+    }
+    return locked;
+}
+
+/* ----------------------------------------------------------------------
  * Dem_FindEventOfDtc
  * ---------------------------------------------------------------------- */
 
@@ -2635,8 +2815,15 @@ static uint8 Dem_ClearOne(Dem_EventIdType EventId)
                              | DEM_STATUS_NOT_COMPLETED_THIS_CYCLE;
     Dem_DebounceCounter[EventId]    = 0;
     Dem_AgingCounter[EventId]       = 0U;
-    Dem_OccurrenceCounter[EventId]  = 0U;
-    Dem_FreezeFrameValid[EventId]   = 0U;
+    if (Dem_IsRecordLocked(EventId))
+    {
+        Dem_RecordClearPending[EventId]   = 1U;   /* レコードは、Dem_EnableDTCRecordUpdate() が戻すときに消す */
+        Dem_RecordCapturePending[EventId] = 0U;   /* 消去は、それより前の確定の更新より、あとに効く */
+    }
+    else
+    {
+        Dem_DiscardRecords(EventId);
+    }
 
     return (Dem_StatusTable[EventId] != prevStatus) ? 1U : 0U;
 }

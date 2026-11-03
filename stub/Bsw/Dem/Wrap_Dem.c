@@ -61,6 +61,8 @@ uint32 CallCount_Dem_GetNextExtendedDataRecord               = 0U;
 uint32 CallCount_Dem_SelectFreezeFrameData                    = 0U;
 uint32 CallCount_Dem_GetSizeOfFreezeFrameSelection            = 0U;
 uint32 CallCount_Dem_GetNextFreezeFrameData                   = 0U;
+uint32 CallCount_Dem_DisableDTCRecordUpdate                   = 0U;
+uint32 CallCount_Dem_EnableDTCRecordUpdate                    = 0U;
 
 Dem_EventIdType     LastEventId_Dem_SetEventStatus     = 0xFFU;
 Dem_EventStatusType LastEventStatus_Dem_SetEventStatus = 0xFFU;
@@ -89,6 +91,8 @@ uint32 FailFromCallCount_Dem_GetNextExtendedDataRecord               = WRAP_DEM_
 uint32 FailFromCallCount_Dem_SelectFreezeFrameData            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection    = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetNextFreezeFrameData           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_DisableDTCRecordUpdate           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+uint32 FailFromCallCount_Dem_EnableDTCRecordUpdate            = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_SetDTCFilter                 = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetNumberOfFilteredDTC       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
 uint32 FailFromCallCount_Dem_GetNextFilteredDTC           = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -117,6 +121,8 @@ Std_ReturnType ForcedReturn_Dem_GetNextExtendedDataRecord   = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_SelectFreezeFrameData         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetSizeOfFreezeFrameSelection = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNextFreezeFrameData        = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_DisableDTCRecordUpdate        = E_NOT_OK;
+Std_ReturnType ForcedReturn_Dem_EnableDTCRecordUpdate         = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_SetDTCFilter                = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNumberOfFilteredDTC      = E_NOT_OK;
 Std_ReturnType ForcedReturn_Dem_GetNextFilteredDTC          = E_NOT_OK;
@@ -150,6 +156,8 @@ void WrapDem_Reset(void)
     CallCount_Dem_SelectFreezeFrameData               = 0U;
     CallCount_Dem_GetSizeOfFreezeFrameSelection       = 0U;
     CallCount_Dem_GetNextFreezeFrameData              = 0U;
+    CallCount_Dem_DisableDTCRecordUpdate              = 0U;
+    CallCount_Dem_EnableDTCRecordUpdate               = 0U;
     CallCount_Dem_GetTranslationType           = 0U;
     CallCount_Dem_GetFaultDetectionCounter     = 0U;
     CallCount_Dem_EnableDTCSetting             = 0U;
@@ -182,6 +190,8 @@ void WrapDem_Reset(void)
     FailFromCallCount_Dem_SelectFreezeFrameData       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetSizeOfFreezeFrameSelection= WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetNextFreezeFrameData      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_DisableDTCRecordUpdate      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
+    FailFromCallCount_Dem_EnableDTCRecordUpdate       = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_SetDTCFilter                = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetNumberOfFilteredDTC      = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
     FailFromCallCount_Dem_GetNextFilteredDTC          = WRAP_DEM_FAIL_FROM_CALL_COUNT_DISABLED;
@@ -210,6 +220,8 @@ void WrapDem_Reset(void)
     ForcedReturn_Dem_SelectFreezeFrameData            = E_NOT_OK;
     ForcedReturn_Dem_GetSizeOfFreezeFrameSelection    = E_NOT_OK;
     ForcedReturn_Dem_GetNextFreezeFrameData           = E_NOT_OK;
+    ForcedReturn_Dem_DisableDTCRecordUpdate           = E_NOT_OK;
+    ForcedReturn_Dem_EnableDTCRecordUpdate            = E_NOT_OK;
     ForcedReturn_Dem_SetDTCFilter                = E_NOT_OK;
     ForcedReturn_Dem_GetNumberOfFilteredDTC      = E_NOT_OK;
     ForcedReturn_Dem_GetNextFilteredDTC          = E_NOT_OK;
@@ -762,13 +774,39 @@ Std_ReturnType __wrap_Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* 
  * Dem_DisableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_DisableDTCRecordUpdate(uint8 ClientId);
+Std_ReturnType __wrap_Dem_DisableDTCRecordUpdate(uint8 ClientId)
+{
+    CallCount_Dem_DisableDTCRecordUpdate++;
+    Log_Write(LOG_T, TAG, "Dem_DisableDTCRecordUpdate", "called %u times", CallCount_Dem_DisableDTCRecordUpdate);
+
+    if (CallCount_Dem_DisableDTCRecordUpdate >= FailFromCallCount_Dem_DisableDTCRecordUpdate)
+    {
+        return ForcedReturn_Dem_DisableDTCRecordUpdate;
+    }
+
+    return __real_Dem_DisableDTCRecordUpdate(ClientId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_EnableDTCRecordUpdate
  * ---------------------------------------------------------------------- */
 
-/* 未実装 */
+extern
+Std_ReturnType __real_Dem_EnableDTCRecordUpdate(uint8 ClientId);
+Std_ReturnType __wrap_Dem_EnableDTCRecordUpdate(uint8 ClientId)
+{
+    CallCount_Dem_EnableDTCRecordUpdate++;
+    Log_Write(LOG_T, TAG, "Dem_EnableDTCRecordUpdate", "called %u times", CallCount_Dem_EnableDTCRecordUpdate);
+
+    if (CallCount_Dem_EnableDTCRecordUpdate >= FailFromCallCount_Dem_EnableDTCRecordUpdate)
+    {
+        return ForcedReturn_Dem_EnableDTCRecordUpdate;
+    }
+
+    return __real_Dem_EnableDTCRecordUpdate(ClientId);
+}
 
 /* ----------------------------------------------------------------------
  * Dem_GetSizeOfExtendedDataRecordSelection
