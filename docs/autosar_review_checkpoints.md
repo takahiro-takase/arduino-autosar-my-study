@@ -448,8 +448,8 @@ CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は
 残る乖離: 受信側の BS≠0 の FC 再送（00278）、N_Br/FC(WAIT)/WFTmax（00082 ほか）、タイマの起点を送信確認にする件（00075 ほか）、
 機能アドレッシング・複数チャネル（00092・00096）、未実装 API（Shutdown・Cancel*・ChangeParameter・ReadParameter）。）
 （2026-11-03 追記 4: 受信側の BS≠0 の FC の再送（[SWS_CanTp_00278]・[SWS_CanTp_00067]）を実装した。BS は実行時の変数（`CanTp_RxBlockSize`）で持つ。
-タイマの起点を送信確認にする件（00075 ほか）は見送り: 本プロジェクトの TX 確認は、`Can_Write()` の成功で積んだ保留キューを `Can_MainFunction_Write()` が通知するだけで、MCP2515 の送信完了と結びついていないため、
-CanTp 側で確認を待っても、実際の N_As・N_Ar を表せない。先に、Can ドライバの TX 確認を、ハードウェアの送信完了（TXREQ のクリア・エラー）に結びつける必要がある。）
+タイマの起点を送信確認にする件（00075 ほか）は見送り: 本プロジェクトの `Can_Write()` は、mcp_can の `sendMsg()`（最大 2.5 ms、TXREQ のクリアまで待つ。送信は同期）で送るため、`E_OK` を返した時点で、実際の送信は終わっている（確認の通知は、`Can_MainFunction_Write()` へ遅らせるだけ）。送信の失敗（ACK なしなど）は、同期的な `E_NOT_OK` で分かる。このため、CanTp の N_As・N_Ar は、同期的な送信失敗で近似できている。仕様どおり、送信を非同期（バッファへ載せて返り、TXREQ のクリアを後で確認）にするには、mcp_can の公開 API が足りず（`sendMsg()` は private、レジスタ読み出しも private）、独自の SPI ドライバが要る。）
+（2026-11-03 追記 5: `CanIf_GetControllerMode()` を、`Can_GetControllerMode()` への転送に直した（[SWS_CANIF_00229]）。CanIf の記録 `CanIf_ControllerMode[]` は、CanIf 内部の判断用に残した。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|

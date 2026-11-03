@@ -101,6 +101,13 @@ CanSM は、現在、受け取るだけで、状態を変えません（[`CanSM_
 本関数は `CanIf_ControllerMode[]` を更新しません（`CanIf_SetControllerMode()` の側にある、起床時の通知・送信確認の
 状態などの付随処理と、ちぐはぐになるため）。
 
+## CanIf_GetControllerMode（モードの取得の転送）
+
+`CanIf_GetControllerMode()` は、CanIf の引数の検査（未初期化、`CANIF_E_PARAM_CONTROLLERID`、`CANIF_E_PARAM_POINTER`）のあと、`Can_GetControllerMode()` へ転送し、
+その結果を返します（[SWS_CANIF_00229]、[SWS_Can_91015]）。CanIf が持つ `CanIf_ControllerMode[]` は、CanIf 内部の判断（TX 確認の通知状態を、STARTED のときだけ更新する）にだけ使います。
+以前は、この記録を返していました（2026-11-03 に転送へ切り替え）。
+Can ドライバが未初期化のときは、Can ドライバが `CAN_E_UNINIT` を DET へ報告し、`E_NOT_OK` が返ります（CanIf 自身の検査は、これより前で行います）。
+
 ## CanIf_TriggerTransmit（送信データの要求の転送）
 
 CAN ドライバが送信の直前にデータを取りに来たとき、TX PDU 設定（`CanIf_TxPduConfigType`）の

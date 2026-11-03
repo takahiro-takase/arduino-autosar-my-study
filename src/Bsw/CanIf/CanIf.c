@@ -85,8 +85,8 @@ static uint8 CanIf_WakeupRxEventStored[CANIF_CONTROLLER_MAX];
  * 実 AUTOSAR は CanIf_ControllerModeIndication()（Can からの非同期通知）で
  * 実際の遷移完了を知るが、本プロジェクトの Can_SetControllerMode() は
  * 同期的に完了するため、要求成功時点で直接更新する形に簡略化している。
- * CanIf_GetControllerMode() が返す記録（Can_GetControllerMode() への転送には
- * 切り替えていない。Can.c の同関数のコメント参照）。 */
+ * CanIf 内部の判断（TX 確認の通知状態を、STARTED のときだけ更新する）に使う記録。
+ * CanIf_GetControllerMode() は、これを返さず、Can_GetControllerMode() へ転送する。 */
 static Can_ControllerStateType CanIf_ControllerMode[CANIF_CONTROLLER_MAX];
 
 /* CanIf_GetTxConfirmationState()（[SWS_CANIF_00734]、2026-09 追加）用の
@@ -304,11 +304,15 @@ Std_ReturnType CanIf_SetControllerMode(uint8 ControllerId, Can_ControllerStateTy
 /**
  * \brief   CAN コントローラの現在の動作モードを取得する。
  *
+ * \details [SWS_CANIF_00229] の通り、対応する CAN ドライバのサービス
+ *          （Can_GetControllerMode()、[SWS_Can_91015]。Can.c 参照）へそのまま転送する。
+ *
  * \param[in]   ControllerId     対象コントローラの ID。
  * \param[out]  ControllerModePtr  現在のモードの格納先。NULL 禁止。
  *
  * \retval  E_OK      ControllerModePtr へ格納した。
- * \retval  E_NOT_OK  ControllerId が範囲外、または ControllerModePtr が NULL。
+ * \retval  E_NOT_OK  CanIf 未初期化、ControllerId が範囲外、ControllerModePtr が NULL、または
+ *                      下位の Can ドライバが失敗した。
  *
  * \AUTOSARReq     {SWS_CANIF_00229, SWS_CANIF_00313, SWS_CANIF_00656}
  * \ServiceID      {0x04}
@@ -336,8 +340,8 @@ Std_ReturnType CanIf_GetControllerMode(uint8 ControllerId, Can_ControllerStateTy
         return E_NOT_OK;
     }
 
-    *ControllerModePtr = CanIf_ControllerMode[ControllerId];
-    return E_OK;
+    /* [SWS_CANIF_00229]: 対応する Can ドライバのサービスへ転送する（CanIf_ControllerMode[] の記録は、CanIf 内部の判断用）。 */
+    return Can_GetControllerMode(ControllerId, ControllerModePtr);
 }
 
 /* ----------------------------------------------------------------------
