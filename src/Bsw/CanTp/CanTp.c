@@ -1148,7 +1148,12 @@ static void CanTp_SendNextCF(void)
             return;
         }
 
-        /* 送信失敗: pos/sn を進めず、組み立て済みの同じ CF を、次の CanTp_MainFunction 呼び出しで再送する */
+        /* 送信失敗: pos/sn を進めず、組み立て済みの同じ CF を、次の CanTp_MainFunction 呼び出しで再送する。
+         * [SWS_CanTp_00343] は、CanIf_Transmit() が E_NOT_OK のとき、接続を打ち切ることを求めるが、本実装は意図的に再送する
+         * （N_As 相当の時間まで）。E_NOT_OK の主な原因は、Can_Write() が同期（mcp_can の sendMsg() が、TXREQ のクリアまで最大 2.5 ms 待つ）で、
+         * バスの混雑による時間切れを E_NOT_OK にすること。仕様では、この「混んでいるだけ」の状態は、Can_Write() が CAN_BUSY を返し、
+         * CanIf が送信バッファ（CanIfTxBuffer）で溜めて再送するため、CanTp には見えない。本プロジェクトは CAN_BUSY を返さず、
+         * CanIf にも送信バッファが無いので、CanTp がその代わりをする（Arduino のライブラリの制約が理由の補い）。 */
         DET_LOGE(TAG, "TX CF FAIL sn=%u retry", (unsigned)CanTp_Tx.sn);
         return;
     }

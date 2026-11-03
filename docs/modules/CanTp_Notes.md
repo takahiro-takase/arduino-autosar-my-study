@@ -50,7 +50,12 @@ Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は
 | | `Dcm_CopyTxData(id, {コピー先, 長さ}, 再送指示, &残り)` | SF（`CanTp_Transmit()` の中）、FF の先頭 6 バイト、各 CF の組み立ての時に、Dcm の応答バッファから取り出す |
 | | `Dcm_TpTxConfirmation(id, E_OK / E_NOT_OK)` | 送信の完了（最後のフレームを送った時。E_OK）、または中断（N_Bs・N_As タイムアウト、FC(OVFLW)、CopyTxData の失敗。E_NOT_OK） |
 
-- CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。
+- CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。失敗が N_As 相当（1000 ms）続いたら、中断します。
+  **仕様（[SWS_CanTp_00343]）は、失敗したら、すぐ接続を打ち切ること**ですが、意図的に再送しています（2026-11-03 判断）。理由:
+  `CanIf_Transmit()` が `E_NOT_OK` になる主な原因は、`Can_Write()` の同期の時間切れ（mcp_can の `sendMsg()` が、TXREQ のクリアまで最大 2.5 ms 待つ）で、
+  バスが混んでいて送り終わらない場合です。仕様では、この状態は `Can_Write()` が `CAN_BUSY` を返し、CanIf が送信バッファ（CanIfTxBuffer）で溜めて再送するため、
+  CanTp には見えません。本プロジェクトは `CAN_BUSY` を返さず、CanIf にも送信バッファが無いので、CanTp が、その代わりをしています
+  （Arduino のライブラリの制約が理由の補い）。仕様の形にするには、`Can_Write()` の `CAN_BUSY` と CanIf の送信バッファが要ります（大きい）。
 - SF/FF の最初の `Dcm_CopyTxData()` が `BUFREQ_E_BUSY`（送信データがまだ無い）のときは、`CanTp_Transmit()` は要求を受け付け（`E_OK`）、
   `CanTp_MainFunction()` で再試行します。N_Cs 相当（`CANTP_N_AS_TIMEOUT_MS`）を超えても用意されなければ、`E_NOT_OK` で中断します。
   待っている間も、チャネルは使用中で、新しい送信要求は拒否します。

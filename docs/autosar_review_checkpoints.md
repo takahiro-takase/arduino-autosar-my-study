@@ -452,6 +452,8 @@ CanTp は Dcm を直接呼ばず、PduR 経由で呼ぶ。Dcm の送信要求は
 （2026-11-03 追記 5: `CanIf_GetControllerMode()` を、`Can_GetControllerMode()` への転送に直した（[SWS_CANIF_00229]）。CanIf の記録 `CanIf_ControllerMode[]` は、CanIf 内部の判断用に残した。）
 （2026-11-03 追記 6: `Can_Write()` の送信失敗のとき、MCP2515 の送信バッファに残る未送信のフレームを取り消すようにした（`Can_Hw_AbortTx()`。各 TXBnCTRL の TXREQ を BIT MODIFY で消す）。
 以前は、失敗しても残り、バスの状況が変わると遅れて送出され、3 つ残ると以降の送信が常に失敗した。）
+（2026-11-03 追記 7: CanTp の CF の送信失敗の再送（[SWS_CanTp_00343] は即中断）は、意図的に残す判断とした。`Can_Write()` が同期で `CAN_BUSY` を返さず、CanIf に送信バッファが無いための補いで、Arduino のライブラリの制約が理由。
+CanTp_Notes と CanTp.c に理由を記録した。仕様の形にするには、`Can_Write()` の `CAN_BUSY` と CanIf の送信バッファが要る。）
 
 | 対象ファイル | SHA（変更前） | 結果 |
 |---|---|---|
