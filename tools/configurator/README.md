@@ -106,6 +106,15 @@ CAN のバイト列と、信号表の定義に従ってデコードした信号�
 `TestCounter2` に値を入れる処理はまだ無いため、値は 0 のままです。ASW から書く関数 `Rte_Write_TestMsg_TestCounter2()` は、手順 5 の「生成」で `src/Rte/Rte.h` / `Rte.c` に自動で作られています（[Rte の関数の生成](#rte-generation) 参照）。
 値を変えたいときは、`src/Asw/App_Test.c` の `App_Test_Run()` から、その関数を呼びます。
 
+### CAN FD の確認用フレーム（FdTestMsg）
+
+CAN FD の 64 バイトのフレームを試すための、テスト専用のメッセージ `FdTestMsg`（CAN 0x310、ECU 送信、1 秒周期、64 バイト）もあります。
+先頭（byte[0]）の `FdTestCounterHead` と、末尾（byte[63]）の `FdTestCounterTail` に、`TestMsg` と同じカウンタが入ります。
+8 バイトを超える位置まで届くことを、受信側で確かめるためです。
+
+- ECU は FD 対応の基板（MCP2518FD）で動かします（`pio run -e uno_r4_fd -t upload`）。MCP2515 では FD を出せないため、`Can.json` が MCP2518FD のときだけ生成が通ります。
+- can_tool は `interface=candle`、`fd: true` で接続します（[can_tool の README](../can_tool/README.md) 参照）。
+
 元に戻すときは、信号表の変更を取り消し（`git checkout` または手で戻す）、「同期」「生成」を押し直します。
 
 ## 仕組み

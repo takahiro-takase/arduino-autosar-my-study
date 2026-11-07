@@ -9,7 +9,8 @@
  *          受信オーバーフローの検出、INT ピンの割り込み、スリープとバス活動での復帰を実装する。
  *          CAN FD は、Can_Hw_ConfigureFd() で有効にしたときだけ使う（8 byte を超える長さを FD フレームで送受信し、
  *          通常動作のモードを NormalFD にする）。無効のときはクラシック CAN 2.0（最大 8 byte）。
- *          受信フィルタ（Can_Hw_InitMask/InitFilter）は、まだ実装していない。
+ *          受信フィルタ（Can_Hw_InitMask/InitFilter）は、MCP2515 と同じ「マスク 2 個 + フィルタ 6 個」の指定を、
+ *          MCP2518FD のフィルタ（マスク + 受理 ID の組）へ置き換えて使う（標準 ID のみ）。
  *
  *          MCP2515 版との主な違い:
  *            - 送信は非同期。Can_Hw_Send() は、送信キューへ積めたら成功とする。ACK が返らないことは
@@ -110,6 +111,13 @@ static const uint32_t Can_Hw_BitRateTable[] = {
 /** 標準 ID（11 bit）で表せる最大値。これを超える ID は拡張フレームとして送る。 */
 #define CAN_HW_STD_ID_MAX  0x7FFUL
 
+/** 受信マスクの数と受信フィルタの数（MCP2515 と同じ。マスク 0 はフィルタ 0〜1 に、マスク 1 はフィルタ 2〜5 に掛かる）。 */
+#define CAN_HW_RX_MASK_COUNT    2U
+#define CAN_HW_RX_FILTER_COUNT  6U
+
+/** 標準 ID の値は、MCP2515 用の指定（mcp_can の形式）では上位 16 bit に置く。 */
+#define CAN_HW_STD_ID_SHIFT  16U
+
 /* ======================================================================
  * Global Variables
  * ====================================================================== */
@@ -128,6 +136,9 @@ static bool     Can_Hw_FdBrs = false;           /**< FD フレームを BRS 付�
 static uint8_t  Can_Hw_DataFactor = 1U;         /**< データ部ビットレート / 通常のビットレート（1〜10） */
 static bool     Can_Hw_SleepRequested = false;  /**< スリープを要求した（起床待ち） */
 static bool     Can_Hw_SleepEntered   = false;  /**< チップが実際にスリープに入ったことを確認した */
+static uint16_t Can_Hw_RxMask[CAN_HW_RX_MASK_COUNT];      /**< 受信マスク（標準 ID の 11 bit。0 は「全 ID を受ける」） */
+static uint16_t Can_Hw_RxFilter[CAN_HW_RX_FILTER_COUNT];  /**< 受信フィルタ（標準 ID の 11 bit） */
+static bool     Can_Hw_RxFilterDirty = false;   /**< 受信マスク/フィルタを変えたが、チップへは未反映 */
 
 /** ライブラリ（begin() 内）と同じ 800kHz。ライブラリを介さずレジスタを直接読み書きするときに使う。 */
 static const SPISettings Can_Hw_SpiSettings(800UL * 1000UL, MSBFIRST, SPI_MODE0);
@@ -210,6 +221,24 @@ static bool Can_Hw_Usable(void)
 }
 
 /**
+ * 受信マスクと受信フィルタから、MCP2518FD のフィルタ（マスク + 受理 ID の組）を作る。
+ * 受理の条件は MCP2515 と同じ: マスクの 1 の bit だけを比べ、(ID & マスク) == (フィルタ & マスク) なら受ける。
+ * マスク 0 はフィルタ 0〜1 に、マスク 1 はフィルタ 2〜5 に掛かる。
+ * \retval true  フィルタを作った（begin() に渡す）。
+ * \retval false 全 ID を受ける（マスクが 0 の組がある）。フィルタは渡さない。
+ */
+static bool Can_Hw_BuildRxFilters(ACAN2517FDFilters& filters)
+{
+    for (uint8_t f = 0U; f < CAN_HW_RX_FILTER_COUNT; f++)
+    {
+        const uint16_t mask = Can_Hw_RxMask[(f < 2U) ? 0U : 1U];
+        if (mask == 0U) { return false; }
+        filters.appendFilter(kStandard, mask, (uint16_t)(Can_Hw_RxFilter[f] & mask), nullptr);
+    }
+    return true;
+}
+
+/**
  * チップを RESET してから begin() で設定し直す（最大 CAN_HW_INIT_RETRY 回）。成功すると Listen-Only になる。
  * 起動時（Can_Hw_Init）と、スリープから起きたとき（Can_Hw_SetMode）に使う。
  * 失敗のたびに、CiCON と OSC の生の読み値を出す（原因の切り分け用）。
@@ -220,12 +249,18 @@ static bool Can_Hw_BeginChip(void)
                                 static_cast<DataBitRateFactor>(Can_Hw_DataFactor));
     settings.mRequestedMode = ACAN2517FDSettings::ListenOnly;
 
+    /* 受信フィルタ。マスクが 0 の組が 1 つでもあれば全 ID を受けるため、フィルタは指定しない（ライブラリの既定: 全受信）。 */
+    ACAN2517FDFilters filters;
+    const bool useFilters = Can_Hw_BuildRxFilters(filters);
+
     for (uint8_t attempt = 1U; attempt <= CAN_HW_INIT_RETRY; attempt++)
     {
         Can_Hw_RawReset();
-        const uint32_t errorCode = driver->begin(settings, nullptr);
+        const uint32_t errorCode = useFilters ? driver->begin(settings, nullptr, filters)
+                                              : driver->begin(settings, nullptr);
         if (errorCode == 0U)
         {
+            Can_Hw_RxFilterDirty = false;
             if (attempt > 1U) { DET_LOGW(TAG, "MCP2518FD begin() ok on attempt %u", (unsigned)attempt); }
             return true;
         }
@@ -353,16 +388,37 @@ Can_Hw_ReturnType Can_Hw_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     return CAN_HW_OK;
 }
 
+/* マスクとフィルタは、ここでは保存するだけ。チップへの反映は、次に begin() をやり直すとき
+ * （Can_Hw_SetMode() の中。起動時の begin() は、これらの設定より前に済んでいる）。標準 ID のみ対応する。 */
 Can_Hw_ReturnType Can_Hw_InitMask(uint8_t num, uint8_t ext, uint32_t mask)
 {
-    /* 段階 1 では、ハードウェアの受信フィルタは使わない（全フレームを受信し、CanIf が振り分ける）。 */
-    (void)num; (void)ext; (void)mask;
+    if ((num >= CAN_HW_RX_MASK_COUNT) || (ext != 0U))
+    {
+        DET_LOGW(TAG, "InitMask: unsupported (num=%u ext=%u)", (unsigned)num, (unsigned)ext);
+        return CAN_HW_FAIL;
+    }
+    const uint16_t value = (uint16_t)((mask >> CAN_HW_STD_ID_SHIFT) & CAN_HW_STD_ID_MAX);
+    if (value != Can_Hw_RxMask[num])
+    {
+        Can_Hw_RxMask[num]   = value;
+        Can_Hw_RxFilterDirty = true;
+    }
     return CAN_HW_OK;
 }
 
 Can_Hw_ReturnType Can_Hw_InitFilter(uint8_t num, uint8_t ext, uint32_t filter)
 {
-    (void)num; (void)ext; (void)filter;
+    if ((num >= CAN_HW_RX_FILTER_COUNT) || (ext != 0U))
+    {
+        DET_LOGW(TAG, "InitFilter: unsupported (num=%u ext=%u)", (unsigned)num, (unsigned)ext);
+        return CAN_HW_FAIL;
+    }
+    const uint16_t value = (uint16_t)((filter >> CAN_HW_STD_ID_SHIFT) & CAN_HW_STD_ID_MAX);
+    if (value != Can_Hw_RxFilter[num])
+    {
+        Can_Hw_RxFilter[num] = value;
+        Can_Hw_RxFilterDirty = true;
+    }
     return CAN_HW_OK;
 }
 
@@ -384,9 +440,10 @@ Can_Hw_ReturnType Can_Hw_SetMode(Can_Hw_Mode mode)
     }
 
     /* スリープから起きた直後は、構成モードにいる。起床後は、起動時と同じくチップを初期化し直す
-     * （起床のままでは、実機で送信が ACK されない状態が続いたため）。
+     * （起床のままでは、実機で送信が ACK されない状態が続いたため）。受信フィルタを変えたときも、
+     * フィルタは begin() でしか設定できないため、初期化し直す。
      * 失敗しても Can_Hw_Started は落とさない（SleepRequested が残るので、次の SetMode() で再試行できる）。 */
-    if (Can_Hw_SleepRequested && (mode != CAN_HW_MODE_SLEEP) && !Can_Hw_BeginChip())
+    if (((Can_Hw_SleepRequested || Can_Hw_RxFilterDirty) && (mode != CAN_HW_MODE_SLEEP)) && !Can_Hw_BeginChip())
     {
         return CAN_HW_FAIL;
     }

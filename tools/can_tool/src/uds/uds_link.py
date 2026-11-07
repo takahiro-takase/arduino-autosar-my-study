@@ -212,15 +212,27 @@ class UdsResponse:
         return f"POS " + " ".join(f"{b:02X}" for b in self.raw)
 
 
-def create_bus(interface: str, channel, bitrate: int) -> can.BusABC:
+def create_bus(interface: str, channel, bitrate: int, fd: bool = False, data_bitrate: int = 2000000) -> can.BusABC:
     """python-can の Bus を生成する。アダプタ種別ごとに channel の型が異なる
     （gs_usb は整数 index、slcan はシリアルポート文字列等）ため、呼び出し側
-    (config.json) でそのまま渡せる値をそのまま使う。"""
+    (config.json) でそのまま渡せる値をそのまま使う。
+
+    fd=True は CAN FD で開く（8 バイトを超えるフレームを受信・送信できる）。data_bitrate は
+    データ部のビットレート [bit/s]。FD に対応するのは candle（python-can-candle）だけ。"""
+    if fd and interface != "candle":
+        raise ValueError("CAN FD で開けるのは interface=candle のときだけです（現在: %s）" % interface)
     if interface == "candle":
         # python-can-candle（candleLight / gs_usb 互換の USB-CAN。FD 対応のアダプタも扱える）。
         # ignore_config=True は、python-can の設定ファイル・環境変数の値で引数が文字列に
         # 変換されるのを防ぐ（candle の引数は型を持つため）。送受信の仕方は gs_usb と同じ。
-        return can.Bus(interface=interface, channel=channel, bitrate=bitrate, ignore_config=True)
+        # FD のサンプルポイントは ECU（MCP2518FD、約 80%）に合わせる。candle の既定 87.5% のままだと、
+        # データ部が高速（2Mbps）のときにずれてフォーマットエラーになった（実機で確認）。
+        fd_args = dict(fd=True, data_bitrate=data_bitrate,
+                       sample_point=80.0, data_sample_point=80.0) if fd else {}
+        bus = can.Bus(interface=interface, channel=channel, bitrate=bitrate,
+                      ignore_config=True, **fd_args)
+        bus.opened_as_fd = bool(fd)
+        return bus
     bus = can.Bus(interface=interface, channel=channel, bitrate=bitrate)
     if interface == "gs_usb":
         _patch_gs_usb_shutdown(bus)
@@ -418,6 +430,10 @@ def dtc_name(dtc: int) -> str:
     return DTC_NAMES.get(dtc, f"0x{dtc:06X}")
 
 
+# CAN FD で許されるデータ長（8 バイトを超える側）
+FD_VALID_LENGTHS = (12, 16, 20, 24, 32, 48, 64)
+
+
 def send_can_frame(bus: can.BusABC, can_id: int, data: bytes) -> None:
     """任意の CAN ID で生フレームを送信する。UDS 応答を待たない。
     実 CAN と同じく DLC は data の実バイト数そのもの（8 バイトへの
@@ -425,8 +441,22 @@ def send_can_frame(bus: can.BusABC, can_id: int, data: bytes) -> None:
     [SWS_CANIF_00168])を意図的に発火させたい場合は、データ入力欄に設定 Dlc
     未満のバイト数を入力するだけでよい（2026-09、以前は常に0x00で8バイトへ
     パディングしており、バイト数を減らしても実際に流れる DLC が変わらなかった
-    ため、この検証ができなかった）。"""
-    msg = can.Message(arbitration_id=can_id, data=bytes(data)[:8], is_extended_id=False)
+    ため、この検証ができなかった）。
+
+    8 バイトを超えるときは CAN FD のフレーム（BRS あり）で送る。FD で許される長さ
+    （12/16/20/24/32/48/64）以外は ValueError。バスを FD で開いていること（fd=True）が前提。"""
+    payload = bytes(data)
+    if len(payload) <= 8:
+        msg = can.Message(arbitration_id=can_id, data=payload, is_extended_id=False)
+    else:
+        # candle は python-can の bus.protocol を設定しない（常に CAN_20 と見える）ため、create_bus() が付けた印を見る
+        if not getattr(bus, "opened_as_fd", False):
+            raise ValueError("8 バイトを超えるフレームは、CAN FD で開いたバスでしか送れません（config.json の can.fd を確認）")
+        if len(payload) not in FD_VALID_LENGTHS:
+            raise ValueError("CAN FD のデータ長は %s のいずれか（現在: %d）"
+                             % ("/".join(str(n) for n in FD_VALID_LENGTHS), len(payload)))
+        msg = can.Message(arbitration_id=can_id, data=payload, is_extended_id=False,
+                          is_fd=True, bitrate_switch=True)
     bus.send(msg)
 
 

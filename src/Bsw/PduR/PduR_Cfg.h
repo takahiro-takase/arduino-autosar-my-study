@@ -98,7 +98,7 @@
  *           配信先はここには現れない）
  *  UDS 診断要求（CAN 0x7E0）は、CanIf が CanTp_RxIndication() を直接呼ぶ（IF の経路ではない）。
  *  CanTp が上位層（Dcm）へ渡す N-SDU は、tpRxPaths で運ぶ。 */
-#define PDUR_RX_PATH_COUNT   3U
+#define PDUR_RX_PATH_COUNT   4U
 
 /** RX パス 0 の配信先数（COM のみ） */
 #define PDUR_RX_DEST_COUNT_PATH0  1U
@@ -108,6 +108,9 @@
 
 /** RX パス 2 の配信先数（SecOC のみ） */
 #define PDUR_RX_DEST_COUNT_PATH2  1U
+
+/** RX パス 3 の配信先数（COM のみ） */
+#define PDUR_RX_DEST_COUNT_PATH3  1U
 
 /** TX ルーティングパス数
  *  パス 0: COM   → CanIf TxPduId=0 (CAN 0x200, EngineState)
@@ -120,7 +123,7 @@
  *  UDS 診断応答（CAN 0x7E8）は、CanTp が CanIf_Transmit() を直接呼ぶ（IF の経路ではない）。
  *  SrcPduId は COM が PduR_ComTransmit() へ渡す名前空間。各パスで重複しない値を割り当てること。
  *  SrcPduId=1 は、かつて CanTp の診断応答に使っていた欠番（既存の ID を変えないため、詰めない）。 */
-#define PDUR_TX_PATH_COUNT   5U
+#define PDUR_TX_PATH_COUNT   6U
 
 /** TP の RX ルーティングパス数（CanTp → Dcm） */
 #define PDUR_TP_RX_PATH_COUNT   1U
@@ -134,12 +137,14 @@
 #define PduRConf_PduRSrcPdu_EngineInfo_Rx         0U
 #define PduRConf_PduRSrcPdu_AbsInfo_Rx            2U
 #define PduRConf_PduRSrcPdu_ImmobilizerCmd_Rx     3U
+#define PduRConf_PduRSrcPdu_FdTestRx_Rx           4U
 
 #define PduRConf_PduRSrcPdu_MeterStatus_Tx        0U
 #define PduRConf_PduRSrcPdu_WarningStatus_Tx      2U
 #define PduRConf_PduRSrcPdu_E2EHealthStatus_Tx    3U
 #define PduRConf_PduRSrcPdu_ImmobilizerStatus_Tx  4U
 #define PduRConf_PduRSrcPdu_TestMsg_Tx            5U
+#define PduRConf_PduRSrcPdu_FdTestMsg_Tx          6U
 /* @@GEN-END pdur-symbols */
 
 #endif /* PDUR_CFG_H */

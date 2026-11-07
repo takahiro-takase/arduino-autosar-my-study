@@ -162,8 +162,9 @@
 /** RX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=RECEIVE の ComIPdu 数
  *  [0]=EngineInfo 0x100, [1]=AbsInfo 0x110,
- *  [2]=SecureCommand 0x120（SecOC 検証成功後に転送） */
-#define COM_RX_IPDU_COUNT   3U
+ *  [2]=SecureCommand 0x120（SecOC 検証成功後に転送）、
+ *  [3]=FdTestRx 0x320（CAN FD の 64 byte。受信確認用） */
+#define COM_RX_IPDU_COUNT   4U
 
 /** TX I-PDU テーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 Direction=SEND の ComIPdu 数
@@ -176,12 +177,13 @@
  *  [3]=ImmobilizerStatus 0x230 (DIRECT: 変化時のみ送信。Signal Gateway が
  *  ImmobilizerCmd（RX、SecOC 検証済み）から SWC を介さず直接転送する。
  *  詳細は Com_PBCfg.c の Com_GwMappingData 参照)、
- *  [4]=TestMsg 0x300 (PERIODIC 1000ms。信号追加の練習用のテスト専用フレーム) */
-#define COM_TX_IPDU_COUNT   5U
+ *  [4]=TestMsg 0x300 (PERIODIC 1000ms。信号追加の練習用のテスト専用フレーム)、
+ *  [5]=FdTestMsg 0x310 (PERIODIC 1000ms、64 byte。CAN FD の動作確認用) */
+#define COM_TX_IPDU_COUNT   6U
 
 /** シグナルテーブルのエントリ数（RX + TX の合計）
  *  DaVinci: /ActiveEcuC/Com/ComConfig/ 内 ComSignal ノード数の合計 */
-#define COM_SIGNAL_COUNT    20U
+#define COM_SIGNAL_COUNT    24U
 
 /** Signal Gateway ルーティングテーブルのエントリ数
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComGwMapping] ノード数
@@ -204,6 +206,10 @@
 /** TestMsg (0x300、テスト専用) の PERIODIC 送信周期 [ms]
  *  値が変化しなくても、この周期で送信し続ける（信号追加の練習・動作確認用）。 */
 #define COM_TX_PERIOD_TESTMSG_MS  1000U
+
+/** FdTestMsg (0x310、CAN FD の動作確認用、テスト専用) の PERIODIC 送信周期 [ms]
+ *  値が変化しなくても、この周期で送信し続ける。 */
+#define COM_TX_PERIOD_FDTESTMSG_MS  1000U
 
 /** MeterStatus (0x200) の MIXED 送信モードにおける周期フロア間隔 [ms]
  *  DaVinci: /ActiveEcuC/Com/ComConfig/[ComIPdu]/ComTxModeFalse/ComTxModeTimePeriodFactor
@@ -282,12 +288,14 @@
 #define ComConf_ComIPdu_EngineInfo_Rx                        0U
 #define ComConf_ComIPdu_AbsInfo_Rx                           1U
 #define ComConf_ComIPdu_SecureCommand_Rx                     2U
+#define ComConf_ComIPdu_FdTestRx_Rx                          3U
 
 #define ComConf_ComIPdu_MeterStatus_Tx                       0U
 #define ComConf_ComIPdu_WarningStatus_Tx                     1U
 #define ComConf_ComIPdu_E2EHealthStatus_Tx                   2U
 #define ComConf_ComIPdu_ImmobilizerStatus_Tx                 3U
 #define ComConf_ComIPdu_TestMsg_Tx                           4U
+#define ComConf_ComIPdu_FdTestMsg_Tx                         5U
 
 /** RX: エンジン回転数シグナル (16 bit, CAN ID 0x100, byte[0-1]) */
 #define ComConf_ComSignal_EngineSpeed_Rx                     0U
@@ -351,6 +359,18 @@
 
 /** TX: TestCounter (8 bit, CAN ID 0x300, bit 0) */
 #define ComConf_ComSignal_TestMsg_TestCounter_Tx            19U
+
+/** TX: FdTestCounterHead (8 bit, CAN ID 0x310, bit 0) */
+#define ComConf_ComSignal_FdTestMsg_FdTestCounterHead_Tx    20U
+
+/** TX: FdTestCounterTail (8 bit, CAN ID 0x310, bit 504) */
+#define ComConf_ComSignal_FdTestMsg_FdTestCounterTail_Tx    21U
+
+/** RX: FdTestRxHead (8 bit, CAN ID 0x320, bit 0) */
+#define ComConf_ComSignal_FdTestRx_FdTestRxHead_Rx          22U
+
+/** RX: FdTestRxTail (8 bit, CAN ID 0x320, bit 504) */
+#define ComConf_ComSignal_FdTestRx_FdTestRxTail_Rx          23U
 /* @@GEN-END com-symbols */
 
 #endif /* COM_CFG_H */

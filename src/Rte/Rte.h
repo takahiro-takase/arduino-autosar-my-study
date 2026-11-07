@@ -89,6 +89,14 @@ Std_ReturnType Rte_Write_MeterStatus_CoolantTemp(CoolantTemp_t temp);
  * 名前は Rte_Write/Rte_Read_<フレーム名>_<信号名>。合わない名前は Rte.json の names で上書きする */
 /* TestMsg (CAN 0x300) 送信 */
 Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value);
+/* FdTestMsg (CAN 0x310) 送信 */
+Std_ReturnType Rte_Write_FdTestMsg_FdTestCounterHead(uint8 value);
+/* FdTestMsg (CAN 0x310) 送信 */
+Std_ReturnType Rte_Write_FdTestMsg_FdTestCounterTail(uint8 value);
+/* FdTestRx (CAN 0x320) 受信 */
+Std_ReturnType Rte_Read_FdTestRx_FdTestRxHead(uint8* data);
+/* FdTestRx (CAN 0x320) 受信 */
+Std_ReturnType Rte_Read_FdTestRx_FdTestRxTail(uint8* data);
 /* @@GEN-END rte-signal-api */
 
 /* ----------------------------------------------------------------------

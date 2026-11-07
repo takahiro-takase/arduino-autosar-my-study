@@ -117,8 +117,9 @@
  *  TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)
  *  TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先)
  *  TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム)
- *  TxPduId=7: TimeSync (CAN 0x240, CanTSyn。PduR/Com を経由せず直接呼び出す) */
-#define CANIF_TX_PDU_COUNT  8U
+ *  TxPduId=7: TimeSync (CAN 0x240, CanTSyn。PduR/Com を経由せず直接呼び出す)
+ *  TxPduId=8: FdTestMsg (CAN 0x310, 64 byte, COM PERIODIC。CAN FD の動作確認用) */
+#define CANIF_TX_PDU_COUNT  9U
 
 /** RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）
  *  DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg ノード数
@@ -127,8 +128,9 @@
  *  RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU
  *  RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定
  *  RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)
- *  RxPduId=5: TimeSyncIn (CAN 0x241, CanTSyn。PduR/Com を経由せず直接呼び出す) */
-#define CANIF_RX_PDU_COUNT  6U
+ *  RxPduId=5: TimeSyncIn (CAN 0x241, CanTSyn。PduR/Com を経由せず直接呼び出す)
+ *  RxPduId=6: FdTestRx (CAN 0x320, 64 byte, COM。CAN FD の受信確認用) */
+#define CANIF_RX_PDU_COUNT  7U
 /* @@GEN-END canif-counts */
 
 /* @@GEN-BEGIN canif-symbols  生成元: config/data/CanIf.json  （自動生成: 手編集禁止） */
@@ -149,6 +151,8 @@
 #define CanIfConf_CanIfTxPduCfg_TestMsg_Tx            6U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CanIfConf_CanIfTxPduCfg_CanTSyn_Tx            7U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfTxPduCfg_FdTestMsg_Tx          8U
 
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CanIfConf_CanIfRxPduCfg_EngineInfo_Rx         0U
@@ -162,6 +166,8 @@
 #define CanIfConf_CanIfRxPduCfg_CanNm_Rx              4U
 /* cppcheck-suppress misra-c2012-2.5 */
 #define CanIfConf_CanIfRxPduCfg_CanTSyn_Rx            5U
+/* cppcheck-suppress misra-c2012-2.5 */
+#define CanIfConf_CanIfRxPduCfg_FdTestRx_Rx           6U
 /* @@GEN-END canif-symbols */
 
 /** CanIf_ReadRxPduData()（2026-08 追加）の内部バッファ配列サイズ。

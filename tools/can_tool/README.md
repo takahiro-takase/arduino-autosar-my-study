@@ -54,7 +54,12 @@ CAN FD に対応したアダプタ（DSD TECH SH-C31A など。出荷時の cand
 `interface=candle`, `channel=0` で接続します（`pip install -r requirements.txt` で入る `python-can-candle` を使います。
 Windows では追加のドライバ操作は要りませんでした）。`interface` 欄は、`gs_usb` / `candle` / `slcan` から選べます。
 `candle` は、`gs_usb` と同じ USB の ID（`1D50:606F`）のアダプタを扱うため、同時にはどちらか一方でのみ接続してください。
-現在のツールが送受信するのはクラシック CAN（8 バイトまで）で、FD フレームの送受信は未対応です。
+FD フレームを受信するには、`config.json` の `can` で `"fd": true` と `"data_bitrate": 2000000`（データ部のビットレート）を指定します。
+`fd` が有効になるのは `interface=candle` のときだけです（他のアダプタを選んだときは無視します）。
+FD で開くときのサンプルポイントは、ECU（MCP2518FD）に合わせて 80% にしています（アダプタの既定の 87.5% では、
+データ部が 2 Mbps のときにバスエラーになりました）。ECU が FD のフレームを出すとき（`uno_r4_fd`）に、`fd` を `false` のまま、
+または FD 非対応のアダプタで接続すると、バスエラー（0x008）が大量に出て ECU が Bus-Off になります。
+FD フレームの**送信**は未対応です（受信モニタの `FdTestMsg (0x310, 64 byte)` で受信のみ確認できます）。
 
 > **ECU はアイドルが続くと眠ります**（NM のバススリープ）。応答が無いときは、もう一度送信してください
 > （最初の 1 フレームで起きます）。

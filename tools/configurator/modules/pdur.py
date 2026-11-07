@@ -158,7 +158,7 @@ def rx_paths(cfg, ctx):
             [
                 "パス %d: %s" % (i, subst(p["summary"], p, ctx)),
                 "DaVinci: PduRSrcPdu/PduRSrcPduHandleId = %d" % p["srcPduId"],
-                "         (CanIf_PBCfg の RxPduId=%d と一致)" % p["srcPduId"],
+                "         (CanIf_PBCfg の UpperLayerRxPduId と一致。CanIf の RxPduId とは別の番号)",
             ],
             8,
         )

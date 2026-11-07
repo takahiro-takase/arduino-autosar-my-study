@@ -10,7 +10,8 @@
     "TxPduId=4: E2EHealthStatus (CAN 0x220, COM PERIODIC)",
     "TxPduId=5: ImmobilizerStatus (CAN 0x230, COM DIRECT。Signal Gateway 転送先)",
     "TxPduId=6: TestMsg (CAN 0x300, COM PERIODIC。信号追加の練習用のテスト専用フレーム)",
-    "TxPduId=7: TimeSync (CAN 0x240, CanTSyn。PduR/Com を経由せず直接呼び出す)"
+    "TxPduId=7: TimeSync (CAN 0x240, CanTSyn。PduR/Com を経由せず直接呼び出す)",
+    "TxPduId=8: FdTestMsg (CAN 0x310, 64 byte, COM PERIODIC。CAN FD の動作確認用)"
   ],
   "rxPduCountDoc": [
     "RX PDU テーブルのエントリ数（受信 CAN フレーム種別数）",
@@ -20,7 +21,8 @@
     "RxPduId=2: AbsInfo        (CAN 0x110, COM)   ABS ECU",
     "RxPduId=3: ImmobilizerCmd (CAN 0x120, SecOC) KeyFobEcu 想定",
     "RxPduId=4: NM フレーム    (CAN 0x400, CanNm。PduR/Com を経由せず直接呼び出す)",
-    "RxPduId=5: TimeSyncIn (CAN 0x241, CanTSyn。PduR/Com を経由せず直接呼び出す)"
+    "RxPduId=5: TimeSyncIn (CAN 0x241, CanTSyn。PduR/Com を経由せず直接呼び出す)",
+    "RxPduId=6: FdTestRx (CAN 0x320, 64 byte, COM。CAN FD の受信確認用)"
   ],
   "txPdus": [
     {
@@ -162,6 +164,14 @@
           "SYNC の送信完了で FUP を送信する（[SWS_CanTSyn_00045]）"
         ]
       }
+    },
+    {
+      "name": "FdTestMsg_Tx",
+      "frame": "FdTestMsg",
+      "title": "FdTestMsg フレーム",
+      "upperLayerTxPduId": 6,
+      "hth": 0,
+      "txConfirm": "PDUR"
     }
   ],
   "rxPdus": [
@@ -256,6 +266,14 @@
       ],
       "hrh": 0,
       "rxIndication": "CANTSYN"
+    },
+    {
+      "name": "FdTestRx_Rx",
+      "frame": "FdTestRx",
+      "title": "FdTestRx フレーム",
+      "upperLayerRxPduId": 4,
+      "hrh": 0,
+      "rxIndication": "PDUR"
     }
   ]
 }

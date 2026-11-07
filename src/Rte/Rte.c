@@ -547,6 +547,94 @@ Std_ReturnType Rte_Write_TestMsg_TestCounter(uint8 value)
 {
     return Com_SendSignal(ComConf_ComSignal_TestMsg_TestCounter_Tx, &value);
 }
+
+/**
+ * \brief   FdTestMsg 提供ポートへ FdTestCounterHead シグナルを書き込む。
+ *
+ * \details 信号表（FdTestMsg, CAN 0x310）から生成した送信ポート。
+ *          Com_SendSignal(ComConf_ComSignal_FdTestMsg_FdTestCounterHead_Tx) へ委譲するだけ。
+ *
+ * \param[in]  value  FdTestCounterHead の値（8 bit）。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張。信号表からの生成）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_FdTestMsg_FdTestCounterHead(uint8 value)
+{
+    return Com_SendSignal(ComConf_ComSignal_FdTestMsg_FdTestCounterHead_Tx, &value);
+}
+
+/**
+ * \brief   FdTestMsg 提供ポートへ FdTestCounterTail シグナルを書き込む。
+ *
+ * \details 信号表（FdTestMsg, CAN 0x310）から生成した送信ポート。
+ *          Com_SendSignal(ComConf_ComSignal_FdTestMsg_FdTestCounterTail_Tx) へ委譲するだけ。
+ *
+ * \param[in]  value  FdTestCounterTail の値（8 bit）。
+ *
+ * \retval  E_OK      COM の実 TX バッファへ正常にパックした。
+ * \retval  E_NOT_OK  COM 未初期化またはシグナル ID が見つからない。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張。信号表からの生成）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Write_FdTestMsg_FdTestCounterTail(uint8 value)
+{
+    return Com_SendSignal(ComConf_ComSignal_FdTestMsg_FdTestCounterTail_Tx, &value);
+}
+
+/**
+ * \brief   FdTestRx 要求ポートから FdTestRxHead シグナルを読み出す。
+ *
+ * \details 信号表（FdTestRx, CAN 0x320）から生成した受信ポート。
+ *          Com_ReceiveSignal(ComConf_ComSignal_FdTestRx_FdTestRxHead_Rx) へ委譲するだけ。
+ *
+ * \param[out] data  FdTestRxHead の値の格納先（8 bit）。
+ *
+ * \retval  E_OK      COM の RX バッファから正常に読み出した。
+ * \retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または data が NULL。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張。信号表からの生成）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_FdTestRx_FdTestRxHead(uint8* data)
+{
+    return Com_ReceiveSignal(ComConf_ComSignal_FdTestRx_FdTestRxHead_Rx, data);
+}
+
+/**
+ * \brief   FdTestRx 要求ポートから FdTestRxTail シグナルを読み出す。
+ *
+ * \details 信号表（FdTestRx, CAN 0x320）から生成した受信ポート。
+ *          Com_ReceiveSignal(ComConf_ComSignal_FdTestRx_FdTestRxTail_Rx) へ委譲するだけ。
+ *
+ * \param[out] data  FdTestRxTail の値の格納先（8 bit）。
+ *
+ * \retval  E_OK      COM の RX バッファから正常に読み出した。
+ * \retval  E_NOT_OK  COM 未初期化、シグナル ID が見つからない、または data が NULL。
+ *
+ * \pre        Com_Init() が正常に完了していること。
+ *
+ * \note       AUTOSAR 標準外の API（本プロジェクト独自拡張。信号表からの生成）。
+ * \Reentrancy     {Reentrant}
+ * \Synchronicity  {Synchronous}
+ */
+Std_ReturnType Rte_Read_FdTestRx_FdTestRxTail(uint8* data)
+{
+    return Com_ReceiveSignal(ComConf_ComSignal_FdTestRx_FdTestRxTail_Rx, data);
+}
 /* @@GEN-END rte-signal-api */
 
 /* -----------------------------------------------------------------------
