@@ -1,13 +1,13 @@
 {
   "$schema": "../schema/Can.schema.json",
   "module": "Can",
-  "controller": "MCP2515",
+  "controller": "MCP2518FD",
   "csPin": 10,
-  "csPinDoc": "MCP2515 チップセレクト (CS) ピン番号",
+  "csPinDoc": "CAN コントローラ チップセレクト (CS) ピン番号",
   "intPin": 2,
-  "intPinDoc": "MCP2515 割り込み (INT) ピン番号",
+  "intPinDoc": "CAN コントローラ 割り込み (INT) ピン番号",
   "baudrate": "500KBPS",
-  "crystalMhz": 8,
+  "crystalMhz": 20,
   "filter": {
     "id": "0x000",
     "mask": "0x000"
@@ -19,12 +19,12 @@
   ],
   "triggerTransmitEnable": false,
   "fd": {
-    "enabled": false,
+    "enabled": true,
     "dataBitrate": 2000000,
     "txBitRateSwitch": true,
     "note": [
-      "CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig 相当）。MCP2515 は CAN FD に対応しないため無効。",
-      "MCP2518FD へ載せ替えるときは controller を変更し、enabled を true にする。",
+      "CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig 相当）。controller が MCP2515 のときは無効にする（MCP2515 は CAN FD に対応しない）。",
+      "MCP2518FD のときは、enabled を true にできる（環境 uno_r4_fd）。MCP2515 の環境（uno_r4）で動かすときは、controller を MCP2515、crystalMhz を 8、enabled を false に戻す。",
       "dataBitrate は通常のビットレートの整数倍（データ部のビットレート）。"
     ]
   }

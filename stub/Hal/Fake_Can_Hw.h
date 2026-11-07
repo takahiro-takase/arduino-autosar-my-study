@@ -40,6 +40,11 @@ extern "C" {
  * ====================================================================== */
 
 extern uint32 FakeCanHw_InitCount;
+/** Can_Hw_ConfigureFd() の呼び出し回数と、直近の引数・戻り値の設定。 */
+extern uint32 FakeCanHw_ConfigureFdCount;
+extern uint8_t  FakeCanHw_LastFdEnabled;
+extern uint32_t FakeCanHw_LastFdBaudrate;
+extern uint8_t  FakeCanHw_LastFdBitRateSwitch;
 extern uint32 FakeCanHw_SendCount;
 extern uint32 FakeCanHw_ReadCount;
 extern uint32 FakeCanHw_InitMaskCount;
@@ -85,6 +90,7 @@ extern uint8_t  FakeCanHw_RxData[FAKECANHW_DATA_MAX];
 /** 各関数の戻り値（既定 CAN_HW_OK）。失敗系のテストで CAN_HW_FAIL に変更する。
  *  CheckReceive/Read は上記 FakeCanHw_RxPendingCount で制御するため対象外。 */
 extern Can_Hw_ReturnType FakeCanHw_InitReturn;
+extern Can_Hw_ReturnType FakeCanHw_ConfigureFdReturn;
 extern Can_Hw_ReturnType FakeCanHw_SendReturn;
 extern Can_Hw_ReturnType FakeCanHw_IsBusOffReturn;
 /** Can_Hw_TakeRxOverflow() の戻り値（既定 CAN_HW_FAIL = オーバーフローなし）。 */

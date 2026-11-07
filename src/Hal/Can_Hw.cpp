@@ -65,6 +65,20 @@ static void (*Can_Hw_Isr)(void) = nullptr;  /**< Can_Hw_EnableRxIsr() での再�
  * Functions
  * ====================================================================== */
 
+Can_Hw_ReturnType Can_Hw_ConfigureFd(uint8_t fdEnabled, uint32_t fdBaudrate, uint8_t bitRateSwitch)
+{
+    (void)fdBaudrate;
+    (void)bitRateSwitch;
+
+    /* MCP2515 は CAN FD に対応しない。 */
+    if (fdEnabled != 0U)
+    {
+        DET_LOGE(TAG, "ConfigureFd: MCP2515 does not support CAN FD");
+        return CAN_HW_FAIL;
+    }
+    return CAN_HW_OK;
+}
+
 Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz)
 {
     uint8_t mcpClock;

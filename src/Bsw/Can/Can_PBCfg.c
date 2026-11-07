@@ -51,11 +51,11 @@ const Can_ConfigType Can_Config = {
     .csPin       = CAN_CS_PIN,
     .intPin      = CAN_INT_PIN,
     .baudrate    = CAN_BAUDRATE_500KBPS,
-    .crystalFreq = CAN_CRYSTAL_8MHZ,
-    /* CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig 相当）。MCP2515 は CAN FD に対応しないため無効。
-     * MCP2518FD へ載せ替えるときは controller を変更し、enabled を true にする。
+    .crystalFreq = CAN_CRYSTAL_20MHZ,
+    /* CAN FD の設定（AUTOSAR の CanControllerFdBaudrateConfig 相当）。controller が MCP2515 のときは無効にする（MCP2515 は CAN FD に対応しない）。
+     * MCP2518FD のときは、enabled を true にできる（環境 uno_r4_fd）。MCP2515 の環境（uno_r4）で動かすときは、controller を MCP2515、crystalMhz を 8、enabled を false に戻す。
      * dataBitrate は通常のビットレートの整数倍（データ部のビットレート）。 */
-    .fdEnabled       = 0U,
+    .fdEnabled       = 1U,
     .fdBaudrate      = 2000000UL,
     .txBitRateSwitch = 1U,
     /* トリガ送信（CanTriggerTransmitEnable 相当）。1 のとき Can_Write() が sdu = NULL を受け付け、CanIf_TriggerTransmit() でデータを取得する。 */

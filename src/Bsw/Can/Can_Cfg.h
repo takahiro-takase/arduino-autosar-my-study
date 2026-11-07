@@ -97,10 +97,10 @@
 #define CAN_HTH_COUNT          1U
 
 /* @@GEN-BEGIN can-pins  生成元: config/data/Can.json  （自動生成: 手編集禁止） */
-/** MCP2515 チップセレクト (CS) ピン番号 */
+/** CAN コントローラ チップセレクト (CS) ピン番号 */
 #define CAN_CS_PIN             10U
 
-/** MCP2515 割り込み (INT) ピン番号 */
+/** CAN コントローラ 割り込み (INT) ピン番号 */
 #define CAN_INT_PIN            2U
 /* @@GEN-END can-pins */
 
@@ -186,7 +186,7 @@ typedef struct
     uint32              baudrate;    /**< ボーレート（mcp_can_dfs.h の CAN_*KBPS 値） */
     Can_CrystalFreqType crystalFreq; /**< 水晶発振器周波数 (MHz) */
     uint8               fdEnabled;   /**< 1 = CAN FD を有効にする（CAN FD 対応のコントローラのみ。
-                                      *   現行の MCP2515 ドライバは参照しない） */
+                                      *   MCP2515 は非対応で、1 のとき Can_Init() が失敗する） */
     uint32              fdBaudrate;  /**< データ部のビットレート [bit/s]
                                       *   （AUTOSAR の CanControllerFdBaudRate 相当。通常のビットレートの整数倍） */
     uint8               txBitRateSwitch; /**< 1 = 送信時にデータ部でビットレートを切り替える

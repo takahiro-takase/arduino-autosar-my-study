@@ -5,9 +5,11 @@
  *          MCP2515 版（Can_Hw.cpp）の代わりに、ビルドスイッチ CAN_HW_MCP2518FD を定義したとき
  *          だけコンパイルされる（platformio.ini の env:uno_r4_fd）。
  *
- *          段階 1（クラシック CAN 2.0、最大 8 byte）: 通常の送受信、Listen-Only、Loopback、Bus-Off と
- *          エラー状態の取得、送信の取り消し、受信オーバーフローの検出、INT ピンの割り込みを実装する。
- *          受信フィルタ（Can_Hw_InitMask/InitFilter）とスリープからの復帰は、まだ実装していない。
+ *          通常の送受信、Listen-Only、Loopback、Bus-Off とエラー状態の取得、送信の取り消し、
+ *          受信オーバーフローの検出、INT ピンの割り込み、スリープとバス活動での復帰を実装する。
+ *          CAN FD は、Can_Hw_ConfigureFd() で有効にしたときだけ使う（8 byte を超える長さを FD フレームで送受信し、
+ *          通常動作のモードを NormalFD にする）。無効のときはクラシック CAN 2.0（最大 8 byte）。
+ *          受信フィルタ（Can_Hw_InitMask/InitFilter）は、まだ実装していない。
  *
  *          MCP2515 版との主な違い:
  *            - 送信は非同期。Can_Hw_Send() は、送信キューへ積めたら成功とする。ACK が返らないことは
@@ -33,6 +35,7 @@
 #include <ACAN2517FD.h>
 #include <new>
 #include "Can_Hw.h"
+#include "Can_Cfg.h"
 #include "Det.h"
 
 /* ======================================================================
@@ -98,6 +101,12 @@ static const uint32_t Can_Hw_BitRateTable[] = {
 /** 初期化の試行回数（SPI 応答の一時的な乱れに備える）。 */
 #define CAN_HW_INIT_RETRY  3U
 
+/** データ部ビットレートの倍率の上限（ACAN2517FD の DataBitRateFactor は x1〜x10）。 */
+#define CAN_HW_DATA_FACTOR_MAX  10U
+
+/** デバッグログに出すデータの最大 byte 数（64 byte のフレームでも、先頭だけ）。 */
+#define CAN_HW_LOG_MAX_LEN  8U
+
 /** 標準 ID（11 bit）で表せる最大値。これを超える ID は拡張フレームとして送る。 */
 #define CAN_HW_STD_ID_MAX  0x7FFUL
 
@@ -112,6 +121,11 @@ static uint8_t  Can_Hw_IntPin = 0xFFU;
 static void (*Can_Hw_Isr)(void) = nullptr;
 static bool     Can_Hw_Started = false;   /**< begin() が成功したか */
 static uint32_t Can_Hw_BaudId  = 0U;      /**< Can_Hw_Init() の baudrate（CAN_BAUDRATE_* の番号） */
+static bool     Can_Hw_FdEnabled = false;       /**< Can_Hw_ConfigureFd() の fdEnabled */
+static uint32_t Can_Hw_FdBaudrate = 0U;         /**< Can_Hw_ConfigureFd() の fdBaudrate [bit/s] */
+static bool     Can_Hw_BitRateSwitch = false;   /**< Can_Hw_ConfigureFd() の bitRateSwitch */
+static bool     Can_Hw_FdBrs = false;           /**< FD フレームを BRS 付きで送るか（BRS 許可 かつ データ部が通常より速い） */
+static uint8_t  Can_Hw_DataFactor = 1U;         /**< データ部ビットレート / 通常のビットレート（1〜10） */
 static bool     Can_Hw_SleepRequested = false;  /**< スリープを要求した（起床待ち） */
 static bool     Can_Hw_SleepEntered   = false;  /**< チップが実際にスリープに入ったことを確認した */
 
@@ -175,6 +189,20 @@ static void Can_Hw_RawReset(void)
     delay(5);
 }
 
+/** CAN FD で取れるデータ長か（8 byte 以下は常に可。それより長いときは 12/16/20/24/32/48/64）。 */
+static bool Can_Hw_IsValidLength(uint8_t n)
+{
+    return (n <= CAN_FRAME_MAX_DLC) ||
+           ((n >= 12U) && (n <= 24U) && ((n % 4U) == 0U)) ||
+           (n == 32U) || (n == 48U) || (n == 64U);
+}
+
+/** ログに出すデータの byte 数（CAN_HW_LOG_MAX_LEN まで）。 */
+static uint8_t Can_Hw_LogLen(uint8_t n)
+{
+    return (n > CAN_HW_LOG_MAX_LEN) ? CAN_HW_LOG_MAX_LEN : n;
+}
+
 /** スリープ中は発振が止まっていて、レジスタを読み書きできない。それ以外で begin() が成功しているか。 */
 static bool Can_Hw_Usable(void)
 {
@@ -188,7 +216,8 @@ static bool Can_Hw_Usable(void)
  */
 static bool Can_Hw_BeginChip(void)
 {
-    ACAN2517FDSettings settings(CAN_HW_MCP2518FD_OSC, Can_Hw_BitRateTable[Can_Hw_BaudId], DataBitRateFactor::x1);
+    ACAN2517FDSettings settings(CAN_HW_MCP2518FD_OSC, Can_Hw_BitRateTable[Can_Hw_BaudId],
+                                static_cast<DataBitRateFactor>(Can_Hw_DataFactor));
     settings.mRequestedMode = ACAN2517FDSettings::ListenOnly;
 
     for (uint8_t attempt = 1U; attempt <= CAN_HW_INIT_RETRY; attempt++)
@@ -210,6 +239,14 @@ static bool Can_Hw_BeginChip(void)
                  con[0], con[1], con[2], con[3], osc[0], osc[1], osc[2], osc[3]);
     }
     return false;
+}
+
+Can_Hw_ReturnType Can_Hw_ConfigureFd(uint8_t fdEnabled, uint32_t fdBaudrate, uint8_t bitRateSwitch)
+{
+    Can_Hw_FdEnabled     = (fdEnabled != 0U);
+    Can_Hw_FdBaudrate    = fdBaudrate;
+    Can_Hw_BitRateSwitch = (bitRateSwitch != 0U);
+    return CAN_HW_OK;   /* 値の検証は、通常のビットレートが分かる Can_Hw_Init() で行う */
 }
 
 Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz)
@@ -234,7 +271,24 @@ Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalF
     }
     Can_Hw_BaudId = baudrate;
 
-    /* クラシック CAN 2.0（データ部のビットレートは公称と同じ）。まず Listen-Only で始める（Can.c と同じ順序）。 */
+    /* データ部のビットレートは、通常のビットレートの整数倍（x1〜x10）で表す。FD を使わないときは x1。 */
+    Can_Hw_DataFactor = 1U;
+    if (Can_Hw_FdEnabled)
+    {
+        const uint32_t nominal = Can_Hw_BitRateTable[baudrate];
+        const uint32_t factor  = Can_Hw_FdBaudrate / nominal;
+        if ((factor < 1UL) || (factor > CAN_HW_DATA_FACTOR_MAX) || ((Can_Hw_FdBaudrate % nominal) != 0UL))
+        {
+            DET_LOGE(TAG, "fdBaudrate %lu is not an integer multiple (x1..x%u) of %lu",
+                     (unsigned long)Can_Hw_FdBaudrate, (unsigned)CAN_HW_DATA_FACTOR_MAX, (unsigned long)nominal);
+            Can_Hw_Started = false;
+            return CAN_HW_FAIL;
+        }
+        Can_Hw_DataFactor = (uint8_t)factor;
+    }
+    Can_Hw_FdBrs = Can_Hw_BitRateSwitch && (Can_Hw_DataFactor > 1U);
+
+    /* ビットレートは Can_Hw_BeginChip() が設定する（FD 有効ならデータ部は通常の x 倍）。まず Listen-Only で始める（Can.c と同じ順序）。 */
     Can_Hw_Started = Can_Hw_BeginChip();
     return Can_Hw_Started ? CAN_HW_OK : CAN_HW_FAIL;
 }
@@ -242,9 +296,11 @@ Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalF
 Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
 {
     if (!Can_Hw_Started) return CAN_HW_FAIL;
-    if (dlc > 8U)
+
+    const uint8_t maxLen = Can_Hw_FdEnabled ? CAN_FD_FRAME_MAX_DLC : CAN_FRAME_MAX_DLC;
+    if ((dlc > maxLen) || !Can_Hw_IsValidLength(dlc))
     {
-        DET_LOGE(TAG, "TX FAIL id=0x%lX dlc=%u (classic CAN: max 8)", (unsigned long)id, (unsigned)dlc);
+        DET_LOGE(TAG, "TX FAIL id=0x%lX dlc=%u (max %u, FD lengths only above 8)", (unsigned long)id, (unsigned)dlc, (unsigned)maxLen);
         return CAN_HW_FAIL;
     }
 
@@ -252,6 +308,9 @@ Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
     msg.id  = id;
     msg.ext = (id > CAN_HW_STD_ID_MAX);
     msg.len = dlc;
+    /* 種別は必ず指定する。既定は FD + BRS で、NormalFD モードでは 8 byte 以下も FD で出てしまう。 */
+    msg.type = (dlc <= CAN_FRAME_MAX_DLC) ? CANFDMessage::CAN_DATA
+             : (Can_Hw_FdBrs ? CANFDMessage::CANFD_WITH_BIT_RATE_SWITCH : CANFDMessage::CANFD_NO_BIT_RATE_SWITCH);
     for (uint8_t i = 0U; i < dlc; i++) { msg.data[i] = data[i]; }
 
     if (!driver->tryToSend(msg))
@@ -261,7 +320,7 @@ Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data)
     }
 
     char hexbuf[25];
-    Log_HexStr(hexbuf, sizeof(hexbuf), data, dlc);
+    Log_HexStr(hexbuf, sizeof(hexbuf), data, Can_Hw_LogLen(dlc));
     DET_LOGD(TAG, "TX OK id=0x%lX dlc=%u [%s]", (unsigned long)id, (unsigned)dlc, hexbuf);
     return CAN_HW_OK;
 }
@@ -278,11 +337,10 @@ Can_Hw_ReturnType Can_Hw_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     }
 
     uint8_t len = msg.len;
-    if (len > 8U)
+    if (len > CAN_FD_FRAME_MAX_DLC)
     {
-        /* 段階 1 はクラシック CAN だけ。FD のフレームが来ても、先頭の 8 byte だけを渡す。 */
-        DET_LOGE(TAG, "Read: len clamp %u->8", (unsigned)len);
-        len = 8U;
+        DET_LOGE(TAG, "Read: len %u exceeds %u (clamped; safety net for the caller's buffer)", (unsigned)len, (unsigned)CAN_FD_FRAME_MAX_DLC);
+        len = CAN_FD_FRAME_MAX_DLC;
     }
 
     *id  = msg.id;
@@ -290,7 +348,7 @@ Can_Hw_ReturnType Can_Hw_Read(uint32_t* id, uint8_t* dlc, uint8_t* data)
     for (uint8_t i = 0U; i < len; i++) { data[i] = msg.data[i]; }
 
     char hexbuf[25];
-    Log_HexStr(hexbuf, sizeof(hexbuf), data, len);
+    Log_HexStr(hexbuf, sizeof(hexbuf), data, Can_Hw_LogLen(len));
     DET_LOGD(TAG, "RX OK id=0x%lX dlc=%u [%s]", (unsigned long)*id, (unsigned)len, hexbuf);
     return CAN_HW_OK;
 }
@@ -316,7 +374,8 @@ Can_Hw_ReturnType Can_Hw_SetMode(Can_Hw_Mode mode)
     ACAN2517FDSettings::OperationMode target;
     switch (mode)
     {
-    case CAN_HW_MODE_NORMAL:      target = ACAN2517FDSettings::Normal20B;         break;  /* クラシック CAN 2.0 */
+    case CAN_HW_MODE_NORMAL:      target = Can_Hw_FdEnabled ? ACAN2517FDSettings::NormalFD
+                                                            : ACAN2517FDSettings::Normal20B;  break;  /* FD 無効はクラシック CAN 2.0 */
     case CAN_HW_MODE_LISTEN_ONLY: target = ACAN2517FDSettings::ListenOnly;        break;
     case CAN_HW_MODE_SLEEP:       target = ACAN2517FDSettings::Sleep;             break;
     case CAN_HW_MODE_LOOPBACK:    target = ACAN2517FDSettings::InternalLoopBack;  break;

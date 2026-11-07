@@ -264,7 +264,9 @@ void Can_Init(const Can_ConfigType* Config)
     Can_ConfigPtr = Config;
     Can_ResetQueues();
 
-    if (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK)
+    /* CAN FD の設定は、Can_Hw_Init() の前に渡す（Can_Hw_Init() がビットレートの設定に使う）。拒否の理由は HAL がログに出す。 */
+    if ((Can_Hw_ConfigureFd(Config->fdEnabled, Config->fdBaudrate, Config->txBitRateSwitch) != CAN_HW_OK) ||
+        (Can_Hw_Init(Config->csPin, Config->baudrate, Config->crystalFreq) != CAN_HW_OK))
     {
         DET_LOGE(TAG, "Init FAIL");
         for (;;)

@@ -15,6 +15,10 @@
  * ====================================================================== */
 
 uint32 FakeCanHw_InitCount            = 0U;
+uint32 FakeCanHw_ConfigureFdCount      = 0U;
+uint8_t  FakeCanHw_LastFdEnabled       = 0U;
+uint32_t FakeCanHw_LastFdBaudrate      = 0U;
+uint8_t  FakeCanHw_LastFdBitRateSwitch = 0U;
 uint32 FakeCanHw_SendCount            = 0U;
 uint32 FakeCanHw_ReadCount            = 0U;
 uint32 FakeCanHw_InitMaskCount        = 0U;
@@ -44,6 +48,7 @@ uint8_t  FakeCanHw_RxDlc          = 0U;
 uint8_t  FakeCanHw_RxData[FAKECANHW_DATA_MAX]      = { 0U };
 
 Can_Hw_ReturnType FakeCanHw_InitReturn            = CAN_HW_OK;
+Can_Hw_ReturnType FakeCanHw_ConfigureFdReturn      = CAN_HW_OK;
 Can_Hw_ReturnType FakeCanHw_SendReturn            = CAN_HW_OK;
 Can_Hw_ReturnType FakeCanHw_IsBusOffReturn        = CAN_HW_FAIL;
 Can_Hw_ReturnType FakeCanHw_TakeRxOverflowReturn  = CAN_HW_FAIL;
@@ -59,6 +64,11 @@ Can_Hw_ReturnType FakeCanHw_GetErrorStateReturn   = CAN_HW_OK;
 void FakeCanHw_Reset(void)
 {
     FakeCanHw_InitCount            = 0U;
+    FakeCanHw_ConfigureFdCount      = 0U;
+    FakeCanHw_LastFdEnabled         = 0U;
+    FakeCanHw_LastFdBaudrate        = 0U;
+    FakeCanHw_LastFdBitRateSwitch   = 0U;
+    FakeCanHw_ConfigureFdReturn     = CAN_HW_OK;
     FakeCanHw_SendCount            = 0U;
     FakeCanHw_ReadCount            = 0U;
     FakeCanHw_InitMaskCount        = 0U;
@@ -96,6 +106,15 @@ void FakeCanHw_Reset(void)
 
     FakeCanHw_ErrorState           = 0U;
     FakeCanHw_GetErrorStateReturn  = CAN_HW_OK;
+}
+
+Can_Hw_ReturnType Can_Hw_ConfigureFd(uint8_t fdEnabled, uint32_t fdBaudrate, uint8_t bitRateSwitch)
+{
+    FakeCanHw_ConfigureFdCount++;
+    FakeCanHw_LastFdEnabled       = fdEnabled;
+    FakeCanHw_LastFdBaudrate      = fdBaudrate;
+    FakeCanHw_LastFdBitRateSwitch = bitRateSwitch;
+    return FakeCanHw_ConfigureFdReturn;
 }
 
 Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz)
