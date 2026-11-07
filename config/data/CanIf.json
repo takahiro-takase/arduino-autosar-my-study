@@ -43,7 +43,7 @@
     {
       "name": "DiagResp_Tx",
       "canId": "0x7E8",
-      "dlc": 8,
+      "dlc": 64,
       "title": "UDS 診断応答フレーム",
       "note": [
         "CanTp.c は PduR を経由せず CanIf_Transmit(CANTP_CANIF_TX_PDU_ID, ...) を直接呼び出す",

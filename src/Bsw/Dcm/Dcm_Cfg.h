@@ -254,9 +254,11 @@
 /** UDS 要求の受信バッファの大きさ [byte]。CanTp は組み立てを持たず、Dcm_StartOfReception()/
  *  Dcm_CopyRxData() で、この Dcm の受信バッファへ直接コピーする。これを超える長さの要求は
  *  BUFREQ_E_OVFL で拒否し、CanTp は Flow Control (Overflow) を返す。
- *  現状の最大の要求は WriteDataByIdentifier CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト
- *  （SID 1 + DID 2 + keyName 1 + 鍵 16）。 */
-#define DCM_RX_BUF_SIZE  32U
+ *  CAN FD の診断（CanTp が FD のフレームで要求を受ける）では、1 回に最大 62 バイトの SF や、
+ *  それより長い要求を受けるため、クラシックの時の 32 バイトから 128 バイトへ広げた。
+ *  現状の最大の要求は 0x22 ReadDataByIdentifier の DID 4 つ（9 バイト）と、WriteDataByIdentifier
+ *  CryptoKeyUpdate (0x2E, DID 0x0108) の 20 バイト（SID 1 + DID 2 + keyName 1 + 鍵 16）。 */
+#define DCM_RX_BUF_SIZE  128U
 
 /* -----------------------------------------------------------------------
  * データ識別子 (DID) 定義

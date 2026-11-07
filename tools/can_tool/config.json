@@ -151,6 +151,8 @@
               { "label": "2 DID: EngineSpeed+CoolantTemp", "payload": ["0x05", "0x22", "0x01", "0x01", "0x01", "0x02"] }
           ]
         },
+        { "label": "Read DID VIN x4\n(0x22 FD 複数フレーム応答)", "type": "multiframe",
+          "payload": ["0x22", "0xF1", "0x90", "0xF1", "0x90", "0xF1", "0x90", "0xF1", "0x90"] },
         { "label": "Write TestPattern\n(0x2E 複数フレーム)", "type": "multiframe",
           "payload": ["0x2E", "0x01", "0x04", "0x11", "0x22", "0x33", "0x44", "0x55", "0x66", "0x77", "0x88"] },
         { "label": "Write CryptoKeyUpdate\n(0x2E 複数フレーム, DID 0108)", "type": "multiframe",

@@ -227,6 +227,16 @@ void CanTp_Test_SetTxWaitFc(void);
 void CanTp_Test_SetRxBlockSize(uint8 bs);
 
 /**
+ * \brief   [テスト専用] 相手が CAN FD のフレームで要求してきたことにする（応答を FD のフレームで返す）。
+ *
+ * \details 実際には、FD の SF/FF を受け付けたときに決まる。受信の処理（と、Dcm の応答）を経ずに、
+ *          送信側（CanTp_Transmit）の FD の分岐だけを確かめるために、直接設定する（標準外の関数）。
+ *
+ * \param[in]  fd  TRUE なら FD の相手、FALSE ならクラシックの相手。
+ */
+void CanTp_Test_SetPeerFd(boolean fd);
+
+/**
  * \brief   [テスト専用] 直近の FC フレームで受信し、換算した STmin（ms）を返す。
  *
  * \details CTS の FC フレームを受信すると、CanTp が、FC の STmin の生の値を ms に換算して保持する。

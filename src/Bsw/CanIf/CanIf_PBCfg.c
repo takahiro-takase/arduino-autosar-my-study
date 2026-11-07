@@ -109,7 +109,7 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .UpperLayerTxPduId = CANTP_TX_NPDU_ID,    /* DaVinci: CanIfTxPduId
                                                    *          CanTp 側の TX N-PDU の ID（CanTp.json の txNPduId、CanTp_Cfg.h の CANTP_TX_NPDU_ID） */
         .CanId             = 0x7E8U,              /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 8U,                  /* DaVinci: CanIfTxPduDlc */
+        .Dlc               = 64U,                 /* DaVinci: CanIfTxPduDlc */
         .Hth               = 0U,                  /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = CanTp_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
                                                    *          CanTp_TxConfirmation() へ送信完了を通知する（CanTp 側は、現状 no-op） */
