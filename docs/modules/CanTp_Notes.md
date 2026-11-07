@@ -44,10 +44,10 @@ Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は
 | 方向 | 順序 | 内容 |
 |------|------|------|
 | 受信 | `Dcm_StartOfReception(id, {SF/FF のデータ, 長さ}, 長さ, &空き)` | SF/FF の受信時。Dcm が受け入れるかを返す（`BUFREQ_OK` / `BUFREQ_E_NOT_OK` / `BUFREQ_E_OVFL`）。`BUFREQ_E_OVFL` なら CanTp は FC(OVFLW) を返す。データ（`info`）は、通知だけで、コピーは続く `CopyRxData` が行う |
-| | `Dcm_CopyRxData(id, {データ, 長さ}, &空き)` | SF のデータ、FF の先頭 6 バイト、各 CF のデータを、Dcm の受信バッファ（`DCM_RX_BUF_SIZE`＝32）へ直接コピーする |
+| | `Dcm_CopyRxData(id, {データ, 長さ}, &空き)` | SF のデータ、FF の先頭データ（クラシックは 6 バイト、FD は CAN_DL - 2 バイト）、各 CF のデータを、Dcm の受信バッファ（`DCM_RX_BUF_SIZE`＝128）へ直接コピーする |
 | | `Dcm_TpRxIndication(id, E_OK / E_NOT_OK)` | 受信の完了（E_OK）、または中断（N_Cr タイムアウト、シーケンス番号の誤り、別の SF/FF による中断。E_NOT_OK） |
 | 送信 | `CanTp_Transmit(id, {長さ})` | Dcm は応答の長さだけを渡す（`SduDataPtr` は使わない） |
-| | `Dcm_CopyTxData(id, {コピー先, 長さ}, 再送指示, &残り)` | SF（`CanTp_Transmit()` の中）、FF の先頭 6 バイト、各 CF の組み立ての時に、Dcm の応答バッファから取り出す |
+| | `Dcm_CopyTxData(id, {コピー先, 長さ}, 再送指示, &残り)` | SF（`CanTp_Transmit()` の中）、FF の先頭データ（クラシックは 6 バイト、FD は dl - 2 バイト）、各 CF の組み立ての時に、Dcm の応答バッファから取り出す |
 | | `Dcm_TpTxConfirmation(id, E_OK / E_NOT_OK)` | 送信の完了（最後のフレームを送った時。E_OK）、または中断（N_Bs・N_As タイムアウト、FC(OVFLW)、CopyTxData の失敗。E_NOT_OK） |
 
 - CF の送信に失敗したときは、組み立て済みの同じフレームを次の周期で再送します（`Dcm_CopyTxData()` を呼び直さない）。失敗が N_As 相当（1000 ms）続いたら、中断します。
@@ -79,6 +79,8 @@ Dcm の PDU ID（`CANTP_DCM_RX_PDU_ID`・`CANTP_DCM_TX_PDU_ID`）への変換は
 | FF (First Frame)  | `0x1H 0xLL` HL=総長 | UDS ペイロード ≥ 8 バイト の先頭 6 バイト |
 | CF (Consecutive Frame) | `0x2n` n=シーケンス番号 | 続きのデータ（最大 7 バイト/フレーム） |
 | FC (Flow Control) | `0x3X` X=FS | CTS(0)/WAIT(1)/OVFLW(2)、BS、STmin |
+
+上の表は、クラシック CAN（8 バイトのフレーム）です。CAN FD のフレーム（CAN_DL が 8 を超える）は、[CAN FD の診断](#cantp-fd) を参照してください。
 
 ## RX 状態マシン（Arduino 受信側）
 
@@ -134,7 +136,7 @@ TX 確認経路（`Can.c`/`CanIf.c`）が常に成功固定で真の送信失敗
 
 ## バッファ上限（FC OVFLW）とビジー判定
 
-**受信側（FF の総長が大きすぎる場合）**: FF が示す総長が Dcm の受信バッファ（`DCM_RX_BUF_SIZE`、32 バイト）を
+**受信側（FF の総長が大きすぎる場合）**: FF が示す総長が Dcm の受信バッファ（`DCM_RX_BUF_SIZE`、128 バイト）を
 超えるときは、`Dcm_StartOfReception()` が `BUFREQ_E_OVFL` を返し、CanTp は受信を始めず `FC(OVFLW)` を返して拒否します
 （ログ: `RX FF overflow FC_OVFLW`。`DcmStack_RxOverflow_test.cpp` 参照）。
 **送信側**: 自 ECU が FF を送った後に相手から `FC(OVFLW)` を受け取った場合は、送信を中断して
@@ -150,6 +152,30 @@ IDLE に戻ります（ログ: `TX FC OVFLW abort`）。FC(WAIT) を受け取っ
 （ログ: `reception rejected (response TX in progress)`。要求が届いたこと自体はテスターの生存の証拠として
 S3 タイマを更新します。[SWS_Dcm_00557]。`DcmStack_CanTpBusy_test.cpp` 参照）。
 
+<a id="cantp-fd"></a>
+## CAN FD の診断（ISO 15765-2:2016、2026-11）
+
+要求が CAN FD のフレームで届いたときだけ、応答も FD のフレームで返します。クラシックの相手には、これまでどおり、クラシックで返します
+（直近に受け付けた要求の形式で決まります。受け付けられなかった要求は、形式を変えません）。FD のフレームは、CanIf の診断応答の PDU の DLC（64）と、
+CAN 側の設定（`fd.enabled`）が必要です。
+
+**FD の応答を送れない構成のとき**: 診断応答の PDU の DLC が 64 より小さいと、`CanIf_Transmit()` が長さの超過で拒否します（CanTp は、クラシックへは
+戻らず、送信の失敗として扱います。SF は `CanTp_Transmit()` が `E_NOT_OK`、CF は N_As 相当のタイムアウトで中断）。`fd.enabled` が false のときは、FD の
+フレームが届かないため（CAN 側が受けない）、FD の応答になりません。DLC と `CANTP_FD_FRAME_LEN` の整合は、`CANTP_FD_FRAME_LEN <= CANIF_MAX_DLC` だけ、
+コンパイル時に確かめています（`CanIf.json` の DLC 自体は、生成物のため、確かめられません）。
+
+| フレーム | クラシック（8 バイト） | CAN FD（CAN_DL が 12〜64） |
+|---|---|---|
+| SF | `0x0N`、データは [1] から、7 バイトまで | `0x00` + SF_DL、データは [2] から、CAN_DL - 2 バイトまで |
+| FF | `0x1H 0xLL`、先頭データ 6 バイト | 同じ PCI、先頭データ CAN_DL - 2 バイト（64 バイトのフレームなら 62） |
+| CF | `0x2n`、データ 7 バイトまで | 同じ PCI、データ CAN_DL - 1 バイトまで（63） |
+| FC | 8 バイト | FD の相手にも、8 バイト（クラシックの形）で返す |
+
+- **受信**: 最初のフレームの CAN_DL が、その受信の RX_DL です。RX_DL より長い CF は、データを切り捨てると壊れるため、受信を中断します。FD の有効な長さ（12、16、20、24、32、48、64）でない長さのフレームは、無視します（実機では、CanIf が捨てます）。最後の CF は、データが入る分だけの有効な長さで構いません。
+- **送信**: 7 バイト以下は、相手が FD でも、クラシックの SF（8 バイト）です。62 バイト以下は、FD の SF です。それより長い応答は、FD の FF（64 バイト）と、63 バイトずつの CF です。フレームの長さは、有効な DLC へ切り上げ、余りは `CANTP_PADDING_BYTE` で埋めます（[SWS_CanTp_00351]）。
+- **Dcm の受信バッファ**: FD の SF は 62 バイトまで入るため、`DCM_RX_BUF_SIZE` を 32 から 128 バイトにしました。
+- **実機での確認**: `tools/can_tool` の `Read DID VIN x4` ボタン（0x22 に VIN を 4 つ。応答は 77 バイト）で、FD の SF の要求に、FD の FF（64 バイト）と CF（16 バイト）で返ることを確認しました。
+
 ## 受信フレームの長さ（パディング、CANTP_E_PADDING）
 
 受信側は、パディング ON（フレームは常に 8 バイト）を前提にしています（[SWS_CanTp_00344]〜[00349]）。
@@ -164,6 +190,8 @@ CanTp が送る FC・CF も、常に 8 バイトへパディングします。DL
 | FF（First Frame） | 受け付けない（`CANTP_E_PADDING` は報告しない） |
 
 CAN ツールの UDS 要求や `test_scripts/` のスクリプトは、8 バイトまで 0x00 でパディングして送るので、通常は影響しません。
+
+（この節は、クラシックのフレーム（8 バイト）の話です。CAN FD のフレームでは、最後の CF のように、8 バイトを超える有効な長さ（12〜64）のフレームを、そのまま受け付けます。）
 
 **実機の配線では、この CanTp の検査に到達しません**（2026-10 実機確認、`test_scripts/104_verify_cantp_padding.capl`）。DLC が設定（8）と一致しないフレームは、CanTp に届く前に CanIf（`CanIf_RxIndication()`）が捨てます（シリアルに `RX can=0x7E0 length mismatch got=3 exp=8`、DET は CanIf（モジュール 60）のエラー 0x3D）。CanTp の検査は、CanIf を通らない状況（ホストのユニットテスト）だけで働く、仕様どおりの二重の防御です。
 
