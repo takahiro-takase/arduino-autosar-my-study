@@ -166,6 +166,40 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK)
     EXPECT_EQ(LastData_CanIf_RxIndication[3], 0xEFU);
 }
 
+TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_DrainIsBoundedPerCall)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    Can_SetControllerMode(0U, CAN_CS_STARTED);
+
+    FakeCanHw_RxPendingCount = 40U;  // 上限（CAN_RX_DRAIN_MAX）を超える数。再送が続くバスを模擬する
+    FakeCanHw_RxId  = 0x100U;
+    FakeCanHw_RxDlc = 2U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_MainFunction_Read();
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_CanIf_RxIndication, (uint32)CAN_RX_DRAIN_MAX);      // 1 回の呼び出しでは、上限まで
+    EXPECT_EQ(FakeCanHw_RxPendingCount, 40U - (uint32)CAN_RX_DRAIN_MAX);    // 残りは次の呼び出しへ
+
+    Can_MainFunction_Read();
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 2U * (uint32)CAN_RX_DRAIN_MAX); // 次の呼び出しで、続きを取り出す
+
+    Can_MainFunction_Read();
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 40U);                           // 3 回目で、残りの 8 件を取り出して、全件
+    EXPECT_EQ(FakeCanHw_RxPendingCount, 0U);
+
+    Can_MainFunction_Read();
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 40U);                           // もう無い。余分には読まない
+}
+
 TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_RxOverflowReportsDataLost)
 {
     /* ----------------------- */
