@@ -14,6 +14,9 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* MCP2518FD 版（Can_Hw_Mcp2518fd.cpp）を使うビルドでは、この MCP2515 版はコンパイルしない。 */
+#ifndef CAN_HW_MCP2518FD
+
 /* ======================================================================
  * Includes
  * ====================================================================== */
@@ -305,3 +308,5 @@ Can_Hw_ReturnType Can_Hw_IsWakeupPending(void)
 {
     return (digitalRead(Can_Hw_IntPin) == LOW) ? CAN_HW_OK : CAN_HW_FAIL;
 }
+
+#endif /* !CAN_HW_MCP2518FD */
