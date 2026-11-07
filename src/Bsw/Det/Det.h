@@ -126,16 +126,6 @@ void Log_HexStr(char* dst, uint8_t dstSize,
 /**
  * \brief   Det モジュールを初期化する（[SWS_Det_00008]）。
  *
- * \details 実仕様は「内部変数の設定」を初期化の目的として挙げるが、本
- *          プロジェクトの Det はログ出力の都度その場でフォーマットするだけの
- *          ステートレスな実装であり、初期化を要する内部変数を一切持たない
- *          （`Det_ReportError()`/`Log_Write()` は本関数の呼び出し有無に
- *          関わらず常に動作する。他の全 BSW モジュールの `_Init()` 内で
- *          発生しうる初期化前エラーも report できる必要があるため、この
- *          「常に動作する」という既存の挙動はあえて変更しない）。そのため
- *          本関数は仕様上の呼び出し位置（`EcuM_Init()` の先頭、他の全 BSW
- *          モジュール初期化より前）に配線するだけの no-op とする。
- *
  * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build
  *                        設定を持たないため）。
  *
@@ -149,17 +139,12 @@ void Det_Init(const Det_ConfigType* ConfigPtr);
 /**
  * \brief   開発エラーを標準化された形式で通知する（AUTOSAR Det_ReportError 準拠）。
  *
- * \details 上記の DET_LOG* マクロ（呼び出し元固有の自由文字列、人間が読むための
+ * \par 仕様
+ *          上記の DET_LOG* マクロ（呼び出し元固有の自由文字列、人間が読むための
  *          詳細情報）とは別のチャネルとして、ModuleId/InstanceId/ApiId/ErrorId
  *          という標準化された 4 つ組を報告する。呼び出し元は通常、詳細を
  *          伝える DET_LOGE(...) と、この Det_ReportError(...) の両方を呼ぶ
  *          （情報を失わずに標準準拠のエラー通知も行うため）。
- *
- *          本実装は実 AUTOSAR の「コールアウトフック登録・実行停止」等の
- *          高度な機能を持たない学習用の簡略実装で、単に
- *          `[<ms>ms] [<ノード名>] ERROR Det: M=<ModuleId> I=<InstanceId> API=0x<ApiId> ERR=0x<ErrorId>`
- *          という 1 行を出力するのみ。DET_LOG_LEVEL によるレベル抑制の対象外
- *          （開発エラーは常に最重要度のため）。
  *
  * \param[in]  ModuleId    エラーを検出したモジュールの AUTOSAR ModuleId
  *                         （例: Com = 50）。
@@ -185,13 +170,6 @@ Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, u
 /**
  * \brief   実行時エラーを標準化された形式で通知する（[SWS_Det_01001]）。
  *
- * \details 実仕様は「コールアウトフックが設定されていれば呼び出す」機構を
- *          持つが、本プロジェクトはそのようなコールアウト登録機構自体を
- *          持たない学習用の簡略実装（Det_ReportError() と同じ設計方針）
- *          であり、単に Det_ReportError() と同一形式の1行を出力するのみ。
- *          開発エラー(Det_ReportError)と実行時エラー(本関数)を実運用上は
- *          区別せず同じチャネルへ出力する。
- *
  * \param[in]  ModuleId    エラーを検出したモジュールの AUTOSAR ModuleId。
  * \param[in]  InstanceId  マルチインスタンスモジュールのインスタンス番号。
  *                         シングルインスタンスモジュールは 0 を渡す。
@@ -211,13 +189,6 @@ Std_ReturnType Det_ReportRuntimeError(uint16 ModuleId, uint8 InstanceId, uint8 A
 
 /**
  * \brief   一過性障害を標準化された形式で通知する（[SWS_Det_01003]）。
- *
- * \details 実仕様は「コールアウトフックが設定されていればその戻り値
- *          （複数設定時は論理和）を返し、未設定なら E_OK」と規定するが、
- *          本プロジェクトはコールアウト登録機構自体を持たない学習用の
- *          簡略実装のため常に E_OK を返す（Det_ReportError()/
- *          Det_ReportRuntimeError() と同じ設計方針）。単に同一形式の1行を
- *          出力するのみで、開発エラー・実行時エラーとは区別しない。
  *
  * \param[in]  ModuleId    一過性障害を検出したモジュールの AUTOSAR ModuleId。
  * \param[in]  InstanceId  マルチインスタンスモジュールのインスタンス番号。
@@ -239,11 +210,6 @@ Std_ReturnType Det_ReportTransientFault(uint16 ModuleId, uint8 InstanceId, uint8
 
 /**
  * \brief   Det モジュールを起動する（[SWS_Det_00010]）。
- *
- * \details 実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
- *          トリガする」用途を想定するが、本プロジェクトはそのようなセルフ
- *          テスト機構を持たないため no-op とする（実仕様自身も「起動時
- *          呼び出しを要しない Det 実装では空でよい」と明記している）。
  *
  * \AUTOSARReq     {SWS_Det_00010}
  * \ServiceID      {0x02}

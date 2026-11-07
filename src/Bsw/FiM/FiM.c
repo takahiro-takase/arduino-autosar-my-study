@@ -254,6 +254,8 @@ static void FiM_Refresh(void)
  *          あっても誤って許可扱いになる乖離があった（本来 FiM_Init() 完了
  *          時点で正しい許可状態が確定しているべき、[SWS_Fim_00104]違反）。
  *
+ * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
+ *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -296,6 +298,15 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr)
  * \brief   指定 FID が現在許可されているかを取得する。
  *
  * \AUTOSARReq     {SWS_Fim_00011}
+ *
+ * \param[in]   FunctionId  機能 ID (FIM_FID_*)。
+ * \param[out]  Permission  TRUE=許可 / FALSE=抑止 の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  FunctionId が範囲外、または Permission が NULL
+ *                     （この場合 Permission には安全側のフェールセーフとして
+ *                       書き込み可能であれば FALSE を設定する）。
+ *
  * \ServiceID      {0x01}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -430,6 +441,13 @@ void FiM_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /**
  * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
  *
+ * \par 仕様
+ *          FiM_Functions[] の各行（抑止の条件）について、Dem のステータスを確認する。
+ *          条件の種類が FIM_INH_STATUS_MASK なら Dem_GetEventUdsStatus() の UDS ステータス、
+ *          仕様の 4 つの条件（FIM_LAST_FAILED など）なら Dem_GetMonitorStatus() の監視ステータスで、
+ *          条件が成り立てば該当 FID を「抑止」、1 つも成り立たなければ「許可」にする。
+ *          許可状態が変化した瞬間にのみログを出力する。
+ *          Dem からの通知（FiM_DemTriggerOnMonitorStatus()）でも、同じ再評価をする。
  * \ServiceID      {0x05}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

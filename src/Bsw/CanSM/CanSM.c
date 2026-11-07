@@ -277,6 +277,13 @@ static void CanSM_CompleteBusOffRecovery(void);
 /**
  * \brief   CanSM モジュールを初期化する。
  *
+ * \par 仕様
+ *          全ネットワークを COMM_NO_COMMUNICATION 状態に設定する。
+ *          EcuM_Init() から ComM_Init() より先に呼び出すこと。
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため。実 AUTOSAR 仕様は SWS_CanSM_00023 で
+ *                        post-build パラメータへのポインタを要求する）。
+ *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -335,6 +342,12 @@ void CanSM_DeInit(void)
  *          - FULL_COM / SILENT_COM: 回復の後に戻る状態（CanSM_PreBusOffState）を、要求されたモードへ変える
  *            （回復の完了で、G_FULL_COM_MODE_REQUESTED / G_SILENT_COM_MODE_REQUESTED が、要求されたモードを選ぶ）。
  *            SILENT_COM への変更は、回復を待たず、TX を止める（CanIf_SetPduMode(CANIF_TX_OFFLINE)）。
+ *
+ * \param[in]  network  ネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
+ * \param[in]  mode     要求する通信モード (ComM_ModeType)。
+ *
+ * \retval  E_OK      モード遷移の要求を受理した。
+ * \retval  E_NOT_OK  未初期化、network が範囲外、または SILENT_COM への遷移で、TX を抑制できなかった。
  *
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
@@ -488,10 +501,15 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
 /**
  * \brief   ネットワークの現在の通信モードを取得する。
  *
- * \details Bus-Off の回復中は COMM_SILENT_COMMUNICATION として報告する。Bus-Off を検出すると、ComM へ
+ * \par 仕様
+ *          Bus-Off の回復中は COMM_SILENT_COMMUNICATION として報告する。Bus-Off を検出すると、ComM へ
  *          SILENT_COMMUNICATION を通知する（[SWS_CanSM_00521]）ため、ComM が持つモードと同じ値を返す。
- *          以前は NO_COMMUNICATION を返していたが、ComM_GetCurrentComMode() が CanSM へ問い合わせる
- *          ようになった（[SWS_ComM_00084]）ため、通知と食い違わない値に直した。
+ *
+ * \param[in]  network  ネットワークハンドル。
+ * \param[out] mode     現在のモードを受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  未初期化、network が範囲外、または mode が NULL。
  *
  * \ServiceID      {0x03}
  * \Reentrancy     {Reentrant}
@@ -741,6 +759,8 @@ void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
  *          受け付けて、回復を取り消す（2026-11 変更）ので、取りこぼさない。回復が先に成功して
  *          FULL_COM へ戻った場合に CanNm を誤って再起床させないためのガードは ComM 側
  *          （`ComM_BusSM_ModeIndication()` の FULL_COM 分岐）に実装している。
+ *
+ * \param[in]  ControllerId  Bus-Off を検出したコントローラ ID。
  *
  * \ServiceID      {0x04}
  * \Reentrancy     {Non Reentrant}

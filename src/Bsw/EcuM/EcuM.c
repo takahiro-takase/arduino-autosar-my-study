@@ -559,6 +559,17 @@ Std_ReturnType EcuM_ReleaseRUN(EcuM_UserType user)
  *          （詳細は EcuM.h の宣言側コメント参照）。
  *
  * \AUTOSARReq     {SWS_EcuM_04128}
+ *
+ * \param[in]  user  要求ユーザ (ECUM_USER_* 定数)。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  user が範囲外、またはこのユーザが既に POST_RUN を要求中。
+ *
+ * \note    実仕様は Reentrant と規定するが、本実装は `EcuM_RequestRUN`/
+ *          `EcuM_ReleaseRUN` と同じ無保護のビットマスク読み書きのため、
+ *          実際の並行呼び出し安全性に合わせ Non Reentrant として文書化する
+ *          （既存の RUN 系 API と同じ簡略化方針。EcuM.h 冒頭の既存注記参照）。
+ *
  * \ServiceID      {0x0a}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -596,6 +607,16 @@ Std_ReturnType EcuM_RequestPOST_RUN(EcuM_UserType user)
  *          起算する（詳細は EcuM.h の宣言側コメント参照）。
  *
  * \AUTOSARReq     {SWS_EcuM_04129}
+ *
+ * \param[in]  user  解放するユーザ (ECUM_USER_* 定数)。
+ *
+ * \retval  E_OK      受理した。
+ * \retval  E_NOT_OK  user が範囲外、またはこのユーザに対応する POST_RUN
+ *                    要求が存在しない。
+ *
+ * \note    実仕様は Reentrant と規定するが、`EcuM_RequestPOST_RUN` と同じ
+ *          理由で Non Reentrant として文書化する。
+ *
  * \ServiceID      {0x0b}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

@@ -444,6 +444,12 @@ static void Dcm_TransferAbort(void);
  *          TX バッファポインタを設定する。
  *
  * \AUTOSARReq     {SWS_Dcm_00034}
+ *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
+ * \pre        PduR_Init() が正常に完了していること。
+ *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -492,6 +498,8 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
  *          例外 API（他 BSW モジュールと共通の慣例）のため、初期化状態は
  *          確認せず NULL ポインタチェックのみ行う。
  *
+ * \param[out]  versioninfo  バージョン情報の格納先。NULL 禁止。
+ *
  * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -524,7 +532,23 @@ void Dcm_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /**
  * \brief   VIN (Vehicle Identification Number) を取得する（[SWS_Dcm_00950]）。
  *
+ * \par 実装
+ *          実仕様は、ECU 統合者（車両側の実装）が本関数を提供し、Dcm が
+ *          起動時に一度だけ呼び出してキャッシュする「Dcm が呼び出す側」の
+ *          関数である（[SWS_Dcm_01174]）。本プロジェクトは車両情報の実体を
+ *          外部に持たないため、Dcm.c 自身が固定値を返す簡略実装とし、
+ *          `Dcm_Init()` が同じ「起動時に一度だけ取得しキャッシュする」
+ *          呼び出しパターンを踏襲する（UDS SID 0x22 DID 0xF190 の応答は
+ *          このキャッシュから返す。`Dcm_ReadDid()` 参照）。
+ *
  * \AUTOSARReq     {SWS_Dcm_00950}
+ *
+ * \param[out]  Data  VIN 格納先（`DCM_VIN_LENGTH` (17) バイト以上の
+ *                    バッファであること）。NULL 禁止。
+ *
+ * \retval  E_OK      Data に有効な VIN を格納した。
+ * \retval  E_NOT_OK  Data が NULL（本プロジェクトではこれ以外に失敗しない）。
+ *
  * \ServiceID      {0x07}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -563,6 +587,12 @@ Std_ReturnType Dcm_GetVin(uint8* Data)
  * \brief   現在アクティブなセキュリティレベルを取得する。
  *
  * \AUTOSARReq     {SWS_Dcm_00338}
+ *
+ * \param[out]  SecLevel  取得値の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得（実仕様上、値取得自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化、または SecLevel が NULL。
+ *
  * \ServiceID      {0x0d}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -593,6 +623,12 @@ Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel)
  * \brief   現在アクティブなセッション制御タイプを取得する。
  *
  * \AUTOSARReq     {SWS_Dcm_00339}
+ *
+ * \param[out]  SesCtrlType  取得値の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得（実仕様上、値取得自体は常に成功する）。
+ * \retval  E_NOT_OK  未初期化、または SesCtrlType が NULL。
+ *
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -622,7 +658,8 @@ Std_ReturnType Dcm_GetSesCtrlType(Dcm_SesCtrlType* SesCtrlType)
 /**
  * \brief   現在アクティブなプロトコル・コネクション・テスター送信元アドレスを取得する。
  *
- * \details 実仕様は複数プロトコル(OBD/UDS×CAN/FlexRay/IP等)・複数コネクションを
+ * \par 実装
+ *          実仕様は複数プロトコル(OBD/UDS×CAN/FlexRay/IP等)・複数コネクションを
  *          動的に追跡するが、本プロジェクトは UDS on CAN の単一プロトコル・
  *          単一コネクション・物理アドレッシング固定構成のため、`ActiveProtocolType`
  *          は常に `DCM_UDS_ON_CAN`、`ConnectionId`は常に`DCM_CONNECTION_ID`(0)、

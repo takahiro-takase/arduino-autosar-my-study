@@ -111,14 +111,6 @@ void Dcm_MainFunction(void);
 /**
  * \brief   VIN (Vehicle Identification Number) を取得する（[SWS_Dcm_00950]）。
  *
- * \details 実仕様は、ECU 統合者（車両側の実装）が本関数を提供し、Dcm が
- *          起動時に一度だけ呼び出してキャッシュする「Dcm が呼び出す側」の
- *          関数である（[SWS_Dcm_01174]）。本プロジェクトは車両情報の実体を
- *          外部に持たないため、Dcm.c 自身が固定値を返す簡略実装とし、
- *          `Dcm_Init()` が同じ「起動時に一度だけ取得しキャッシュする」
- *          呼び出しパターンを踏襲する（UDS SID 0x22 DID 0xF190 の応答は
- *          このキャッシュから返す。`Dcm_ReadDid()` 参照）。
- *
  * \param[out]  Data  VIN 格納先（`DCM_VIN_LENGTH` (17) バイト以上の
  *                    バッファであること）。NULL 禁止。
  *
@@ -164,13 +156,6 @@ Std_ReturnType Dcm_GetSecurityLevel(Dcm_SecLevelType* SecLevel);
 
 /**
  * \brief   現在アクティブなプロトコル・コネクション・テスター送信元アドレスを取得する。
- *
- * \details 実仕様は複数プロトコル(OBD/UDS×CAN/FlexRay/IP等)・複数コネクションを
- *          動的に追跡するが、本プロジェクトは UDS on CAN の単一プロトコル・
- *          単一コネクション・物理アドレッシング固定構成のため、`ActiveProtocolType`
- *          は常に `DCM_UDS_ON_CAN`、`ConnectionId`は常に`DCM_CONNECTION_ID`(0)、
- *          `TesterSourceAddress`は常に`DCM_TESTER_SOURCE_ADDRESS`(UDS診断要求の
- *          CAN ID)を返す固定値実装とする（Dcm_Cfg.h 参照）。
  *
  * \param[out]  ActiveProtocolType    アクティブなプロトコル種別の格納先。NULL 禁止。
  * \param[out]  ConnectionId          コネクション識別子の格納先。NULL 禁止。

@@ -859,7 +859,8 @@ void CanNm_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
  *          報告して E_NOT_OK を返す（[SWS_CanNm_00195]）。
  *
  *          簡略化: CanNmComUserDataSupport（NM ユーザデータを Com から PduR_CanNmTriggerTransmit() で集める機能）は
- *          持たないので、NM フレームは、CBV と Source Node ID だけで構成する。
+ *          持たないので、NM フレームは、CBV と Source Node ID だけで構成する。本プロジェクトの本番の設定は、
+ *          CanNm の TX PDU をトリガ送信に対応させない（CanIf.json の triggerTransmit が無い）ので、本番コードからは呼ばれない。
  *
  * \param[in]     TxPduId     データを要求された CanNm の TX PDU の ID。
  * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。

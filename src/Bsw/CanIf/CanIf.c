@@ -647,9 +647,12 @@ Std_ReturnType CanIf_ReadRxPduData(PduIdType CanIfRxSduId, PduInfoType* CanIfRxI
  * \brief   指定 TX PDU の送信完了通知状態を取得し、読み出した状態をクリアする
  *          （[SWS_CANIF_00202]）。
  *
- * \details `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
+ * \par 仕様
+ *          `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
  *          `CANIF_TX_RX_NOTIFICATION` になり、本関数を呼ぶと
  *          `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00393]）。
+ *
+ * \par 実装
  *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READTXPDU_NOTIFY_STATUS_API`/
  *          `CANIF_TXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
  *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
@@ -696,9 +699,12 @@ CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId)
  * \brief   指定 RX PDU の受信通知状態を取得し、読み出した状態をクリアする
  *          （[SWS_CANIF_00230]）。
  *
- * \details `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
+ * \par 仕様
+ *          `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
  *          当該 RX PDU の状態は `CANIF_TX_RX_NOTIFICATION` になり、本関数を
  *          呼ぶと `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00394]）。
+ *
+ * \par 実装
  *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READRXPDU_NOTIFY_STATUS_API`/
  *          `CANIF_RXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
  *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
@@ -906,10 +912,13 @@ void CanIf_GetVersionInfo(Std_VersionInfoType* versioninfo)
 /**
  * \brief   CAN コントローラが起床を検出したかを調べる（[SWS_CANIF_00219]）。
  *
- * \details EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼ぶ
+ * \par 仕様
+ *          EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼ぶ
  *          （[SWS_CANIF_00395]）。起床を検出したコントローラを `Can_CheckWakeup()` で調べ、
  *          検出していれば Can が `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
  *          戻り値は、`Can_CheckWakeup()` の戻り値をそのまま返す（[SWS_CANIF_00720]/[SWS_CANIF_00678]）。
+ *
+ * \par 実装
  *          本プロジェクトの CAN コントローラは 1 つだけで、CAN トランシーバのドライバは持たない。
  *          構成項目 `CanIfWakeupSupport`/`CanIfCtrlWakeupSupport` による有効・無効の切り替えは持たない
  *          （[SWS_CANIF_00180]/[SWS_CANIF_00892]）。

@@ -91,8 +91,7 @@ void Crypto_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *          CRYPTO_E_BUSY/CRYPTO_E_QUEUE_FULL 等の非同期・複数ジョブキュー
  *          由来の戻り値は扱わない。ただし `cryptoKeyId` が無効化中
  *          （`Crypto_KeyElementSet()` 直後、`Crypto_KeySetValid()` 未実行）
- *          の場合は `CRYPTO_E_KEY_NOT_VALID` を返す（[SWS_Crypto_00043]。
- *          2026-09 是正: 以前は素の `E_NOT_OK` に統一していた）。
+ *          の場合は `CRYPTO_E_KEY_NOT_VALID` を返す（[SWS_Crypto_00043]）。
  *
  * \param[in]     objectId  Crypto Driver Object の ID。本プロジェクトは
  *                          単一オブジェクトのみのため CRYPTO_OBJECT_ID
@@ -130,8 +129,7 @@ Std_ReturnType Crypto_ProcessJob(uint32 objectId, Crypto_JobType* job);
  *
  * \retval  E_OK      鍵を書き換えた（無効状態になる）。
  * \retval  CRYPTO_E_KEY_SIZE_MISMATCH  keyLength が CRYPTO_AES128_KEY_SIZE と
- *                    不一致（2026-09 是正: 以前は素の E_NOT_OK に統一する
- *                    意図的な簡略化だったが、ユーザー承認の上で是正）。
+ *                    不一致。
  * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、または NULL。
  *
  * \AUTOSARReq     {SWS_Crypto_91004}
@@ -168,9 +166,9 @@ Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId);
  *          `*resultLengthPtr` は常に `CRYPTO_AES128_KEY_SIZE` 丁度でなければ
  *          ならない（大きすぎる/小さすぎるバッファはいずれも拒否する）。
  *          バッファが小さすぎる場合は [SWS_Csm_00959] の Csm_KeyElementGet
- *          戻り値表通り `CRYPTO_E_SMALL_BUFFER` を返す（2026-09 追加）。
+ *          戻り値表通り `CRYPTO_E_SMALL_BUFFER` を返す。
  *          バッファが大きすぎる場合（本プロジェクト独自の「厳密一致」制約で
- *          実仕様に対応する専用値が無い）は従来通り `E_NOT_OK` のまま。
+ *          実仕様に対応する専用値が無い）は `E_NOT_OK` を返す。
  *          実仕様が定義する `CRYPTO_E_BUSY`/`CRYPTO_E_KEY_NOT_AVAILABLE`/
  *          `CRYPTO_E_KEY_READ_FAIL` は本実装では扱わない（対応する機能自体
  *          が無いため。本ファイル冒頭コメント参照）。`Crypto_KeySetValid()`
@@ -187,7 +185,7 @@ Std_ReturnType Crypto_KeySetValid(uint32 cryptoKeyId);
  *
  * \retval  E_OK      鍵要素を読み出した。
  * \retval  CRYPTO_E_SMALL_BUFFER  `*resultLengthPtr` が CRYPTO_AES128_KEY_SIZE
- *                    未満（2026-09 追加）。
+ *                    未満。
  * \retval  E_NOT_OK  未初期化、cryptoKeyId/keyElementId が不正、NULL、
  *                    または `*resultLengthPtr` が CRYPTO_AES128_KEY_SIZE 超過。
  *

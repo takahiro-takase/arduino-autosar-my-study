@@ -868,6 +868,13 @@ static void NvM_ReportInitDiagnosticsToDem(void)
  *             前に呼ぶ。EcuM.c 参照）。
  *
  * \AUTOSARReq     {SWS_NvM_00881}
+ *
+ * \param[in]  ConfigPtr  未使用。[SWS_NvM_00881]により常に NULL を渡すこと
+ *                        （2026-09 是正。以前は実際にこの引数の中身に依存して
+ *                        いた。post-build 設定は`NvM_PBCfg.c`の静的テーブル
+ *                        `NvM_Config`を内部で直接参照する、他の8モジュールと
+ *                        同じ opaque ConfigType パターン。NvM.c 参照）。
+ *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -918,6 +925,15 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr)
  *          保持済みのため追加のコピーは不要で、そのまま E_OK を返す。
  *          非 NULL の場合は従来通り、RAM ミラーとは別にそのバッファへも
  *          追加でコピーする（[SWS_NvM_00278]）。
+ *
+ * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[out] NvM_DstPtr   データのコピー先。NULL の場合は恒久 RAM ブロックを
+ *                          使う（[SWS_NvM_00898]）。
+ *
+ * \retval  E_OK      正常完了。
+ * \retval  E_NOT_OK  BlockId が範囲外。または、恒久 RAM ブロックが設定
+ *                    されていないブロック（本プロジェクトには存在しない）
+ *                    へ NULL を渡した（[SWS_NvM_00616]）。
  *
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant}
@@ -987,6 +1003,17 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr)
  *          現在の RAM ミラー内容をそのまま EEPROM へ（再）書き込むジョブとして
  *          扱う。非 NULL の場合は従来通り、まず RAM ミラーをそのデータで
  *          更新してから書き込む（[SWS_NvM_00280]）。
+ *
+ * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[in]  NvM_SrcPtr   書き込みデータの元アドレス。NULL の場合は恒久 RAM
+ *                          ブロック（現在の RAM ミラー内容）を使う
+ *                          （[SWS_NvM_00900]）。
+ *
+ * \retval  E_OK      ジョブを受け付けた、または内容不変のため書き込みを
+ *                    スキップし即座に成功扱いとした（[SWS_NvM_00852]）。
+ * \retval  E_NOT_OK  BlockId が範囲外。または、恒久 RAM ブロックが設定
+ *                    されていないブロック（本プロジェクトには存在しない）
+ *                    へ NULL を渡した（[SWS_NvM_00622]）。
  *
  * \ServiceID      {0x07}
  * \Reentrancy     {Non Reentrant}
@@ -1106,6 +1133,24 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr)
  *
  * \AUTOSARReq     {SWS_NvM_00456, SWS_NvM_00012, SWS_NvM_00224, SWS_NvM_00267,
  *                  SWS_NvM_00902, SWS_NvM_00883, SWS_NvM_00885}
+ *
+ * \param[in]   BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[out]  NvM_DestPtr  復元したデフォルト値の追加コピー先。NULL の場合は
+ *                          恒久 RAM ブロックを使う（本プロジェクトの全ブロックが
+ *                          該当）ため NULL 可。ただし恒久 RAM ブロックが設定
+ *                          されていないブロック（本プロジェクトには存在しない）
+ *                          へ NULL を渡した場合は development error
+ *                          （[SWS_NvM_00629]）。
+ *
+ * \note       NvM_DestPtr が非 NULL の場合は RAM ミラー更新に加えて
+ *             追加でコピーするだけで、仕様の either/or ([SWS_NvM_00435]) は
+ *             未実装。
+ *
+ * \retval  E_OK      ジョブを受け付けた（書き込み完了を意味しない）。
+ * \retval  E_NOT_OK  BlockId が範囲外、ROM デフォルト値が未設定
+ *                    （[SWS_NvM_00883]）、または恒久 RAM ブロックが設定
+ *                    されていないブロックへ NULL を渡した（[SWS_NvM_00629]）。
+ *
  * \ServiceID      {0x08}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Asynchronous}
@@ -1251,7 +1296,24 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
+ * \par 仕様
+ *          NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を
+ *          明示的に確認したい場合に使う（本プロジェクトの既存呼び出し元は
+ *          いずれも fire-and-forget で戻り値を確認しないが、API としては
+ *          提供する）。
  * \AUTOSARReq     {SWS_NvM_00451, SWS_NvM_00610, SWS_NvM_00611, SWS_NvM_00612}
+ *
+ * \param[in]   BlockId           ブロック ID (NVM_BLOCK_ID_* 定数)。
+ * \param[out]  RequestResultPtr  ジョブ結果の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常取得。
+ * \retval  E_NOT_OK  RequestResultPtr が NULL、未初期化、または BlockId が
+ *                    範囲外（NULL の場合を除き *RequestResultPtr は
+ *                    NVM_REQ_NOT_OK）。
+ *
+ * \note       戻り値の Std_ReturnType と *RequestResultPtr の
+ *             NvM_RequestResultType は別の enum。混同して比較しないこと。
+ *
  * \ServiceID      {0x04}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

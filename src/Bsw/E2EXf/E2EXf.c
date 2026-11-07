@@ -146,6 +146,13 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
 
 /**
  * \AUTOSARReq     {SWS_E2EXf_00035}
+ *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build
+ *                        設定を持たないため。実 AUTOSAR 仕様は
+ *                        SWS_E2EXf_00035 で post-build selectable の場合の
+ *                        設定構造体ポインタを要求するが、link-time variant
+ *                        の場合は NULL でよいと明記されている）。
+ *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}

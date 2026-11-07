@@ -238,14 +238,12 @@ void E2EXf_DeInit(void);
  *          （検証）を行う。実 AUTOSAR の `E2EXf_Inv_<transformerId>`
  *          （[SWS_E2EXf_00025]、8.3.2節）に対応するインスタンス専用関数。
  *
- * \details 2026-09 是正: 従来は `E2EXf_RxConfigType`/`E2EXf_RxConfigTypeP05`
- *          を引数で受け取る汎用関数（`E2EXf_InverseTransform()`/
- *          `E2EXf_InverseTransformP05()`）だったが、実 AUTOSAR の
+ * \details 実 AUTOSAR の
  *          `E2EXf_Inv_<transformerId>` はデータエレメント（本関数の場合
  *          EngineInfo）ごとに個別生成される関数であり、Config を引数で
  *          受け取る設計にはならない（[SWS_E2EXf_00020]/[00025]）。本関数は
  *          `E2EXf_PBCfg.c` の `E2EXf_EngineInfoRxCfg` を直接参照する
- *          インスタンス専用関数へ変更した（AbsInfo 用の `E2EXf_Inv_AbsInfo()` とは、
+ *          インスタンス専用関数である（AbsInfo 用の `E2EXf_Inv_AbsInfo()` とは、
  *          使う設定だけが違い、処理は同じなので、内部の共通関数 `E2EXf_InvP05()` へ
  *          委ねる。仕様も、変換関数が内部の共通関数を呼ぶことを認めている）。
  *
@@ -273,8 +271,7 @@ void E2EXf_DeInit(void);
  *          [SWS_E2EXf_00027]/8.3.2節の規定どおり、戻り値は「上位ニブル=
  *          E2E_SMStateType（VALID=0/NODATA=2/INIT=3/INVALID=4）、下位ニブル
  *          =E2E_PCheckStatusType（プロファイル非依存チェック結果）」の
- *          パック値とする（2026-09 是正、以前は単純な `Std_ReturnType`
- *          E_OK/E_NOT_OK のみだった）。呼び出し元（`Rte.c`）は本来の
+ *          パック値とする。呼び出し元（`Rte.c`）は本来の
  *          「フレーム単体の合否」（下位ニブル）だけでなく「SMState=VALID
  *          に確定するまではデータを使わない」（[SWS_E2E_00345]）という
  *          仕様の要求も、`ret == E_OK`（0x00、両ニブルとも0）の1条件だけで
@@ -302,10 +299,10 @@ void E2EXf_DeInit(void);
  *          E2E の DTC も確定する）。理由は、docs/modules/E2EXf_Notes.md の「NONEWDATA」を参照。
  *
  * \note    `CheckStatus` は仕様の Syntax には無い本プロジェクト独自の
- *          追加出力引数（2026-09、Rte.c が必要とする詳細な生ステータス
+ *          追加出力引数（Rte.c が必要とする詳細な生ステータス
  *          （OKSOMELOST 等、プロファイル非依存写像では失われる情報）を
  *          残すための暫定対応。将来的にはグローバル変数経由での公開へ
- *          置き換える予定 — 詳細はコミットログ参照）。
+ *          置き換える予定）。
  *
  * \param[in,out] buffer             検証対象の I-PDU バイト列（in-place、
  *                                   固定長）。NULL は、`inputBufferLength` が 0 のときだけ
@@ -371,10 +368,8 @@ uint8 E2EXf_Inv_AbsInfo(uint8* buffer, uint32* bufferLength, const uint8* inputB
  *          `E2EXf_<transformerId>`（[SWS_E2EXf_00020]、8.3.1節）に対応する
  *          インスタンス専用関数。
  *
- * \details 2026-09 是正の経緯は `E2EXf_Inv_EngineInfo()` の同名コメント
- *          参照（Check 側と対称、`E2EXf_TxConfigTypeP05`/汎用関数
- *          `E2EXf_TransformP05()` を廃止し、`E2EXf_E2EHealthStatusTxCfgP05`
- *          を直接参照するインスタンス専用実装へ変更）。E2E_P05Protect() を
+ * \details Check 側（`E2EXf_Inv_EngineInfo()`）と対称に、`E2EXf_E2EHealthStatusTxCfgP05`
+ *          を直接参照するインスタンス専用の実装である。E2E_P05Protect() を
  *          呼び、buffer へ Counter・CRC16 を書き込む。
  *
  *          Protect 側にはステートマシン（E2E_SMCheck）が無いため戻り値の

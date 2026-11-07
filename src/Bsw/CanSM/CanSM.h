@@ -74,7 +74,8 @@ extern "C" {
 /**
  * \brief   CanSM モジュールを初期化する。
  *
- * \details 全ネットワークを COMM_NO_COMMUNICATION 状態に設定する。
+ * \par 仕様
+ *          全ネットワークを COMM_NO_COMMUNICATION 状態に設定する。
  *          EcuM_Init() から ComM_Init() より先に呼び出すこと。
  *
  * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
@@ -124,10 +125,9 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
 /**
  * \brief   ネットワークの現在の通信モードを取得する。
  *
- * \details Bus-Off の回復中は COMM_SILENT_COMMUNICATION として報告する。Bus-Off を検出すると、ComM へ
+ * \par 仕様
+ *          Bus-Off の回復中は COMM_SILENT_COMMUNICATION として報告する。Bus-Off を検出すると、ComM へ
  *          SILENT_COMMUNICATION を通知する（[SWS_CanSM_00521]）ため、ComM が持つモードと同じ値を返す。
- *          以前は NO_COMMUNICATION を返していたが、ComM_GetCurrentComMode() が CanSM へ問い合わせる
- *          ようになった（[SWS_ComM_00084]）ため、通知と食い違わない値に直した。
  *
  * \param[in]  network  ネットワークハンドル。
  * \param[out] mode     現在のモードを受け取る変数へのポインタ。NULL 禁止。
@@ -194,9 +194,7 @@ void CanSM_GetVersionInfo(Std_VersionInfoType* VersionInfo);
 void CanSM_ControllerBusOff(uint8 ControllerId);
 
 /**
- * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。旧
- *          `CanSM_ControllerWakeup`（2026-09-05、実仕様名・シグネチャへ
- *          是正）。
+ * \brief   コントローラモード変化通知コールバック（[SWS_CanSM_00396]）。
  *
  * \details 実仕様は「CAN コントローラのモードが変化したことを通知する」
  *          汎用コールバックだが、本プロジェクトは通常のモード変化を
@@ -204,9 +202,7 @@ void CanSM_ControllerBusOff(uint8 ControllerId);
  *          （CanIf.c 冒頭のコメント参照）のため、本コールバック経由の通知が
  *          必要になる場面は「CAN コントローラが CAN_CS_SLEEP 中にバス活動を
  *          検知して自律的にウェイクアップした」場合（`EcuM_CheckWakeup()`
- *          からの委譲、[SWS_Can_00271]。2026-09-05 是正前は実仕様に存在
- *          しない独自 API `CanIf_ControllerWakeup()` 経由だった）のみに
- *          限定される。「通常のスリープ（ComM の NO_COM 要求による、
+ *          からの委譲、[SWS_Can_00271]）のみに限定される。「通常のスリープ（ComM の NO_COM 要求による、
  *          CANSM_STATE_NO_COM）」からの復帰のみを扱う。CANSM_STATE_BUS_OFF
  *          は実 HW をスリープさせず Can_T_STOP/Can_T_START のみで回復を
  *          試行するため、この状態から呼ばれることは原理的にない。
@@ -254,10 +250,7 @@ void CanSM_ControllerModeIndication(uint8 ControllerId, Can_ControllerStateType 
  *          （SLEEP→STOPPED、Listen-Only）にする要求を出して、完了通知を待つ（来なければ繰り返す）。MCP2515 の WAKIF はノイズでも誤って立ちうるため、この時点では FULL_COM へ確定しない。
  *          FULL_COM へ確定するのは、有効な受信の確認後に ComM が CanSM_RequestComMode(FULL_COM) を呼んだとき（検証成功）、
  *          または CanSM_MainFunction() が検証のタイムアウトを検出して、再スリープするとき（検証失敗）。
- *
- *          以前は、同じ処理が CanSM_ControllerModeIndication() の中にあり、EcuM_CheckWakeup() が
- *          CanSM_ControllerModeIndication(0, CAN_CS_STOPPED) を「起床の合図」として呼んでいた（2026-11 に、本関数へ移した。
- *          仕様では、CanSM_ControllerModeIndication() は、コントローラがそのモードに達した完了通知）。
+ *          なお仕様では、CanSM_ControllerModeIndication() は、コントローラがそのモードに達した完了通知である。
  *
  * \param[in]  network  対象のネットワークハンドル（0 〜 CANSM_CHANNEL_COUNT-1）。
  *

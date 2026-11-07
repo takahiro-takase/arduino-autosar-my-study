@@ -235,6 +235,9 @@ static void ComM_NmNetworkRelease(NetworkHandleType Network);
  *          ComM_RequestComMode() で COMM_FULL_COMMUNICATION を要求することで
  *          初めて CAN バスがアクティブになる。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -267,6 +270,9 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr)
 /**
  * \brief   ComM モジュールを未初期化状態に戻す。
  *
+ * \par 仕様
+ *          初期化済みフラグを未初期化に戻す。未初期化状態で呼ばれた場合は
+ *          COMM_E_UNINIT を報告し何もしない。
  * \ServiceID      {0x02}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -362,6 +368,16 @@ Std_ReturnType ComM_GetState(NetworkHandleType Channel, ComM_StateType* State)
 /**
  * \brief   ComM モジュールの初期化状態を取得する。
  *
+ * \par 仕様
+ *          [SWS_ComM_00612/00858] が明記するとおり、ComM_Init/GetVersionInfo と
+ *          並び、本関数だけは未初期化状態で呼ばれても COMM_E_UNINIT を報告
+ *          しない例外 API である。そのため初期化状態は確認せず、NULL
+ *          ポインタチェックのみ行う。
+ * \param[out]  Status  COMM_UNINIT/COMM_INIT の格納先。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  Status が NULL。
+ *
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -449,7 +465,18 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 /**
  * \brief   ユーザが現在要求している通信モードを取得する（[SWS_ComM_00079]）。
  *
+ * \par 仕様
+ *          `ComM_RequestComMode()` で設定された、集約前のユーザ単位の要求値
+ *          （`ComM_UserRequest[User]`）をそのまま返す。集約後のチャネル単位の
+ *          現在モードを返す `ComM_GetCurrentComMode()` とは異なる点に注意。
  * \AUTOSARReq     {SWS_ComM_00079}
+ *
+ * \param[in]   User     照会するユーザ ID。
+ * \param[out]  ComMode  要求中のモードを受け取る変数へのポインタ。NULL 禁止。
+ *
+ * \retval  E_OK      正常に取得した。
+ * \retval  E_NOT_OK  User が範囲外、または ComMode が NULL。
+ *
  * \ServiceID      {0x07}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -889,6 +916,12 @@ void ComM_Nm_BusSleepMode(NetworkHandleType Network)
  *          COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う
  *          （ComM_ComputeAggregatedMode() 参照）。
  *
+ *          潜在的な通信制限（ComM_LimitChannelToNoComMode 等、本プロジェクト
+ *          未実装）を一時的に無効化する趣旨だが、本プロジェクトは
+ *          ComM_RequestComMode() の集約ロジックへ仮想ユーザとして参加させる
+ *          ことで同じ効果（誰か一人でも通信を必要としていればバスは落とさない）
+ *          を実現する（ComM.c 参照）。
+ *
  * \param[in]  Channel  診断通信が必要になったチャネル。
  *
  * \AUTOSARReq     {SWS_ComM_00873}
@@ -1046,6 +1079,13 @@ void ComM_EcuM_WakeUpIndication(NetworkHandleType Channel)
  *          変更は既に COMM_FULL_COMMUNICATION のチャネルには影響しない
  *          （[SWS_ComM_00896] のとおり評価対象は NO_COM からの遷移時のみ）。
  *
+ *          本プロジェクトは EcuM/Fixed 相当（単一チャネル、動的な許可制御は
+ *          未導入）のため、EcuM_Init() が ComM_Init() 直後に
+ *          `ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE)` を呼び、以降は
+ *          常時許可のまま運用する（EcuM.c 参照）。本関数を起動後に FALSE で
+ *          動的に呼び直す運用は検証していない（ComM.c 冒頭「本実装の
+ *          簡略化」参照）。
+ *
  * \param[in]  Channel  対象ネットワークハンドル。
  * \param[in]  Allowed  TRUE: 通信を許可する。FALSE: 通信を許可しない。
  *
@@ -1109,6 +1149,14 @@ void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed)
  *          CanNm の協調スリープが完了して NO_COM へ入ったとき、User0 の要求も NO_COM へ
  *          そろえる。FULL_COM への同期は、2026-11 に廃止した（起床は、誰かの要求ではないため。
  *          上のファイル冒頭コメント参照）。
+ *
+ *          FULL_COM 通知時、`ComM_NmReleasePending[]` が立っていれば
+ *          （CanNm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
+ *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() も EcuM_RequestRUN() も
+ *          呼ばず、CanNm の協調スリープをそのまま続けさせる（詳細は ComM.c の実装コメント参照）。
+ *
+ * \param[in]  Network  ネットワークハンドル (0 〜 COMM_CHANNEL_COUNT-1)。
+ * \param[in]  Mode     新しい通信モード (ComM_ModeType)。
  *
  * \ServiceID      {0x33}
  * \Reentrancy     {Non Reentrant}

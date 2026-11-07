@@ -124,7 +124,8 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr);
 /**
  * \brief   タイムアウト監視と CF 送信を周期的に処理する。
  *
- * \details EcuM_MainFunction から毎ループ呼び出す。以下を担当する:
+ * \par 仕様
+ *          EcuM_MainFunction から毎ループ呼び出す。以下を担当する:
  *          - TX WAIT_FC 状態: N_Bs タイムアウト検出 → TX 中断
  *          - TX SEND_CF 状態: STmin 経過後に次の CF を送信
  *          - RX WAIT_CF 状態: N_Cr タイムアウト検出 → RX 中断
@@ -198,9 +199,7 @@ void CanTp_Test_ResetInitState(void);
 /**
  * \brief   [テスト専用] TX チャネルが、送信の途中（FC 待ち、または CF の送信中）か。
  *
- * \details 以前は公開 API（CanTp_IsTxBusy）だったが、Dcm が TP の送信確認（Dcm_TpTxConfirmation）で
- *          自分の送信状態を持つようになり、不要になった。マルチフレーム送信の途中・完了を、
- *          テストが確認するためだけに残している。
+ * \details 公開 API ではない。マルチフレーム送信の途中・完了を、テストが確認するためだけに残している。
  *
  * \retval  TRUE   送信の途中。
  * \retval  FALSE  IDLE。

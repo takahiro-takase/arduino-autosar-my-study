@@ -153,10 +153,7 @@ uint8 Com_ReceiveSignalGroup(Com_SignalGroupIdType SignalGroupId);
  * \retval  E_OK      SignalGroupId が見つかり、DataPtr へコピーした。
  * \retval  E_NOT_OK  COM 未初期化、DataPtr が NULL、または SignalGroupId が存在しない。
  *
- * \note    実仕様([SWS_Com_00851]/[SWS_Com_00854])は戻り値型 uint8・引数型
- *          Com_SignalGroupIdType だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup
- *          (PR#192で修正済み)と同じ乖離が残っていた。今回まとめて修正。
- * \AUTOSARReq     {SWS_Com_00854, SWS_Com_00855, SWS_Com_00856, SWS_Com_00857}
+ * \AUTOSARReq    {SWS_Com_00854, SWS_Com_00855, SWS_Com_00856, SWS_Com_00857}
  * \ServiceID      {0x24}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -190,10 +187,7 @@ uint8 Com_SendSignalGroup(Com_SignalGroupIdType SignalGroupId);
  *                    テーブルに存在しない、または IsSignalGroup=0 の I-PDU
  *                    を指定した。
  *
- * \note    実仕様([SWS_Com_00851])は戻り値型 uint8・引数型 Com_SignalGroupIdType
- *          だが、以前は Com_SendSignalGroup/Com_ReceiveSignalGroup(PR#192で修正済み)
- *          と同じ乖離が残っていた。今回まとめて修正。
- * \AUTOSARReq     {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853}
+ * \AUTOSARReq    {SWS_Com_00851, SWS_Com_00852, SWS_Com_00853}
  * \ServiceID      {0x23}
  * \Reentrancy     {Non Reentrant for the same signal group}
  * \Synchronicity  {Asynchronous}
