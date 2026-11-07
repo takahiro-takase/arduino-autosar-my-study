@@ -219,6 +219,40 @@ TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ReportsPreFailedTo
     EXPECT_EQ(LastEventStatus_Dem_SetEventStatus, DEM_EVENT_STATUS_PREFAILED);
 }
 
+// Bus-Off の回復中に NO_COM を要求されると、PRE_NO_COM へ入る。NO_COM へ入り終えるまでは、SILENT_COM を報告する
+TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_ReportsSilentComUntilNoComEnteredWhenRequestedDuringBusOff)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    FailFromCallCount_CanIf_SetControllerMode = 0U;   // コントローラの状態変更は、常に成功する
+    ForcedReturn_CanIf_SetControllerMode      = E_OK;
+    FailFromCallCount_CanIf_SetPduMode = 0U;   // PDU モードの変更は、常に成功する
+    ForcedReturn_CanIf_SetPduMode      = E_OK;
+    ASSERT_EQ(CanSM_RequestComMode(0U, COMM_FULL_COMMUNICATION), E_OK);
+    SettleCanSmModeRequests();
+    CanSM_ControllerBusOff(0U);   // BUS_OFF（回復中）へ
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType retReq = CanSM_RequestComMode(0U, COMM_NO_COMMUNICATION);   // 回復を取り消して PRE_NO_COM へ
+    ComM_ModeType modeDuring = COMM_FULL_COMMUNICATION;
+    const Std_ReturnType retDuring = CanSM_GetCurrentComMode(0U, &modeDuring);
+    SettleCanSmModeRequests();
+    ComM_ModeType modeAfter = COMM_FULL_COMMUNICATION;
+    const Std_ReturnType retAfter = CanSM_GetCurrentComMode(0U, &modeAfter);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(retReq, E_OK);
+    ASSERT_EQ(retDuring, E_OK);
+    EXPECT_EQ(modeDuring, COMM_SILENT_COMMUNICATION);   // 入り終えるまでは、直前のモード（Bus-Off 中は SILENT_COM）
+    ASSERT_EQ(retAfter, E_OK);
+    EXPECT_EQ(modeAfter, COMM_NO_COMMUNICATION);
+}
+
 // 確定していない Bus-Off の検出中（BUS_OFF の状態）に、もう一度 Bus-Off が通知されても、報告を重ねない
 TEST_F(CanSM_ControllerBusOff_Test, CanSM_ControllerBusOff_OK_DoesNotReportAgainWhileAlreadyBusOff)
 {

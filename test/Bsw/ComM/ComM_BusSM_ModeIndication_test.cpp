@@ -135,22 +135,24 @@ TEST_F(ComM_BusSM_ModeIndication_Test, ComM_BusSM_ModeIndication_OK_SameModeAsCu
     /* ----------------------- */
     /* ---- 準備 (Arrange) --- */
     /* ----------------------- */
-    ComM_ModeType before = COMM_FULL_COMMUNICATION;
-    ASSERT_EQ(ComM_GetCurrentComMode(COMM_USER_0, &before), E_OK);   // 初期化直後は NO_COM
+    /* ComM が通知から保存したチャネルのモードは、ComM_GetState() で見る
+     * （ComM_GetCurrentComMode() は CanSM へ問い合わせるため、CanSM を初期化しないこのテストでは使えない） */
+    ComM_StateType before = COMM_FULL_COM_NETWORK_REQUESTED;
+    ASSERT_EQ(ComM_GetState(0U, &before), E_OK);   // 初期化直後は NO_COM
 
     /* ----------------------- */
     /* ---- 実行 (Act) ------- */
     /* ----------------------- */
-    ComM_BusSM_ModeIndication(0U, before);   // 現在と同じモードの再通知（SILENT_COM 以外）
-    ComM_ModeType after = COMM_FULL_COMMUNICATION;
-    const Std_ReturnType ret = ComM_GetCurrentComMode(COMM_USER_0, &after);
+    ComM_BusSM_ModeIndication(0U, COMM_NO_COMMUNICATION);   // 現在と同じモードの再通知（SILENT_COM 以外）
+    ComM_StateType after = COMM_FULL_COM_NETWORK_REQUESTED;
+    const Std_ReturnType ret = ComM_GetState(0U, &after);
 
     /* ----------------------- */
     /* ---- 評価 (Assert) ---- */
     /* ----------------------- */
-    EXPECT_EQ(before, COMM_NO_COMMUNICATION);
+    EXPECT_EQ(before, COMM_NO_COM_NO_PENDING_REQUEST);
     ASSERT_EQ(ret, E_OK);
-    EXPECT_EQ(after, COMM_NO_COMMUNICATION);   // 何も変わらない
+    EXPECT_EQ(after, COMM_NO_COM_NO_PENDING_REQUEST);   // 何も変わらない
 }
 
 }  // namespace

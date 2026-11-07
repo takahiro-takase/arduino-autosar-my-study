@@ -14,7 +14,9 @@
 
 extern "C" {
 #include "ComM.h"
+#include "CanSM.h"
 #include "Fake_Det_Hw.h"
+#include "Wrap_CanSM.h"
 }
 
 /* ======================================================================
@@ -78,6 +80,7 @@ protected:
     void SetUp() override
     {
         FakeDetHw_LogSuppressed = 1U;  // Init() のログはノイズになるため抑制
+        WrapCanSM_Reset();
         ComM_Init(NULL);
         FakeDetHw_Reset();              // Init 自体の記録を後続の検証対象から除く
         FakeDetHw_LogSuppressed = 0U;  // ここから各 TEST_F の実行(Act)区間
@@ -87,6 +90,8 @@ protected:
     {
         FakeDetHw_LogSuppressed = 1U;
         ComM_DeInit();
+        CanSM_DeInit();   // OK ケースが初期化した CanSM を、未初期化へ戻す（未初期化でも呼べる）
+        WrapCanSM_Reset();
     }
 };
 
@@ -150,6 +155,80 @@ TEST_F(ComM_GetCurrentComMode_Test, ComM_GetCurrentComMode_NG_NullPointer)
     /* ----------------------- */
     EXPECT_EQ(ret, E_NOT_OK);
     EXPECT_EQ(FakeDetHw_LastErrorId, COMM_E_PARAM_POINTER);
+}
+
+TEST_F(ComM_GetCurrentComMode_Test, ComM_GetCurrentComMode_OK_AsksCanSM)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* ComM が通知から保存した値ではなく、CanSM へ問い合わせた値を返すことを見る（[SWS_ComM_00084]）。
+     * CanSM_Init() 直後の CanSM は NO_COM（CanSM_GetCurrentComMode() はカスケードせず、状態を読むだけ）。 */
+    FakeDetHw_LogSuppressed = 1U;
+    CanSM_Init(NULL);
+    FakeDetHw_LogSuppressed = 0U;
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = ComM_GetCurrentComMode(COMM_USER_0, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);
+    EXPECT_EQ(CallCount_CanSM_GetCurrentComMode, COMM_CHANNEL_COUNT);   // チャネルごとに 1 回、CanSM へ問い合わせた
+}
+
+TEST_F(ComM_GetCurrentComMode_Test, ComM_GetCurrentComMode_OK_ReturnsCanSMModeNotStoredMode)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* ComM が保存したチャネルのモード（SILENT_COM）と、CanSM が持つモード（NO_COM）を、わざと食い違わせる。
+     * 保存した値を返す実装なら SILENT_COM が、CanSM へ問い合わせる実装なら NO_COM が返る。 */
+    FakeDetHw_LogSuppressed = 1U;
+    CanSM_Init(NULL);
+    ComM_BusSM_ModeIndication(0U, COMM_SILENT_COMMUNICATION);
+    FakeDetHw_LogSuppressed = 0U;
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = ComM_GetCurrentComMode(COMM_USER_0, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);
+}
+
+TEST_F(ComM_GetCurrentComMode_Test, ComM_GetCurrentComMode_NG_CanSMFails)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    /* CanSM が未初期化だと、CanSM_GetCurrentComMode() が E_NOT_OK を返す。他のテストが初期化した CanSM が残っていても、
+     * 結果が変わらないよう、明示的に未初期化へ戻す。 */
+    FakeDetHw_LogSuppressed = 1U;
+    CanSM_DeInit();
+    FakeDetHw_LogSuppressed = 0U;
+    ComM_ModeType mode = COMM_FULL_COMMUNICATION;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Std_ReturnType ret = ComM_GetCurrentComMode(COMM_USER_0, &mode);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_NOT_OK);
+    EXPECT_EQ(mode, COMM_FULL_COMMUNICATION);   // 失敗したときは、出力を変えない
 }
 
 }  // namespace

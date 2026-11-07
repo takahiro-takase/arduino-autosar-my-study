@@ -40,6 +40,11 @@ Protocol 相当）により有効な CAN フレーム受信を確認してから
 スリープさせます（`BUS_OFF` から `NO_COM` へ直接遷移します）。`FULL_COM` と `SILENT_COM` は、回復の後に戻る
 状態（`CanSM_PreBusOffState`）を、要求されたモードに変えます（`SILENT_COM` への変更は、すぐに TX を止めます）。
 
+`CanSM_GetCurrentComMode()` は、`BUS_OFF` の回復中は `SILENT_COM` を返します（2026-11 変更。以前は `NO_COM`）。Bus-Off を検出すると
+ComM へ `SILENT_COM` を通知する（[SWS_CanSM_00521]）ので、通知した値と同じにしました。`ComM_GetCurrentComMode()` が
+CanSM へ問い合わせるようになった（[SWS_ComM_00084]）ため、食い違いが見えるようになったことが、きっかけです。
+`PRE_NO_COM` の最中は、入る前のモード（`BUS_OFF` から入った場合は `SILENT_COM`）を返し、`NO_COM` へ入り終えたときに `NO_COM` になります。
+
 ```mermaid
 stateDiagram-v2
     [*] --> NO_COM
