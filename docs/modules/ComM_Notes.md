@@ -147,6 +147,23 @@ NO_COM の 2 つのサブステートを、変数として覚えない理由: �
 - NETWORK_REQUESTED ↔ READY_SLEEP（[SWS_ComM_00882]/[00883]）: ユーザの要求の有無で切り替える。
 - FULL_COM → SILENT_COM（[SWS_ComM_00826]）: CanNm が Prepare Bus-Sleep へ進んだ。SILENT_COM → NO_COM（[SWS_ComM_00295]/[00637]）: Bus-Sleep へ進んだ。
 
+## `ComM_GetCurrentComMode()` は CanSM へ問い合わせる（2026-11）
+
+仕様では、ComM はバスの実際の状態を制御しないため、`ComM_GetCurrentComMode()` を、ユーザが結び付いたチャネルの
+バスステートマネージャへ伝えます（[SWS_ComM_00083]/[SWS_ComM_00084]。CAN は `CanSM_GetCurrentComMode()`）。
+以前は、ComM が通知から保存した `ComM_ChannelMode` を返していましたが、仕様どおり CanSM へ問い合わせるようにしました。
+
+- 複数のチャネルが結び付いていて、チャネルのモードが異なる場合は、最も低いモードを返します（[SWS_ComM_00176]。
+  NO_COM < SILENT_COM < FULL_COM）。結び付きの設定は持たず、実ユーザが `COMM_USER_0` だけで全チャネルを使うため、
+  全チャネルが対象です。
+- CanSM がモードを返せなかったとき（未初期化など）は `E_NOT_OK` を返し、`*ComMode` は変えません。
+- `ComM_GetState()` は、これまでどおり `ComM_ChannelMode`（通知で保存した値）から状態を導きます。サブステートは ComM だけが
+  知っているためです。
+
+CanSM が先に状態を変えるため、通知より先に値が変わることがあります（Bus-Off で CanSM が自分から SILENT_COM へ落ちる場合など）。
+この場合も、ComM へ通知する値と食い違わないよう、CanSM は Bus-Off の回復中に SILENT_COM を返します
+（[`CanSM_Notes.md`](./CanSM_Notes.md) 参照）。
+
 ## ウェイクアップ時のパッシブ起動（READY_SLEEP）
 
 CanSM がウェイクアップの検証成功（や、他ノードの NM フレームによる起床）で

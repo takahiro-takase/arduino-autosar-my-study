@@ -657,7 +657,7 @@ TEST_F(CanSM_RequestComMode_Test, CanSM_RequestComMode_OK_BusOffWhileStartingFul
     /* ----------------------- */
     EXPECT_EQ(demAfterBusOff, 1U);                              // Bus-Off を Dem へ報告した（PREFAILED）
     EXPECT_EQ(CallCount_ComM_BusSM_ModeIndication, 1U);         // ComM へは SILENT_COM（Bus-Off）だけ。FULL_COM へは入らない
-    EXPECT_EQ(mode, COMM_NO_COMMUNICATION);                     // Bus-Off の回復中（FULL_COM ではない）
+    EXPECT_EQ(mode, COMM_SILENT_COMMUNICATION);                 // Bus-Off の回復中（FULL_COM ではない。ComM へ通知した SILENT_COM と同じ）
 }
 
 }  // namespace

@@ -324,7 +324,7 @@ python tools/api_coverage/api_coverage.py --update-readme # README の表の数�
 
 実 HW を使わず、BSW モジュールのロジックを PC 上で GoogleTest により検証します。
 単一モジュールのテストも、複数モジュールにまたがる関数コールチェーンのテストも、
-`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-11 時点で 2037 件）。
+`native_chain_tests` という 1 つのテストバイナリにまとめています（2026-11 時点で 2041 件）。
 
 ビルドは PlatformIO ではなく CMake + clang++（llvm-mingw）です。事前に環境変数
 `LLVM_MINGW_BIN` へ llvm-mingw の `bin` ディレクトリを設定してください。

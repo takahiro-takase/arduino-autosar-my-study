@@ -208,12 +208,24 @@ Std_ReturnType ComM_GetState(NetworkHandleType Channel, ComM_StateType* State);
 /**
  * \brief   ユーザの現在の通信モードを取得する。
  *
+ * \details ComM はバスの実際の状態を制御しないため、バスステートマネージャへ問い合わせる
+ *          （[SWS_ComM_00083]/[SWS_ComM_00084]。CAN は CanSM_GetCurrentComMode()）。
+ *          ComM が通知から保存した値（ComM_ChannelMode）は使わない。CanSM は、バスオフで自分から
+ *          SILENT_COM へ落ちる場合や、NO_COM へ入り終えるまでの間など、ComM への通知より先に
+ *          状態が変わることがあるため。
+ *          ユーザに複数のチャネルが結び付いていて、チャネルのモードが異なる場合は、最も低いモード
+ *          （NO_COM < SILENT_COM < FULL_COM）を返す（[SWS_ComM_00176]）。
+ *          ユーザとチャネルの結び付きは、いまは実ユーザが COMM_USER_0 だけで、全チャネルを使うため、
+ *          全チャネルを対象にしている（結び付きの設定を持たない）。
+ *
  * \param[in]  User      照会するユーザ ID。
  * \param[out] ComMode   現在のモードを受け取る変数へのポインタ。NULL 禁止。
  *
  * \retval  E_OK      正常に取得した。
- * \retval  E_NOT_OK  User が範囲外、または ComMode が NULL。
+ * \retval  E_NOT_OK  未初期化、User が範囲外、ComMode が NULL、または CanSM がモードを返せなかった
+ *                    （この場合、*ComMode は変更しない）。
  *
+ * \AUTOSARReq     {SWS_ComM_00083, SWS_ComM_00084, SWS_ComM_00176}
  * \ServiceID      {0x08}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

@@ -488,7 +488,10 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
 /**
  * \brief   ネットワークの現在の通信モードを取得する。
  *
- * \details Bus-Off 状態は COMM_NO_COMMUNICATION として報告する。
+ * \details Bus-Off の回復中は COMM_SILENT_COMMUNICATION として報告する。Bus-Off を検出すると、ComM へ
+ *          SILENT_COMMUNICATION を通知する（[SWS_CanSM_00521]）ため、ComM が持つモードと同じ値を返す。
+ *          以前は NO_COMMUNICATION を返していたが、ComM_GetCurrentComMode() が CanSM へ問い合わせる
+ *          ようになった（[SWS_ComM_00084]）ため、通知と食い違わない値に直した。
  *
  * \ServiceID      {0x03}
  * \Reentrancy     {Reentrant}
@@ -517,7 +520,8 @@ Std_ReturnType CanSM_GetCurrentComMode(NetworkHandleType network, ComM_ModeType*
     switch (CanSM_State)
     {
         case CANSM_STATE_FULL_COM:   *mode = COMM_FULL_COMMUNICATION;   break;
-        case CANSM_STATE_SILENT_COM: *mode = COMM_SILENT_COMMUNICATION; break;
+        case CANSM_STATE_SILENT_COM:
+        case CANSM_STATE_BUS_OFF:    *mode = COMM_SILENT_COMMUNICATION; break;   /* Bus-Off の回復中は、ComM へ SILENT_COM を通知済み（[SWS_CanSM_00521]） */
         case CANSM_STATE_PRE_NO_COM: *mode = CanSM_ModeBeforePreNoCom;  break;   /* NO_COM へ入り終えるまでは、直前のモード */
         default:                     *mode = COMM_NO_COMMUNICATION;     break;
     }
@@ -1202,14 +1206,14 @@ static void CanSM_EnterPreNoCom(void)
     Can_ControllerStateType current;
 
     /* NO_COM へ入り終えるまで、CanSM_GetCurrentComMode() が返す、直前のネットワークのモードを記録する
-     * （PRE_FULL_COM / PRE_NO_COM / NO_COM 等からは、NO_COM とみなす） */
+     * （PRE_FULL_COM / PRE_NO_COM / NO_COM 等からは、NO_COM とみなす。BUS_OFF からは SILENT_COM） */
     if (CanSM_State == CANSM_STATE_FULL_COM)
     {
         CanSM_ModeBeforePreNoCom = COMM_FULL_COMMUNICATION;
     }
-    else if (CanSM_State == CANSM_STATE_SILENT_COM)
+    else if ((CanSM_State == CANSM_STATE_SILENT_COM) || (CanSM_State == CANSM_STATE_BUS_OFF))
     {
-        CanSM_ModeBeforePreNoCom = COMM_SILENT_COMMUNICATION;
+        CanSM_ModeBeforePreNoCom = COMM_SILENT_COMMUNICATION;   /* Bus-Off の回復中も、ComM へは SILENT_COM を通知済み */
     }
     else if (CanSM_State != CANSM_STATE_PRE_NO_COM)
     {

@@ -124,11 +124,16 @@ Std_ReturnType CanSM_RequestComMode(NetworkHandleType network, ComM_ModeType mod
 /**
  * \brief   ネットワークの現在の通信モードを取得する。
  *
+ * \details Bus-Off の回復中は COMM_SILENT_COMMUNICATION として報告する。Bus-Off を検出すると、ComM へ
+ *          SILENT_COMMUNICATION を通知する（[SWS_CanSM_00521]）ため、ComM が持つモードと同じ値を返す。
+ *          以前は NO_COMMUNICATION を返していたが、ComM_GetCurrentComMode() が CanSM へ問い合わせる
+ *          ようになった（[SWS_ComM_00084]）ため、通知と食い違わない値に直した。
+ *
  * \param[in]  network  ネットワークハンドル。
  * \param[out] mode     現在のモードを受け取る変数へのポインタ。NULL 禁止。
  *
  * \retval  E_OK      正常に取得した。
- * \retval  E_NOT_OK  network が範囲外、または mode が NULL。
+ * \retval  E_NOT_OK  未初期化、network が範囲外、または mode が NULL。
  *
  * \ServiceID      {0x03}
  * \Reentrancy     {Reentrant}
