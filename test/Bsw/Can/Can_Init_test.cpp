@@ -68,6 +68,10 @@ protected:
         config.intPin          = 2U;
         config.baudrate        = 500000U;
         config.crystalFreq     = CAN_CRYSTAL_16MHZ;
+        config.fdEnabled       = 0U;
+        config.fdBaudrate      = 0U;
+        config.txBitRateSwitch = 0U;
+        config.triggerTransmitEnable = 0U;
     }
     Can_ConfigType config;
 };
@@ -112,6 +116,31 @@ TEST_F(Can_Init_Test, Can_Init_OK_Basic)
     EXPECT_EQ(FakeCanHw_InitCount, 1U);
     EXPECT_EQ(FakeCanHw_AttachRxIsrCount, 1U);
     EXPECT_EQ(FakeDetHw_ReportCount, 0U);
+}
+
+TEST_F(Can_Init_Test, Can_Init_OK_PassesFdConfigToHw)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    config.fdEnabled       = 1U;
+    config.fdBaudrate      = 2000000UL;
+    config.txBitRateSwitch = 1U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    Can_Init(&config);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_ConfigureFdCount, 1U);        // CAN FD の設定を、Can_Hw_Init() の前に渡す
+    EXPECT_EQ(FakeCanHw_LastFdEnabled, 1U);
+    EXPECT_EQ(FakeCanHw_LastFdBaudrate, 2000000UL);
+    EXPECT_EQ(FakeCanHw_LastFdBitRateSwitch, 1U);
+    EXPECT_EQ(FakeCanHw_InitCount, 1U);
+    EXPECT_EQ(Can_Test_GetControllerState(), CAN_CS_STOPPED);
 }
 
 TEST_F(Can_Init_Test, Can_Init_NG_AlreadyInitialized)

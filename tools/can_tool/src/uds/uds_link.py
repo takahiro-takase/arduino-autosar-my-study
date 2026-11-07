@@ -212,15 +212,27 @@ class UdsResponse:
         return f"POS " + " ".join(f"{b:02X}" for b in self.raw)
 
 
-def create_bus(interface: str, channel, bitrate: int) -> can.BusABC:
+def create_bus(interface: str, channel, bitrate: int, fd: bool = False, data_bitrate: int = 2000000) -> can.BusABC:
     """python-can の Bus を生成する。アダプタ種別ごとに channel の型が異なる
     （gs_usb は整数 index、slcan はシリアルポート文字列等）ため、呼び出し側
-    (config.json) でそのまま渡せる値をそのまま使う。"""
+    (config.json) でそのまま渡せる値をそのまま使う。
+
+    fd=True は CAN FD で開く（8 バイトを超えるフレームを受信・送信できる）。data_bitrate は
+    データ部のビットレート [bit/s]。FD に対応するのは candle（python-can-candle）だけ。"""
+    if fd and interface != "candle":
+        raise ValueError("CAN FD で開けるのは interface=candle のときだけです（現在: %s）" % interface)
     if interface == "candle":
         # python-can-candle（candleLight / gs_usb 互換の USB-CAN。FD 対応のアダプタも扱える）。
         # ignore_config=True は、python-can の設定ファイル・環境変数の値で引数が文字列に
         # 変換されるのを防ぐ（candle の引数は型を持つため）。送受信の仕方は gs_usb と同じ。
-        return can.Bus(interface=interface, channel=channel, bitrate=bitrate, ignore_config=True)
+        # FD のサンプルポイントは ECU（MCP2518FD、約 80%）に合わせる。candle の既定 87.5% のままだと、
+        # データ部が高速（2Mbps）のときにずれてフォーマットエラーになった（実機で確認）。
+        fd_args = dict(fd=True, data_bitrate=data_bitrate,
+                       sample_point=80.0, data_sample_point=80.0) if fd else {}
+        bus = can.Bus(interface=interface, channel=channel, bitrate=bitrate,
+                      ignore_config=True, **fd_args)
+        bus.opened_as_fd = bool(fd)
+        return bus
     bus = can.Bus(interface=interface, channel=channel, bitrate=bitrate)
     if interface == "gs_usb":
         _patch_gs_usb_shutdown(bus)
@@ -254,9 +266,37 @@ def _patch_gs_usb_shutdown(bus) -> None:
     bus.shutdown = _safe_shutdown
 
 
+def _fd_round_up(n: int) -> int:
+    """フレームに入れる長さ n を、CAN FD で送れる有効な長さ（12/16/20/24/32/48/64）へ切り上げる。"""
+    for length in FD_VALID_LENGTHS:
+        if n <= length:
+            return length
+    raise ValueError("CAN FD のフレームは 64 バイトまで（現在: %d）" % n)
+
+
+def _require_fd_bus(bus: can.BusABC) -> None:
+    """8 バイトを超えるフレームを送る前に、バスが FD で開かれていることを確かめる。"""
+    # candle は python-can の bus.protocol を設定しない（常に CAN_20 と見える）ため、create_bus() が付けた印を見る
+    if not getattr(bus, "opened_as_fd", False):
+        raise ValueError("8 バイトを超えるフレームは、CAN FD で開いたバスでしか送れません（config.json の can.fd を確認）")
+
+
+def _send_fd_frame(bus: can.BusABC, arbitration_id: int, data: bytes) -> None:
+    """データを有効な FD の長さまで 0x00 で埋めて、FD のフレーム（BRS あり）で送る。"""
+    _require_fd_bus(bus)
+    padded = bytes(data) + b"\x00" * (_fd_round_up(len(data)) - len(data))
+    bus.send(can.Message(arbitration_id=arbitration_id, data=padded, is_extended_id=False,
+                         is_fd=True, bitrate_switch=True))
+
+
 def send_raw(bus: can.BusABC, payload: bytes, request_id: int = REQUEST_ID) -> None:
     """SF 専用送信。payload は byte0=PCI（長さ）から始まる完成済みフレーム
-    （例: [0x02, 0x10, 0x01]）を渡すこと。8 バイトまで 0x00 でパディングする。"""
+    （例: [0x02, 0x10, 0x01]）を渡すこと。8 バイトまで 0x00 でパディングする。
+    9 バイト以上のときは、CAN FD のフレームとして、有効な長さまで 0x00 で埋めて送る
+    （FD の SF は PCI が 0x00 + SF_DL の 2 バイト。例: [0x00, 0x09, 0x22, ...]）。"""
+    if len(payload) > 8:
+        _send_fd_frame(bus, request_id, bytes(payload))
+        return
     data = bytes(payload) + b"\x00" * (8 - len(payload))
     msg = can.Message(arbitration_id=request_id, data=data, is_extended_id=False)
     bus.send(msg)
@@ -286,14 +326,30 @@ def send_multiframe_request(
 
     uds_payload は PCI バイトを含まない生 UDS ペイロード（例: [0x2E, 0x01, 0x04,
     data...]）。8 バイト以下なら send_raw() と同様 SF として送信する。
+
+    バスを CAN FD で開いている（create_bus(fd=True)）ときは、8 バイトを超える要求を FD のフレームで送る
+    （ECU は、要求が FD のフレームで届いたときだけ、応答も FD で返す）。
+      - 62 バイト以下: FD の SF（PCI は 0x00 + SF_DL。フレームは有効な長さ 12〜64）
+      - それより長い: FD の FF（64 バイト。データ 62）→ FC → CF（データは 63 バイトずつ）
+    7 バイト以下は、FD のバスでも、クラシックの SF（8 バイト）で送る。
     """
     msg_len = len(uds_payload)
     if msg_len <= 7:
         send_raw(bus, bytes([msg_len]) + uds_payload, request_id)
         return
 
-    ff_data = bytes([0x10 | ((msg_len >> 8) & 0x0F), msg_len & 0xFF]) + uds_payload[:6]
-    bus.send(can.Message(arbitration_id=request_id, data=ff_data, is_extended_id=False))
+    fd = bool(getattr(bus, "opened_as_fd", False))
+    if fd and msg_len <= FD_SF_MAX_DATA:
+        _send_fd_frame(bus, request_id, bytes([0x00, msg_len]) + uds_payload)
+        return
+
+    ff_len = FD_FRAME_MAX - 2 if fd else 6        # FF のデータ（FD は 62、クラシックは 6）
+    cf_len = FD_FRAME_MAX - 1 if fd else 7        # CF のデータ（FD は 63、クラシックは 7）
+    ff_data = bytes([0x10 | ((msg_len >> 8) & 0x0F), msg_len & 0xFF]) + uds_payload[:ff_len]
+    if fd:
+        _send_fd_frame(bus, request_id, ff_data)   # 64 バイトちょうど
+    else:
+        bus.send(can.Message(arbitration_id=request_id, data=ff_data, is_extended_id=False))
 
     deadline = time.monotonic() + timeout
     st_min = 0
@@ -316,12 +372,15 @@ def send_multiframe_request(
             continue
         raise RuntimeError("FC OVFLW: ECU 側の受信バッファを超過した")
 
-    pos = 6
+    pos = ff_len
     sn = 1
     while pos < msg_len:
-        chunk = uds_payload[pos : pos + 7]
-        cf_data = bytes([0x20 | (sn & 0x0F)]) + chunk + b"\x00" * (7 - len(chunk))
-        bus.send(can.Message(arbitration_id=request_id, data=cf_data, is_extended_id=False))
+        chunk = uds_payload[pos : pos + cf_len]
+        if fd:
+            _send_fd_frame(bus, request_id, bytes([0x20 | (sn & 0x0F)]) + chunk)
+        else:
+            cf_data = bytes([0x20 | (sn & 0x0F)]) + chunk + b"\x00" * (7 - len(chunk))
+            bus.send(can.Message(arbitration_id=request_id, data=cf_data, is_extended_id=False))
         pos += len(chunk)
         sn = (sn + 1) & 0x0F
         if st_min > 0:
@@ -364,19 +423,23 @@ def receive_uds_response(
         frame_type = pci >> 4
 
         if frame_type == 0x0:  # SF
+            if len(msg.data) > 8 and (pci & 0x0F) == 0:
+                # CAN FD の SF: PCI は 0x00 + SF_DL（2 バイト目）。データは [2] から
+                length = msg.data[1]
+                return UdsResponse(bytes(msg.data[2 : 2 + length]))
             length = pci & 0x0F
             return UdsResponse(bytes(msg.data[1 : 1 + length]))
 
         if frame_type == 0x1:  # FF
             expected_len = ((pci & 0x0F) << 8) | msg.data[1]
-            payload = bytearray(msg.data[2:8])
+            payload = bytearray(msg.data[2:])    # クラシックは 6 バイト、FD は CAN_DL - 2 バイト
             _send_flow_control(bus, request_id)
             continue
 
         if frame_type == 0x2:  # CF
             if expected_len is None:
                 continue  # FF を見ていないのに CF が来た場合は無視
-            payload.extend(msg.data[1:8])
+            payload.extend(msg.data[1:])   # クラシックは 7 バイト、FD は CAN_DL - 1 バイト（余りは下で切り捨てる）
             if len(payload) >= expected_len:
                 return UdsResponse(bytes(payload[:expected_len]))
             continue
@@ -418,6 +481,14 @@ def dtc_name(dtc: int) -> str:
     return DTC_NAMES.get(dtc, f"0x{dtc:06X}")
 
 
+# CAN FD で許されるデータ長（8 バイトを超える側）
+FD_VALID_LENGTHS = (12, 16, 20, 24, 32, 48, 64)
+
+# ISO-TP（ISO 15765-2）を CAN FD で使うときの上限
+FD_FRAME_MAX = 64                  # フレームの最大長
+FD_SF_MAX_DATA = FD_FRAME_MAX - 2  # FD の SF に入る最大のデータ長（PCI が 2 バイト）
+
+
 def send_can_frame(bus: can.BusABC, can_id: int, data: bytes) -> None:
     """任意の CAN ID で生フレームを送信する。UDS 応答を待たない。
     実 CAN と同じく DLC は data の実バイト数そのもの（8 バイトへの
@@ -425,8 +496,20 @@ def send_can_frame(bus: can.BusABC, can_id: int, data: bytes) -> None:
     [SWS_CANIF_00168])を意図的に発火させたい場合は、データ入力欄に設定 Dlc
     未満のバイト数を入力するだけでよい（2026-09、以前は常に0x00で8バイトへ
     パディングしており、バイト数を減らしても実際に流れる DLC が変わらなかった
-    ため、この検証ができなかった）。"""
-    msg = can.Message(arbitration_id=can_id, data=bytes(data)[:8], is_extended_id=False)
+    ため、この検証ができなかった）。
+
+    8 バイトを超えるときは CAN FD のフレーム（BRS あり）で送る。FD で許される長さ
+    （12/16/20/24/32/48/64）以外は ValueError。バスを FD で開いていること（fd=True）が前提。"""
+    payload = bytes(data)
+    if len(payload) <= 8:
+        msg = can.Message(arbitration_id=can_id, data=payload, is_extended_id=False)
+    else:
+        _require_fd_bus(bus)
+        if len(payload) not in FD_VALID_LENGTHS:
+            raise ValueError("CAN FD のデータ長は %s のいずれか（現在: %d）"
+                             % ("/".join(str(n) for n in FD_VALID_LENGTHS), len(payload)))
+        msg = can.Message(arbitration_id=can_id, data=payload, is_extended_id=False,
+                          is_fd=True, bitrate_switch=True)
     bus.send(msg)
 
 

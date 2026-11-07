@@ -53,6 +53,14 @@ extern "C" {
  * Functions
  * ====================================================================== */
 
+/**
+ * \brief   CAN FD の設定を渡す（Can_Hw_Init() の前に呼ぶ）。
+ * \details fdEnabled=0 ならクラシック CAN 2.0（最大 8 byte）。fdEnabled=1 なら、8 byte を超える長さを
+ *          CAN FD フレームで送受信する。fdBaudrate はデータ部のビットレート [bit/s]（通常のビットレートの整数倍）、
+ *          bitRateSwitch=1 のとき FD フレームの送信でデータ部のビットレートを切り替える（BRS）。
+ *          CAN FD に対応しない実装は、fdEnabled=1 を渡されたら CAN_HW_FAIL を返す。
+ */
+Can_Hw_ReturnType Can_Hw_ConfigureFd(uint8_t fdEnabled, uint32_t fdBaudrate, uint8_t bitRateSwitch);
 Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz);
 Can_Hw_ReturnType Can_Hw_Send(uint32_t id, uint8_t dlc, const uint8_t* data);
 Can_Hw_ReturnType Can_Hw_Read(uint32_t* id, uint8_t* dlc, uint8_t* data);

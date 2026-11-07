@@ -54,9 +54,14 @@
 #define CANTP_E_INVALID_TX_ID   0x30U  /* TxSduId（CanTp_Transmit）または TxPduId（CanTp_TxConfirmation）が、本実装の固定チャネル ID と不一致 */
 #define CANTP_E_INVALID_RX_ID   0x40U  /* RxPduId（CanTp_RxIndication）が、本実装の固定チャネル ID と不一致 */
 
-/** CAN フレーム（N-PDU）の長さ [バイト]。送受信とも常に 8 バイトへパディングする（受信パディング ON、[SWS_CanTp_00344] 他）。
- *  CanIf の設定 DLC（CanIf_PBCfg.c）と同じ値にすること（CAN FD では 64 などに変わる）。 */
+/** クラシック CAN のフレーム（N-PDU）の長さ [バイト]。クラシックの送受信では、常に 8 バイトへパディングする
+ *  （受信パディング ON、[SWS_CanTp_00344] 他）。 */
 #define CANTP_FRAME_LEN         8U
+
+/** CAN FD のフレーム（N-PDU）の最大の長さ [バイト]（ISO 15765-2 の TX_DL に相当。[SWS_CanTp_00354]）。
+ *  要求が FD のフレームで届いたときだけ、応答も FD のフレーム（最大でこの長さ）で返す。
+ *  CanIf の、診断応答の送信 PDU の設定 DLC（CanIf_PBCfg.c）以下にすること。 */
+#define CANTP_FD_FRAME_LEN      64U
 
 /** ランタイムエラーコード（7.4.2 [SWS_CanTp_00352] 表）。Det_ReportRuntimeError() で報告する。 */
 #define CANTP_E_PADDING         0x70U  /* 長さが 8 バイト未満の PDU を受信した（パディング ON の前提に反する） */

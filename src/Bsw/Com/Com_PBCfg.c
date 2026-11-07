@@ -304,6 +304,17 @@ static const Com_IPduConfigType Com_RxIPduConfigData[COM_RX_IPDU_COUNT] = {
         .RxIndicationCbk   = Rte_COMRxInd_SecureCommand,       /* ログ出力のみの最小デモ
                                                                 * （Rte_COMCbkInv_CoolantTemp と同じパターン） */
         .RxIpduCalloutCbk  = Rte_COMRxIpduCallout_SecureCommand
+    },
+    {
+        /* ---------------------------------------------------------------
+         * RX IPduId=3: FdTestRx フレーム
+         * DaVinci: /ActiveEcuC/Com/ComConfig/FdTestRx_Rx
+         * --------------------------------------------------------------- */
+        .IPduId            = ComConf_ComIPdu_FdTestRx_Rx,
+        .DLC               = 64U,
+        .PduRId            = ComConf_ComIPdu_FdTestRx_Rx,
+        .UpdateBitPosition = 0xFFFFU,
+        .IpduGroupId       = COM_IPDU_GROUP_NONE
     }
 };
 
@@ -480,6 +491,19 @@ static const Com_IPduConfigType Com_TxIPduConfigData[COM_TX_IPDU_COUNT] = {
         .PduRId            = PduRConf_PduRSrcPdu_TestMsg_Tx,
         .TxModeMode        = COM_TX_MODE_PERIODIC,
         .TxPeriodMs        = COM_TX_PERIOD_TESTMSG_MS,
+        .UpdateBitPosition = 0xFFFFU,
+        .IpduGroupId       = COM_IPDU_GROUP_NONE
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TX IPduId=5: FdTestMsg フレーム (メータ ECU 送信、CAN FD 64 byte、テスト専用、E2E/SecOC なし)
+         * DaVinci: /ActiveEcuC/Com/ComConfig/FdTestMsg_Tx
+         * --------------------------------------------------------------- */
+        .IPduId            = ComConf_ComIPdu_FdTestMsg_Tx,
+        .DLC               = 64U,
+        .PduRId            = PduRConf_PduRSrcPdu_FdTestMsg_Tx,
+        .TxModeMode        = COM_TX_MODE_PERIODIC,
+        .TxPeriodMs        = COM_TX_PERIOD_FDTESTMSG_MS,
         .UpdateBitPosition = 0xFFFFU,
         .IpduGroupId       = COM_IPDU_GROUP_NONE
     }
@@ -917,6 +941,58 @@ static const Com_SignalConfigType Com_SignalConfigData[COM_SIGNAL_COUNT] = {
         .Endian          = COM_BIG_ENDIAN,                           /* DaVinci: ComSignalEndianness = OPAQUE */
         .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,
         .Mask            = 0xFFU
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 20: FdTestCounterHead  TX 8bit  CAN 0x310 bit0
+         * DaVinci: /ActiveEcuC/Com/ComConfig/FdTestMsg_FdTestCounterHead_Tx
+         * --------------------------------------------------------------- */
+        .SignalId        = ComConf_ComSignal_FdTestMsg_FdTestCounterHead_Tx, /* DaVinci: ComHandleId */
+        .Direction       = COM_SIGNAL_DIRECTION_TX,                          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId          = ComConf_ComIPdu_FdTestMsg_Tx,                     /* DaVinci: ComIPduRef → FdTestMsg_Tx */
+        .BitPosition     = 0U,                                               /* DaVinci: ComBitPosition */
+        .BitSize         = 8U,                                               /* DaVinci: ComBitSize */
+        .Endian          = COM_BIG_ENDIAN,                                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,
+        .Mask            = 0xFFU
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 21: FdTestCounterTail  TX 8bit  CAN 0x310 bit504
+         * DaVinci: /ActiveEcuC/Com/ComConfig/FdTestMsg_FdTestCounterTail_Tx
+         * --------------------------------------------------------------- */
+        .SignalId        = ComConf_ComSignal_FdTestMsg_FdTestCounterTail_Tx, /* DaVinci: ComHandleId */
+        .Direction       = COM_SIGNAL_DIRECTION_TX,                          /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId          = ComConf_ComIPdu_FdTestMsg_Tx,                     /* DaVinci: ComIPduRef → FdTestMsg_Tx */
+        .BitPosition     = 504U,                                             /* DaVinci: ComBitPosition */
+        .BitSize         = 8U,                                               /* DaVinci: ComBitSize */
+        .Endian          = COM_BIG_ENDIAN,                                   /* DaVinci: ComSignalEndianness = OPAQUE */
+        .FilterAlgorithm = COM_FILTER_MASKED_NEW_DIFFERS_MASKED_OLD,
+        .Mask            = 0xFFU
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 22: FdTestRxHead  RX 8bit  CAN 0x320 bit0
+         * DaVinci: /ActiveEcuC/Com/ComConfig/FdTestRx_FdTestRxHead_Rx
+         * --------------------------------------------------------------- */
+        .SignalId    = ComConf_ComSignal_FdTestRx_FdTestRxHead_Rx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,                    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_FdTestRx_Rx,                /* DaVinci: ComIPduRef → FdTestRx_Rx */
+        .BitPosition = 0U,                                         /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                         /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                              /* DaVinci: ComSignalEndianness = OPAQUE */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * Signal 23: FdTestRxTail  RX 8bit  CAN 0x320 bit504
+         * DaVinci: /ActiveEcuC/Com/ComConfig/FdTestRx_FdTestRxTail_Rx
+         * --------------------------------------------------------------- */
+        .SignalId    = ComConf_ComSignal_FdTestRx_FdTestRxTail_Rx, /* DaVinci: ComHandleId */
+        .Direction   = COM_SIGNAL_DIRECTION_RX,                    /* 本プロジェクト独自拡張。Com_SignalDirectionType 参照 */
+        .IPduId      = ComConf_ComIPdu_FdTestRx_Rx,                /* DaVinci: ComIPduRef → FdTestRx_Rx */
+        .BitPosition = 504U,                                       /* DaVinci: ComBitPosition */
+        .BitSize     = 8U,                                         /* DaVinci: ComBitSize */
+        .Endian      = COM_BIG_ENDIAN                              /* DaVinci: ComSignalEndianness = OPAQUE */
     }
 };
 

@@ -109,7 +109,7 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .UpperLayerTxPduId = CANTP_TX_NPDU_ID,    /* DaVinci: CanIfTxPduId
                                                    *          CanTp 側の TX N-PDU の ID（CanTp.json の txNPduId、CanTp_Cfg.h の CANTP_TX_NPDU_ID） */
         .CanId             = 0x7E8U,              /* DaVinci: CanIfTxPduCanId */
-        .Dlc               = 8U,                  /* DaVinci: CanIfTxPduDlc */
+        .Dlc               = 64U,                 /* DaVinci: CanIfTxPduDlc */
         .Hth               = 0U,                  /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = CanTp_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
                                                    *          CanTp_TxConfirmation() へ送信完了を通知する（CanTp 側は、現状 no-op） */
@@ -200,6 +200,17 @@ static const CanIf_TxPduConfigType CanIf_TxPduConfigData[CANIF_TX_PDU_COUNT] = {
         .Hth               = 0U,                    /* DaVinci: CanIfTxPduHthIdRef */
         .TxConfirmFct      = CanTSyn_TxConfirmation /* DaVinci: CanIfTxPduUserTxConfirmationName
                                                      *          SYNC の送信完了で FUP を送信する（[SWS_CanTSyn_00045]） */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * TxPduId=8: FdTestMsg フレーム
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfTxPduCfg/FdTestMsg_Tx
+         * --------------------------------------------------------------- */
+        .UpperLayerTxPduId = PduRConf_PduRSrcPdu_FdTestMsg_Tx, /* DaVinci: CanIfTxPduId */
+        .CanId             = 0x310U,                           /* DaVinci: CanIfTxPduCanId */
+        .Dlc               = 64U,                              /* DaVinci: CanIfTxPduDlc */
+        .Hth               = 0U,                               /* DaVinci: CanIfTxPduHthIdRef */
+        .TxConfirmFct      = PduR_CanIfTxConfirmation          /* DaVinci: CanIfTxPduUserTxConfirmationName */
     }
 };
 
@@ -291,6 +302,18 @@ static const CanIf_RxPduConfigType CanIf_RxPduConfigData[CANIF_RX_PDU_COUNT] = {
         .UpperLayerRxPduId = CANTSYN_RX_PDU_ID,   /* DaVinci: CanIfRxPduUpperLayerPduId */
         .Dlc               = 8U,                  /* DaVinci: CanIfRxPduDataLength */
         .RxIndicationFct   = CanTSyn_RxIndication /* DaVinci: CanIfRxPduUserRxIndicationName */
+    },
+    {
+        /* ---------------------------------------------------------------
+         * RxPduId=6: FdTestRx フレーム
+         * DaVinci: /ActiveEcuC/CanIf/CanIfInitCfg/CanIfRxPduCfg/FdTestRx_Rx
+         * --------------------------------------------------------------- */
+        .CanId             = 0x320U,                          /* DaVinci: CanIfRxPduCanId */
+        .Hrh               = 0U,                              /* DaVinci: CanIfRxPduHrhIdRef */
+        .UpperLayerRxPduId = PduRConf_PduRSrcPdu_FdTestRx_Rx, /* DaVinci: CanIfRxPduUpperLayerPduId
+                                                               *          → PduR RX パス 4 へのリンク */
+        .Dlc               = 64U,                             /* DaVinci: CanIfRxPduDataLength */
+        .RxIndicationFct   = PduR_CanIfRxIndication           /* DaVinci: CanIfRxPduUserRxIndicationName */
     }
 };
 

@@ -68,6 +68,20 @@
           "secocPdu": "ImmobilizerCmd_Rx"
         }
       ]
+    },
+    {
+      "name": "FdTestRx_Rx",
+      "frame": "FdTestRx",
+      "tableSummary": "CAN {canId} → COM (FdTestRx)",
+      "summary": "CanIf RxPduId=6 (CAN {canId}) → COM/FdTestRx",
+      "srcPduId": 4,
+      "destCountNote": "COM のみ",
+      "dests": [
+        {
+          "module": "COM",
+          "ipdu": "FdTestRx_Rx"
+        }
+      ]
     }
   ],
   "txPaths": [
@@ -130,6 +144,15 @@
       "srcPduId": 5,
       "canIfTxPduId": 6,
       "confIpdu": "TestMsg_Tx",
+      "confModule": "COM"
+    },
+    {
+      "name": "FdTestMsg_Tx",
+      "frame": "FdTestMsg",
+      "summary": "COM (SrcPduId=6) → CanIf TxPduId=8 (CAN {canId}, FdTestMsg)",
+      "srcPduId": 6,
+      "canIfTxPduId": 8,
+      "confIpdu": "FdTestMsg_Tx",
       "confModule": "COM"
     }
   ],

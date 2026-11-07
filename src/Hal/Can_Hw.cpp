@@ -14,6 +14,9 @@
  *          AUTOSAR 認証済み実装ではなく、製品への適用は想定していません。
  */
 
+/* MCP2518FD 版（Can_Hw_Mcp2518fd.cpp）を使うビルドでは、この MCP2515 版はコンパイルしない。 */
+#ifndef CAN_HW_MCP2518FD
+
 /* ======================================================================
  * Includes
  * ====================================================================== */
@@ -61,6 +64,20 @@ static void (*Can_Hw_Isr)(void) = nullptr;  /**< Can_Hw_EnableRxIsr() での再�
 /* ======================================================================
  * Functions
  * ====================================================================== */
+
+Can_Hw_ReturnType Can_Hw_ConfigureFd(uint8_t fdEnabled, uint32_t fdBaudrate, uint8_t bitRateSwitch)
+{
+    (void)fdBaudrate;
+    (void)bitRateSwitch;
+
+    /* MCP2515 は CAN FD に対応しない。 */
+    if (fdEnabled != 0U)
+    {
+        DET_LOGE(TAG, "ConfigureFd: MCP2515 does not support CAN FD");
+        return CAN_HW_FAIL;
+    }
+    return CAN_HW_OK;
+}
 
 Can_Hw_ReturnType Can_Hw_Init(uint8_t csPin, uint32_t baudrate, uint8_t crystalFreqMhz)
 {
@@ -305,3 +322,5 @@ Can_Hw_ReturnType Can_Hw_IsWakeupPending(void)
 {
     return (digitalRead(Can_Hw_IntPin) == LOW) ? CAN_HW_OK : CAN_HW_FAIL;
 }
+
+#endif /* !CAN_HW_MCP2518FD */

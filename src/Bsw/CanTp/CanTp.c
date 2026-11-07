@@ -82,8 +82,20 @@
 
 #define CANTP_SF_MAX_DATA 7U     /**< SF: 最大 UDS ペイロード長    */
 #define CANTP_FF_DATA     6U     /**< FF: 先頭データバイト数       */
-#define CANTP_CF_DATA     7U     /**< CF: データバイト数           */
 #define CANTP_MAX_MSG_LEN 4095U  /**< FF の長さ欄（12 bit）で表せる N-SDU の最大長 */
+
+/* CAN FD のフレーム（N-PDU の CAN_DL が 8 を超える）では、PCI の置き方とデータの量が変わる（ISO 15765-2:2016）。
+ *   SF: PCI が 2 バイト（0x00 + SF_DL。「エスケープ」形式）、データは CAN_DL - 2 バイトまで
+ *   FF: PCI は 2 バイトのまま、データは CAN_DL - 2 バイト
+ *   CF: PCI は 1 バイトのまま、データは CAN_DL - 1 バイトまで */
+#define CANTP_FD_SF_PCI   2U     /**< FD の SF: PCI のバイト数 */
+#define CANTP_FF_PCI      2U     /**< FF: PCI のバイト数（クラシックも FD も同じ） */
+#define CANTP_CF_PCI      1U     /**< CF: PCI のバイト数（クラシックも FD も同じ） */
+#define CANTP_MAX_FRAME_DATA  (CANTP_FD_FRAME_LEN - CANTP_CF_PCI)   /**< 1 フレームのデータの最大バイト数（FD の CF） */
+
+/** CAN FD のフレームの最大長が、CanIf の PDU の最大長（COMSTACK_PDU_MAX_LENGTH）に収まることの静的アサート。
+ *  CanIf の診断応答の PDU の DLC（config/data/CanIf.json の DiagResp_Tx）は、これ以上にすること（CanTp_Cfg.h 参照）。 */
+typedef char CanTp_FdFrame_Must_Fit_CanIfMaxDlc[(CANTP_FD_FRAME_LEN <= CANIF_MAX_DLC) ? 1 : -1];
 
 /* ======================================================================
  * Type Definitions
@@ -121,6 +133,7 @@ typedef enum
 
 /** RX チャネル状態（データは持たず、フレームごとに PduR_CanTpCopyRxData() で渡す） */
 static struct {
+    uint8             dl;        /**< この受信の RX_DL（最初のフレームの CAN_DL。クラシックは 8、FD は 12〜64）。CF のデータは dl - 1 バイトまで */
     uint16            msgLen;    /**< FF で通知された総メッセージ長 */
     uint16            pos;       /**< Dcm へコピー済みのバイト数    */
     uint8             sn;        /**< 次に受信すべき CF シーケンス番号 */
@@ -132,9 +145,11 @@ static struct {
 
 /** TX チャネル状態（データは持たず、フレームごとに PduR_CanTpCopyTxData() で取り出す） */
 static struct {
+    uint8             dl;        /**< この送信の TX_DL（フレームの最大長。クラシックは 8、FD は CANTP_FD_FRAME_LEN） */
     uint16            msgLen;    /**< 送信する総メッセージ長        */
     uint16            pos;       /**< 送信済み（フレームに詰めた）バイト数 */
     uint8             frameLen;  /**< 組み立て済みで未送信の CF のデータバイト数 */
+    uint8             frameSize; /**< 組み立て済みで未送信の CF の、フレームの長さ（パディング後。送信にそのまま渡す） */
     uint8             frameReady;/**< 1 = CanTp_TxFrameBuf に未送信の CF が組み立て済み
                                   *   （送信に失敗した CF を、CopyTxData をやり直さず再送する） */
     uint8             sn;        /**< 次の CF シーケンス番号 (1-15, 0...) */
@@ -163,7 +178,11 @@ static uint8 CanTp_RxBlockSize = CANTP_BLOCK_SIZE;
 
 /** TX フレーム送信用バッファ (SF/FF/CF 共用)。FC は、CF の組み立て済みフレーム（再送待ち）を壊さないよう、
  *  CanTp_SendFlowControl() の中の別のバッファを使う */
-static uint8 CanTp_TxFrameBuf[8];
+static uint8 CanTp_TxFrameBuf[CANTP_FD_FRAME_LEN];
+
+/** 直近に受け付けた要求（SF/FF）が、CAN FD のフレームだったか。真なら、応答も FD のフレームで返す
+ *  （クラシック CAN 専用の相手には、これまでどおりクラシックで返す）。 */
+static boolean CanTp_PeerFd = FALSE;
 
 /* ======================================================================
  * Function Prototypes
@@ -174,7 +193,8 @@ static unsigned long CanTp_GetNowMs(void);
 /* -----------------------------------------------------------------------
  * 内部関数プロトタイプ
  * ----------------------------------------------------------------------- */
-static Std_ReturnType CanTp_SendFrame(uint8* frame);
+static Std_ReturnType CanTp_SendFrame(uint8* frame, uint8 length);
+static uint8 CanTp_RoundUpDl(uint8 n);
 static void CanTp_ReportRuntimeError(uint8 apiId, uint8 errorId);
 static CanTp_StartResultType CanTp_TxStart(void);
 static BufReq_ReturnType CanTp_StartOfReception(const uint8* src, uint8 len, PduLengthType total, PduLengthType* bufSize);
@@ -215,16 +235,19 @@ void CanTp_Init(const CanTp_ConfigType* CfgPtr)
 {
     (void)CfgPtr; /* 本プロジェクトは post-build 設定を持たない（CanTp.h 参照） */
     CanTp_Rx.state  = CANTP_RX_IDLE;
+    CanTp_Rx.dl     = CANTP_FRAME_LEN;
     CanTp_Rx.msgLen = 0U;
     CanTp_Rx.pos    = 0U;
     CanTp_Rx.bs     = 0U;
     CanTp_Rx.bsCnt  = 0U;
     CanTp_RxBlockSize = CANTP_BLOCK_SIZE;
     CanTp_Tx.state       = CANTP_TX_IDLE;
+    CanTp_Tx.dl          = CANTP_FRAME_LEN;
     CanTp_Tx.msgLen      = 0U;
     CanTp_Tx.pos         = 0U;
     CanTp_Tx.frameReady  = 0U;
     CanTp_Tx.asFailTimer = 0UL;
+    CanTp_PeerFd         = FALSE;
     CanTp_Initialized = 1U;
     DET_LOGI(TAG, "Init ok");
 }
@@ -325,6 +348,7 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
     }
 
     CanTp_Tx.msgLen = msgLen;
+    CanTp_Tx.dl     = (CanTp_PeerFd != FALSE) ? (uint8)CANTP_FD_FRAME_LEN : (uint8)CANTP_FRAME_LEN;
 
     switch (CanTp_TxStart())
     {
@@ -510,6 +534,15 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         return;  /* 空フレームは DET 対象外（NULL ポインタではないため） */
     }
 
+    /* 8 バイトを超えるフレームは、CAN FD の有効な長さ（12、16、20、24、32、48、64）だけを扱う。
+     * 実機の配線では、CanIf が無効な長さを捨てるため、ここへは届かない（二重の防御）。 */
+    if ((PduInfoPtr->SduLength > CANTP_FRAME_LEN) &&
+        (CanTp_RoundUpDl((uint8)PduInfoPtr->SduLength) != (uint8)PduInfoPtr->SduLength))
+    {
+        DET_LOGW(TAG, "RX frame with invalid FD length=%u ignored", (unsigned)PduInfoPtr->SduLength);
+        return;
+    }
+
     const uint8* data      = PduInfoPtr->SduDataPtr;
     uint8        pci       = data[0];
     uint8        frameType = (uint8)((pci >> 4U) & 0x0FU);
@@ -519,7 +552,11 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
     /* ------------------------------------------------------------------ */
     case CANTP_FRAME_SF:
     {
-        uint8 udsLen = pci & 0x0FU;
+        /* フレームが CAN FD のものか（CAN_DL が 8 を超える）。FD の SF は、PCI が 2 バイト（0x00 + SF_DL）で、
+         * データは [2] から。クラシックの SF は、PCI が 1 バイト（下位 4 bit が長さ）で、データは [1] から。 */
+        boolean isFd   = (boolean)(PduInfoPtr->SduLength > CANTP_FRAME_LEN);
+        uint8   hdrLen = (isFd != FALSE) ? (uint8)CANTP_FD_SF_PCI : 1U;
+        uint8   udsLen = (isFd != FALSE) ? data[1] : (uint8)(pci & 0x0FU);
 
         /* [SWS_CanTp_00344]/[SWS_CanTp_00345]: 受信パディングは常に ON（送信側テスターは 8 バイトへ
          * パディングする前提）。DLC が 8 未満の SF は、PCI の内容にかかわらず受け付けず、ランタイム
@@ -531,19 +568,20 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             break;
         }
 
-        /* ペイロード長が 0、または 1 フレームに収まる最大値（7）を超える SF は不正。DLC は 8 以上と確認済みなので、
-         * 宣言された長さ（udsLen + 1 バイト）がフレームに収まるかの検査は不要。 */
-        if ((udsLen == 0U) || (udsLen > CANTP_SF_MAX_DATA))
+        /* ペイロード長が 0、または 1 フレームに収まる最大値（クラシックは 7、FD は CAN_DL - 2）を超える SF は不正。
+         * FD の SF で、PCI の 1 バイト目の下位 4 bit が 0 でないものも不正（エスケープ形式は 0x00）。 */
+        uint8 maxLen = (isFd != FALSE) ? (uint8)(PduInfoPtr->SduLength - CANTP_FD_SF_PCI) : (uint8)CANTP_SF_MAX_DATA;
+        if ((udsLen == 0U) || (udsLen > maxLen) || ((isFd != FALSE) && ((pci & 0x0FU) != 0U)))
         {
             break;
         }
 
         CanTp_RxAbort();   /* 受信中の MF があれば中断（受信中でなければ何もしない） */
 
-        DET_LOGD(TAG, "RX SF len=%u", (unsigned)udsLen);
+        DET_LOGD(TAG, "RX SF len=%u%s", (unsigned)udsLen, (isFd != FALSE) ? " (FD)" : "");
 
         PduLengthType bufSize = 0U;
-        if (CanTp_StartOfReception(&data[1], udsLen, (PduLengthType)udsLen, &bufSize) != BUFREQ_OK)
+        if (CanTp_StartOfReception(&data[hdrLen], udsLen, (PduLengthType)udsLen, &bufSize) != BUFREQ_OK)
         {
             DET_LOGW(TAG, "RX SF rejected by upper layer");
             break;   /* 受け入れられなかった（PduR_CanTpRxIndication() は呼ばない） */
@@ -558,7 +596,9 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             break;
         }
 
-        Std_ReturnType result = (CanTp_CopyToUpper(&data[1], (uint8)udsLen) == BUFREQ_OK) ? E_OK : E_NOT_OK;
+        CanTp_PeerFd = isFd;   /* 受け付けた要求のフレーム形式。応答も同じ形式で返す */
+
+        Std_ReturnType result = (CanTp_CopyToUpper(&data[hdrLen], udsLen) == BUFREQ_OK) ? E_OK : E_NOT_OK;
         PduR_CanTpRxIndication(CANTP_RX_SDU_ID, result);
         break;
     }
@@ -585,13 +625,19 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         uint16 msgLen = (uint16)((((uint16)pci & 0x0FU) << 8U)
                                  | (uint16)data[1]);
 
-        if ((msgLen <= CANTP_SF_MAX_DATA) || (PduInfoPtr->SduLength < CANTP_FRAME_LEN))
+        /* FF の先頭データの量。クラシックは 6 バイト、FD は CAN_DL - 2 バイト。 */
+        boolean isFd   = (boolean)(PduInfoPtr->SduLength > CANTP_FRAME_LEN);
+        uint8   ffData = (isFd != FALSE) ? (uint8)(PduInfoPtr->SduLength - CANTP_FF_PCI) : (uint8)CANTP_FF_DATA;
+
+        /* SF で送れる長さの N-SDU は FF にしない（クラシック: 7 以下）。FD は、FF のデータより長いときだけ FF にする。 */
+        if ((msgLen <= ((isFd != FALSE) ? (uint16)ffData : (uint16)CANTP_SF_MAX_DATA)) ||
+            (PduInfoPtr->SduLength < CANTP_FRAME_LEN))
         {
             break;
         }
 
         PduLengthType bufSize = 0U;
-        BufReq_ReturnType started = CanTp_StartOfReception(&data[2], (uint8)CANTP_FF_DATA, (PduLengthType)msgLen, &bufSize);
+        BufReq_ReturnType started = CanTp_StartOfReception(&data[CANTP_FF_PCI], ffData, (PduLengthType)msgLen, &bufSize);
 
         if (started == BUFREQ_E_OVFL)
         {
@@ -607,7 +653,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         }
 
         /* [SWS_CanTp_00339]: 受け入れられても、空きが、FF で受信済みのデータより小さければ、受信を中断する。 */
-        if (bufSize < (PduLengthType)CANTP_FF_DATA)
+        if (bufSize < (PduLengthType)ffData)
         {
             DET_LOGE(TAG, "RX FF buffer too small avail=%u", (unsigned)bufSize);
             CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_COM);
@@ -615,6 +661,8 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             break;
         }
 
+        CanTp_PeerFd    = isFd;   /* 受け付けた要求のフレーム形式。応答も同じ形式で返す */
+        CanTp_Rx.dl     = (isFd != FALSE) ? (uint8)PduInfoPtr->SduLength : (uint8)CANTP_FRAME_LEN;
         CanTp_Rx.msgLen = msgLen;
         CanTp_Rx.sn     = 1U;
         CanTp_Rx.bs     = CanTp_RxBlockSize;
@@ -622,16 +670,16 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
         CanTp_Rx.state  = CANTP_RX_WAIT_CF;
         CanTp_Rx.timer  = CanTp_GetNowMs();
 
-        DET_LOGD(TAG, "RX FF len=%u", (unsigned)msgLen);
+        DET_LOGD(TAG, "RX FF len=%u%s", (unsigned)msgLen, (isFd != FALSE) ? " (FD)" : "");
 
-        /* FF の先頭 6 バイトを、上位層へ渡す（msgLen > 7 は上で確認済み） */
-        if (CanTp_CopyToUpper(&data[2], (uint8)CANTP_FF_DATA) != BUFREQ_OK)
+        /* FF の先頭データ（クラシックは 6 バイト、FD は CAN_DL - 2 バイト）を、上位層へ渡す（msgLen が、それより長いことは上で確認済み） */
+        if (CanTp_CopyToUpper(&data[CANTP_FF_PCI], ffData) != BUFREQ_OK)
         {
             CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_COM);
             CanTp_RxAbort();
             break;
         }
-        CanTp_Rx.pos = (uint16)CANTP_FF_DATA;
+        CanTp_Rx.pos = (uint16)ffData;
 
         (void)CanTp_SendRxFlowControl();
         break;
@@ -649,7 +697,24 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
          * 受信側もこれ未満は不正フレームとして破棄する（SF/FF と同様の防御。
          * これが無いと、短い CF で data[1..7] に古い/未初期化のバイトが
          * 混入したまま再組立バッファへコピーされてしまう）。 */
-        if (PduInfoPtr->SduLength < CANTP_FRAME_LEN)
+        /* FD では、最後の CF は、データが入る分だけの有効な長さでよい（8 を超える有効な DLC は 12、16、…、64 のため、
+         * パディングで 8 バイトに揃える対象ではない）。クラシックは、常に 8 バイト以上。 */
+        uint16 remaining = CanTp_Rx.msgLen - CanTp_Rx.pos;
+        uint8  copyLen   = (remaining > (uint16)(CanTp_Rx.dl - CANTP_CF_PCI))
+                           ? (uint8)(CanTp_Rx.dl - CANTP_CF_PCI) : (uint8)remaining;
+        uint8  minLen    = (CanTp_Rx.dl == CANTP_FRAME_LEN) ? (uint8)CANTP_FRAME_LEN : (uint8)(copyLen + CANTP_CF_PCI);
+
+        /* ISO 15765-2: CF は、最後のものを除き、長さが RX_DL（最初のフレームの CAN_DL）に等しい。RX_DL より長い CF は、
+         * 余りを切り捨てると、データが壊れる（コピーが進む量とずれる）ため、受信を中断する。 */
+        if (PduInfoPtr->SduLength > CanTp_Rx.dl)
+        {
+            DET_LOGE(TAG, "RX CF longer than RX_DL len=%u dl=%u", (unsigned)PduInfoPtr->SduLength, (unsigned)CanTp_Rx.dl);
+            CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_COM);
+            CanTp_RxAbort();
+            break;
+        }
+
+        if (PduInfoPtr->SduLength < minLen)
         {
             DET_LOGE(TAG, "RX CF too short len=%u", (unsigned)PduInfoPtr->SduLength);
             CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_PADDING);   /* [SWS_CanTp_00346] */
@@ -668,10 +733,7 @@ void CanTp_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr)
             break;
         }
 
-        uint16 remaining = CanTp_Rx.msgLen - CanTp_Rx.pos;
-        uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
-                           ? CANTP_CF_DATA : (uint8)remaining;
-        if (CanTp_CopyToUpper(&data[1], copyLen) != BUFREQ_OK)
+        if (CanTp_CopyToUpper(&data[CANTP_CF_PCI], copyLen) != BUFREQ_OK)
         {
             CanTp_ReportRuntimeError(CANTP_API_ID_RX_INDICATION, CANTP_E_COM);
             CanTp_RxAbort();
@@ -835,16 +897,36 @@ static unsigned long CanTp_GetNowMs(void)
  * 内部ヘルパー: フレーム送信
  * ----------------------------------------------------------------------- */
 
-/** frame（8 バイト）を CanIf 経由で CAN 0x7E8 に送信する。
- *  \param[in] frame  送信する 8 バイトのフレーム（CanTp_TxFrameBuf か fcFrame）。
+/** frame（length バイト）を CanIf 経由で CAN 0x7E8 に送信する。
+ *  \param[in] frame   送信するフレーム（CanTp_TxFrameBuf か fcFrame）。
+ *  \param[in] length  フレームの長さ（クラシックは 8、FD は 12〜64 の有効な長さ。パディング済みのもの）。
  *  \retval E_OK     送信受け付け成功。
  *  \retval E_NOT_OK CanIf / Can_Write が失敗（TX バッファビジー等）。 */
-static Std_ReturnType CanTp_SendFrame(uint8* frame)
+static Std_ReturnType CanTp_SendFrame(uint8* frame, uint8 length)
 {
     static PduInfoType pdu;
     pdu.SduDataPtr = frame;
-    pdu.SduLength  = CANTP_FRAME_LEN;
+    pdu.SduLength  = length;
     return CanIf_Transmit(CANTP_CANIF_TX_PDU_ID, &pdu);
+}
+
+/** フレームの長さ n を、送れる有効な長さへ切り上げる（[SWS_CanTp_00351]）。
+ *  クラシックの長さ（8 以下）は、パディング ON のため 8 にする。FD では 12、16、20、24、32、48、64。
+ *  \param[in] n  フレームに入れる長さ（PCI を含む。CANTP_FD_FRAME_LEN 以下）。
+ *  \return    切り上げた有効な長さ。 */
+static uint8 CanTp_RoundUpDl(uint8 n)
+{
+    uint8 r;
+
+    if (n <= CANTP_FRAME_LEN)    { r = CANTP_FRAME_LEN; }
+    else if (n <= 12U)           { r = 12U; }
+    else if (n <= 16U)           { r = 16U; }
+    else if (n <= 20U)           { r = 20U; }
+    else if (n <= 24U)           { r = 24U; }
+    else if (n <= 32U)           { r = 32U; }
+    else if (n <= 48U)           { r = 48U; }
+    else                         { r = CANTP_FD_FRAME_LEN; }
+    return r;
 }
 
 /** 実行時エラーを DET へ報告する（モジュール ID・インスタンス ID は固定）。
@@ -865,12 +947,20 @@ static CanTp_StartResultType CanTp_TxStart(void)
 {
     PduLengthType avail  = 0U;
     uint16        msgLen = CanTp_Tx.msgLen;
-    boolean       isSf   = (boolean)(msgLen <= (uint16)CANTP_SF_MAX_DATA);
+    uint8         dl     = CanTp_Tx.dl;
     PduInfoType   src;
 
-    /* SF は PCI が 1 バイト（データは [1] から msgLen バイト）、FF は PCI が 2 バイト（データは [2] から 6 バイト）。 */
-    src.SduDataPtr = (isSf != FALSE) ? &CanTp_TxFrameBuf[1] : &CanTp_TxFrameBuf[2];
-    src.SduLength  = (isSf != FALSE) ? (PduLengthType)msgLen : (PduLengthType)CANTP_FF_DATA;
+    /* フレームの種類。SF: クラシックの形（PCI 1 バイト）、FD の形（PCI 2 バイト）。長さが SF に収まらなければ FF。
+     * 7 バイト以下の N-SDU は、相手が FD でも、クラシックの SF で送る。 */
+    boolean isSf   = (boolean)((msgLen <= (uint16)CANTP_SF_MAX_DATA) ||
+                               ((dl > CANTP_FRAME_LEN) && (msgLen <= (uint16)(dl - CANTP_FD_SF_PCI))));
+    boolean fdSf   = (boolean)((isSf != FALSE) && (msgLen > (uint16)CANTP_SF_MAX_DATA));
+    uint8   hdrLen = (isSf == FALSE) ? (uint8)CANTP_FF_PCI : ((fdSf != FALSE) ? (uint8)CANTP_FD_SF_PCI : 1U);
+    uint8   dataLen = (isSf != FALSE) ? (uint8)msgLen : (uint8)(dl - CANTP_FF_PCI);   /* FF: クラシック 6、FD は dl - 2 */
+    uint8   frameSize = (isSf == FALSE) ? dl : ((fdSf != FALSE) ? CanTp_RoundUpDl((uint8)(msgLen + CANTP_FD_SF_PCI)) : (uint8)CANTP_FRAME_LEN);
+
+    src.SduDataPtr = &CanTp_TxFrameBuf[hdrLen];
+    src.SduLength  = (PduLengthType)dataLen;
 
     BufReq_ReturnType got = PduR_CanTpCopyTxData(CANTP_TX_SDU_ID, &src, NULL, &avail);
     if (got == BUFREQ_E_BUSY)
@@ -886,16 +976,24 @@ static CanTp_StartResultType CanTp_TxStart(void)
     if (isSf != FALSE)
     {
         /* ---- Single Frame ---- */
-        CanTp_TxFrameBuf[0] = (uint8)msgLen;   /* SF PCI: 0x0N */
-        uint8 i;
-        for (i = (uint8)msgLen; i < CANTP_SF_MAX_DATA; i++)
+        if (fdSf != FALSE)
         {
-            CanTp_TxFrameBuf[1U + i] = CANTP_PADDING_BYTE;
+            CanTp_TxFrameBuf[0] = 0x00U;            /* FD の SF: PCI は 0x00（エスケープ）+ SF_DL */
+            CanTp_TxFrameBuf[1] = (uint8)msgLen;
+        }
+        else
+        {
+            CanTp_TxFrameBuf[0] = (uint8)msgLen;    /* SF PCI: 0x0N */
+        }
+        uint8 i;
+        for (i = (uint8)(hdrLen + dataLen); i < frameSize; i++)
+        {
+            CanTp_TxFrameBuf[i] = CANTP_PADDING_BYTE;
         }
 
-        DET_LOGD(TAG, "TX SF len=%u", (unsigned)msgLen);
+        DET_LOGD(TAG, "TX SF len=%u%s", (unsigned)msgLen, (fdSf != FALSE) ? " (FD)" : "");
 
-        if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
+        if (CanTp_SendFrame(CanTp_TxFrameBuf, frameSize) != E_OK)
         {
             DET_LOGE(TAG, "TX SF FAIL");
             return CANTP_START_FAIL;
@@ -904,17 +1002,17 @@ static CanTp_StartResultType CanTp_TxStart(void)
     }
 
     /* ---- Multi Frame: First Frame ---- */
-    CanTp_Tx.pos        = (uint16)CANTP_FF_DATA;   /* FF で送信済みバイト数 */
+    CanTp_Tx.pos        = (uint16)dataLen;   /* FF で送信済みバイト数 */
     CanTp_Tx.sn         = 1U;
     CanTp_Tx.frameReady = 0U;
 
-    /* FF PCI: [0x1H, 0xLL] + 先頭 6 バイト（データは CopyTxData で書き込み済み） */
+    /* FF PCI: [0x1H, 0xLL] + 先頭データ（クラシックは 6 バイト、FD は dl - 2 バイト。データは CopyTxData で書き込み済み） */
     CanTp_TxFrameBuf[0] = (uint8)(0x10U | (uint8)((msgLen >> 8U) & 0x0FU));
     CanTp_TxFrameBuf[1] = (uint8)(msgLen & 0xFFU);
 
-    DET_LOGD(TAG, "TX FF len=%u", (unsigned)msgLen);
+    DET_LOGD(TAG, "TX FF len=%u%s", (unsigned)msgLen, (dl > CANTP_FRAME_LEN) ? " (FD)" : "");
 
-    if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
+    if (CanTp_SendFrame(CanTp_TxFrameBuf, frameSize) != E_OK)
     {
         DET_LOGE(TAG, "TX FF FAIL abort");
         return CANTP_START_FAIL;
@@ -929,7 +1027,7 @@ static CanTp_StartResultType CanTp_TxStart(void)
 /** SF/FF の受信を、上位層（Dcm）へ通知する。受け取ったデータ（src、len バイト）は、
  *  PduR_CanTpStartOfReception() の info（[SWS_CanTp_00329]）として渡す。データは、続く CopyRxData() で渡す。
  *  \param[in]  src      SF/FF のデータ（プロトコルの情報を除く）。
- *  \param[in]  len      src の長さ（最大 CANTP_CF_DATA）。
+ *  \param[in]  len      src の長さ（最大 CANTP_MAX_FRAME_DATA）。
  *  \param[in]  total    N-SDU 全体の長さ。
  *  \param[out] bufSize  上位層の空き。 */
 static BufReq_ReturnType CanTp_StartOfReception(const uint8* src, uint8 len, PduLengthType total, PduLengthType* bufSize)
@@ -941,13 +1039,13 @@ static BufReq_ReturnType CanTp_StartOfReception(const uint8* src, uint8 len, Pdu
     return PduR_CanTpStartOfReception(CANTP_RX_SDU_ID, &info, total, bufSize);
 }
 
-/** 受信フレームのデータ（len バイト、最大 CANTP_CF_DATA。超える分は切り捨てる）を、内部の作業領域へ写し、その先頭を返す。
+/** 受信フレームのデータ（len バイト、最大 CANTP_MAX_FRAME_DATA。超える分は切り捨てる）を、内部の作業領域へ写し、その先頭を返す。
  *  上位層の関数は書き込み可能なポインタを取る（CopyRxData）、または受信フレームそのものを渡したくない（StartOfReception）ため、
  *  一度、写してから渡す。作業領域は 1 つで、渡した呼び出しが終わるまでだけ有効。 */
 static uint8* CanTp_StageRxData(const uint8* src, uint8 len)
 {
-    static uint8 work[CANTP_CF_DATA];
-    uint8 n = (len > CANTP_CF_DATA) ? CANTP_CF_DATA : len;
+    static uint8 work[CANTP_MAX_FRAME_DATA];
+    uint8 n = (len > CANTP_MAX_FRAME_DATA) ? (uint8)CANTP_MAX_FRAME_DATA : len;
     uint8 k;
 
     for (k = 0U; k < n; k++)
@@ -998,7 +1096,7 @@ static void CanTp_TxFinish(Std_ReturnType result)
     PduR_CanTpTxConfirmation(CANTP_TX_SDU_ID, result);
 }
 
-/** 受信したフレームのデータ（len バイト、最大 CANTP_CF_DATA）を、上位層の受信バッファへコピーする。
+/** 受信したフレームのデータ（len バイト、最大 CANTP_MAX_FRAME_DATA）を、上位層の受信バッファへコピーする。
  *  CopyRxData() は書き込み可能なポインタを取るので、受信フレームを一度、内部の作業領域へ写してから渡す。 */
 static BufReq_ReturnType CanTp_CopyToUpper(const uint8* src, uint8 len)
 {
@@ -1064,7 +1162,7 @@ static Std_ReturnType CanTp_SendFlowControl(uint8 fs, uint8 bs, uint8 stMin)
 
     DET_LOGD(TAG, "TX FC fs=%u bs=%u", (unsigned)fs, (unsigned)bs);
 
-    return CanTp_SendFrame(fcFrame);
+    return CanTp_SendFrame(fcFrame, CANTP_FRAME_LEN);
 }
 
 /** 受信中の N-SDU の次のブロックのために、FC(CTS)（この受信で固定した BS、STmin）を送る。
@@ -1102,8 +1200,8 @@ static void CanTp_SendNextCF(void)
     {
         /* 新しい CF を組み立てる: データは、上位層（Dcm）から取り出す。 */
         uint16 remaining = CanTp_Tx.msgLen - CanTp_Tx.pos;
-        uint8  copyLen   = (remaining > (uint16)CANTP_CF_DATA)
-                           ? CANTP_CF_DATA : (uint8)remaining;
+        uint8  copyLen   = (remaining > (uint16)(CanTp_Tx.dl - CANTP_CF_PCI))
+                           ? (uint8)(CanTp_Tx.dl - CANTP_CF_PCI) : (uint8)remaining;
 
         PduInfoType   src;
         PduLengthType avail = 0U;
@@ -1135,18 +1233,23 @@ static void CanTp_SendNextCF(void)
         }
 
         CanTp_TxFrameBuf[0] = (uint8)(0x20U | (CanTp_Tx.sn & 0x0FU));
+
+        /* フレームの長さ: クラシックは常に 8。FD は、PCI + データを、有効な長さへ切り上げる（余りはパディング）。 */
+        uint8 frameSize = (CanTp_Tx.dl == CANTP_FRAME_LEN) ? (uint8)CANTP_FRAME_LEN
+                                                           : CanTp_RoundUpDl((uint8)(copyLen + CANTP_CF_PCI));
         uint8 i;
-        for (i = copyLen; i < CANTP_CF_DATA; i++)
+        for (i = (uint8)(CANTP_CF_PCI + copyLen); i < frameSize; i++)
         {
-            CanTp_TxFrameBuf[1U + i] = CANTP_PADDING_BYTE;
+            CanTp_TxFrameBuf[i] = CANTP_PADDING_BYTE;
         }
         CanTp_Tx.frameLen   = copyLen;
+        CanTp_Tx.frameSize  = frameSize;
         CanTp_Tx.frameReady = 1U;
     }
 
     DET_LOGD(TAG, "TX CF sn=%u pos=%u", (unsigned)CanTp_Tx.sn, (unsigned)CanTp_Tx.pos);
 
-    if (CanTp_SendFrame(CanTp_TxFrameBuf) != E_OK)
+    if (CanTp_SendFrame(CanTp_TxFrameBuf, CanTp_Tx.frameSize) != E_OK)
     {
         if (CanTp_TxStallTimedOut())
         {
@@ -1230,6 +1333,19 @@ void CanTp_Test_SetTxWaitFc(void)
 void CanTp_Test_SetRxBlockSize(uint8 bs)
 {
     CanTp_RxBlockSize = bs;
+}
+
+/**
+ * \brief   [テスト専用] 相手が CAN FD のフレームで要求してきたことにする（応答を FD のフレームで返す）。
+ *
+ * \details 実際には、FD の SF/FF を受け付けたときに決まる。受信の処理（と、Dcm の応答）を経ずに、
+ *          送信側（CanTp_Transmit）の FD の分岐だけを確かめるために、直接設定する（標準外の関数）。
+ *
+ * \param[in]  fd  TRUE なら FD の相手、FALSE ならクラシックの相手。
+ */
+void CanTp_Test_SetPeerFd(boolean fd)
+{
+    CanTp_PeerFd = fd;
 }
 
 /**

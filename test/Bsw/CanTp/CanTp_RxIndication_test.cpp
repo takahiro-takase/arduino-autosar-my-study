@@ -955,4 +955,252 @@ TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_MultiFrameReceptionDeliver
     EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
 }
 
+/* ----------------------------------------------------------------------
+ * CAN FD のフレーム（CAN_DL が 8 を超える）の受信（ISO 15765-2:2016、[SWS_CanTp_00350]）
+ * ---------------------------------------------------------------------- */
+
+// 12 バイトの FD フレームに、先頭から data を詰め、残りを 0xAA で埋めて CanTp へ渡す。
+static void ReceiveFdFrame(const uint8* data, uint8 dataLen, uint8 frameLen)
+{
+    uint8 frame[64];
+    for (uint8 i = 0U; i < frameLen; i++)
+    {
+        frame[i] = (i < dataLen) ? data[i] : CANTP_PADDING_BYTE;
+    }
+    PduInfoType info = { frame, frameLen };
+    CanTp_RxIndication(CANTP_RX_NPDU_ID, &info);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FdSfPassesPayloadToStartOfReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 sf[5] = { 0x00U, 0x03U, 0x22U, 0xF1U, 0x90U };   // FD の SF: PCI は 0x00 + SF_DL（3 バイト）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(sf, sizeof(sf), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    EXPECT_EQ(LastTpSduLength_Dcm_StartOfReception, 3U);   // SF_DL（2 バイト目）
+    EXPECT_EQ(LastInfoLength_Dcm_StartOfReception, 3U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[0], 0x22U);   // データは [2] から
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[1], 0xF1U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[2], 0x90U);
+    EXPECT_EQ(CallCount_PduR_CanTpRxIndication, 1U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FdSfPciLowNibbleIsNotZero)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 sf[5] = { 0x03U, 0x03U, 0x22U, 0xF1U, 0x90U };   // FD のフレームなのに、クラシックの形の PCI（0x03）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(sf, sizeof(sf), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);   // エスケープ形式（0x00）でない FD の SF は不正
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FdSfLengthExceedsFrame)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 sf[2] = { 0x00U, 0x0BU };   // 11 バイトと宣言したが、12 バイトのフレームに入るのは 10 バイトまで
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(sf, sizeof(sf), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FdSfAtMaximumLengthIsAccepted)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    uint8 sf[64];
+    sf[0] = 0x00U;
+    sf[1] = 62U;   // 64 バイトのフレームに入る最大（CAN_DL - 2）
+    for (uint8 i = 2U; i < 64U; i++) { sf[i] = (uint8)i; }
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(sf, sizeof(sf), 64U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    EXPECT_EQ(LastTpSduLength_Dcm_StartOfReception, 62U);
+    EXPECT_EQ(CallCount_PduR_CanTpRxIndication, 1U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FdFfCarriesFrameLengthMinusTwoBytes)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 ff[12] = { 0x10U, 0x64U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U };   // 総長 100、12 バイトのフレーム
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(ff, sizeof(ff), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    EXPECT_EQ(LastTpSduLength_Dcm_StartOfReception, 100U);
+    EXPECT_EQ(LastInfoLength_Dcm_StartOfReception, 10U);   // FD の FF のデータは CAN_DL - 2（クラシックは 6）
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[0], 1U);
+    EXPECT_EQ(LastInfoData_Dcm_StartOfReception[7], 8U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FdFfIsAnsweredWithAnEightByteFlowControl)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 ff[12] = { 0x10U, 0x64U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(ff, sizeof(ff), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    EXPECT_EQ(LastLength_CanIf_Transmit, 8U);       // FC は、FD の相手にも 8 バイト（クラシックの形）で返す
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x30U);   // FC(CTS)
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FdFfTotalLengthFitsInFirstFrame)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 ff[12] = { 0x10U, 0x0AU, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U };   // 総長 10 は、FF のデータ（10 バイト）で足りる
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(ff, sizeof(ff), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_OK_FdCfCarriesFrameLengthMinusOneBytes)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 ff[12] = { 0x10U, 0x1EU, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U };   // 総長 30: FF で 10、残り 20
+    ReceiveFdFrame(ff, sizeof(ff), 12U);
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    const uint8 cf1[1] = { 0x21U };                       // CF 1 本目: 11 バイト（フレーム 12 バイト）
+    const uint8 cf2[1] = { 0x22U };                       // CF 2 本目: 残り 9 バイト（フレーム 12 バイトで、余りはパディング）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(cf1, sizeof(cf1), 12U);
+    const uint32 copiedAfterFirst = CallCount_Dcm_CopyRxData;
+    ReceiveFdFrame(cf2, sizeof(cf2), 12U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(copiedAfterFirst, 2U);                  // FF の分 + CF 1 本目
+    EXPECT_EQ(CallCount_Dcm_CopyRxData, 3U);
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);      // 10 + 11 + 9 = 30 バイトで、受信が完了
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FdCfShorterThanItsDataAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 ff[12] = { 0x10U, 0x1EU, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U };
+    ReceiveFdFrame(ff, sizeof(ff), 12U);
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    const uint8 cf[1] = { 0x21U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(cf, sizeof(cf), 8U);   // 最後ではない CF なのに、8 バイト（データは 7 バイトしか入らない。12 バイトのはず）
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FdCfLongerThanRxDlAbortsReception)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 ff[12] = { 0x10U, 0x64U, 1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 10U };   // RX_DL は 12
+    ReceiveFdFrame(ff, sizeof(ff), 12U);
+    ASSERT_EQ(CallCount_Dcm_StartOfReception, 1U);
+    const uint8 cf[1] = { 0x21U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(cf, sizeof(cf), 64U);   // RX_DL（12）より長い CF。余りを切り捨てるとデータが壊れる
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_TpRxIndication, 1U);
+    EXPECT_EQ(LastResult_Dcm_TpRxIndication, E_NOT_OK);
+}
+
+TEST_F(CanTp_RxIndication_Test, CanTp_RxIndication_NG_FrameWithInvalidFdLengthIsIgnored)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    const uint8 sf[5] = { 0x00U, 0x03U, 0x22U, 0xF1U, 0x90U };
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ReceiveFdFrame(sf, sizeof(sf), 10U);   // 9〜11 は、CAN FD の有効な長さではない
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(CallCount_Dcm_StartOfReception, 0U);
+}
+
 }  // namespace

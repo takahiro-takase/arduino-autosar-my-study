@@ -2,7 +2,9 @@
  * \file    App_Test.c
  * \brief   汎用のテスト用 SW-C 実装（TestMsg の送信、MISRA 練習用パターン集）
  * \details 1 秒ごとに +1 するカウンタを Rte_Write_TestMsg_TestCounter() で
- *          書き込む。末尾に MISRA 練習用のパターン集がある（MISRA_PRACTICE_ENABLE が有効のときだけ）。
+ *          書き込む。同じカウンタを、CAN FD の 64 byte のフレーム FdTestMsg の
+ *          先頭と末尾の信号にも書き込む。
+ *          末尾に MISRA 練習用のパターン集がある（MISRA_PRACTICE_ENABLE が有効のときだけ）。
  *          詳細は App_Test.h を参照。
  *
  * \copyright  Copyright (c) 2025 T_T
@@ -18,6 +20,7 @@
 
 #include "App_Test.h"
 #include "Rte.h"
+#include "Det.h"
 
 #if defined(MISRA_PRACTICE_ENABLE) && defined(ARDUINO)
 #error "MISRA_PRACTICE_ENABLE は解析専用。実機向けのビルド（ARDUINO が定義される）では有効にしないこと"
@@ -56,9 +59,31 @@ void App_Test_Run(void)
 {
     /* TestMsg.TestCounter へ書き込む値（uint8 のため 255 の次は 0） */
     static uint8 s_TestCounter = 0U;
+    /* FdTestRx の前回値（起動直後の 0 と区別するため、範囲外の 0x100 で初期化。
+     * 起動後の最初の周期で「head=0 tail=0」と 1 回出るのは、この初期化による） */
+    static uint16 s_RxHead = 0x100U;
+    static uint16 s_RxTail = 0x100U;
+    uint8 rxHead = 0U;
+    uint8 rxTail = 0U;
 
     s_TestCounter++;
     (void)Rte_Write_TestMsg_TestCounter(s_TestCounter);
+
+    /* CAN FD の 64 byte のフレーム（FdTestMsg）。先頭（byte[0]）と末尾（byte[63]）に同じ値を入れ、
+     * 8 byte を超える位置の信号まで届くことを、受信側で確かめる。 */
+    (void)Rte_Write_FdTestMsg_FdTestCounterHead(s_TestCounter);
+    (void)Rte_Write_FdTestMsg_FdTestCounterTail(s_TestCounter);
+
+    /* CAN FD の 64 byte のフレーム（FdTestRx、can_tool が送る）の受信確認。先頭と末尾の byte が
+     * 前回から変わったときだけログに出す。 */
+    if ((Rte_Read_FdTestRx_FdTestRxHead(&rxHead) == E_OK) &&
+        (Rte_Read_FdTestRx_FdTestRxTail(&rxTail) == E_OK) &&
+        (((uint16)rxHead != s_RxHead) || ((uint16)rxTail != s_RxTail)))
+    {
+        s_RxHead = (uint16)rxHead;
+        s_RxTail = (uint16)rxTail;
+        DET_LOGI("AppTest", "FdTestRx: head=%u tail=%u", (unsigned)rxHead, (unsigned)rxTail);
+    }
 }
 
 /* ----------------------------------------------------------------------

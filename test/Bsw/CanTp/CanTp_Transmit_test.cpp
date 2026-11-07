@@ -421,4 +421,82 @@ TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_FfIsSentAndWaitsForFlowControl)
     EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 0U);   // まだ送信は終わっていない
 }
 
+/* ----------------------------------------------------------------------
+ * CAN FD の相手への応答（要求が FD のフレームで届いたときだけ、応答も FD のフレームで返す）
+ * ---------------------------------------------------------------------- */
+
+// 相手が FD で要求してきたことにする。以降の応答は、FD のフレームで返す。
+static void MarkPeerAsFd()
+{
+    CanTp_Test_SetPeerFd(TRUE);
+}
+
+TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_FdPeerGetsFdSingleFrameWithEscapePci)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    MarkPeerAsFd();
+    MakeDcmSendingVinResponse();   // VIN の応答は 20 バイト（クラシックなら FF だが、FD の SF に収まる）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Transmit(20U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    EXPECT_EQ(LastLength_CanIf_Transmit, 24U);       // PCI 2 + データ 20 = 22 を、有効な長さ 24 へ切り上げる
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x00U);    // FD の SF: PCI は 0x00 + SF_DL
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 20U);
+    EXPECT_EQ(CallCount_Dcm_TpTxConfirmation, 1U);   // SF は、送ったら終わり
+}
+
+TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_FdPeerStillGetsClassicSfForSevenBytesOrLess)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    MarkPeerAsFd();
+    MakeDcmSendingSessionResponse();   // 6 バイトの応答
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Transmit(6U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    EXPECT_EQ(LastLength_CanIf_Transmit, 8U);        // 7 バイト以下は、相手が FD でも、クラシックの SF（8 バイト）
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x06U);
+}
+
+TEST_F(CanTp_Transmit_Test, CanTp_Transmit_OK_ClassicPeerStillGetsClassicFirstFrame)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    MakeDcmSendingVinResponse();   // 相手が FD で要求していない（既定）
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    const Std_ReturnType ret = Transmit(20U);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(ret, E_OK);
+    ASSERT_EQ(CallCount_CanIf_Transmit, 1U);
+    EXPECT_EQ(LastLength_CanIf_Transmit, 8U);        // クラシックの FF（8 バイト）
+    EXPECT_EQ(LastData_CanIf_Transmit[0], 0x10U);
+    EXPECT_EQ(LastData_CanIf_Transmit[1], 20U);
+}
+
 }  // namespace

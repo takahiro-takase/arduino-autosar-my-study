@@ -1046,8 +1046,13 @@ class UdsTesterFrame(ttk.Frame):
         except ValueError:
             channel = channel_raw  # COM ポート文字列等 (SLCAN 等)
         try:
+            can_cfg = self.cfg["can"]
+            interface = self.interface_var.get()
             bus = uds_link.create_bus(
-                self.interface_var.get(), channel, int(self.bitrate_var.get())
+                interface, channel, int(self.bitrate_var.get()),
+                # FD で開けるのは candle だけ。UI で他のアダプタを選んだときは FD を無視する。
+                fd=bool(can_cfg.get("fd", False)) and interface == "candle",
+                data_bitrate=int(can_cfg.get("data_bitrate", 2000000)),
             )
         except Exception as exc:  # noqa: BLE001 - 接続失敗内容をそのままユーザーに見せる
             messagebox.showerror("接続失敗", str(exc))

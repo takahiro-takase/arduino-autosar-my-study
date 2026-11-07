@@ -657,6 +657,69 @@
           "note": "時間領域。本ECUは 1 だけを受け付ける"
         }
       ]
+    },
+    {
+      "name": "FdTestMsg",
+      "direction": "TX",
+      "canId": "0x310",
+      "dlc": 64,
+      "txPeriodMs": 1000,
+      "note": "CAN FD の動作確認用（テスト専用）。メータECU送信、E2E/SecOCなし、1秒周期、64 byte の FD フレーム（BRS あり）。先頭の byte と末尾の byte に TestMsg と同じカウンタを入れ、64 byte 全体が届くことを確かめる",
+      "fields": [
+        {
+          "name": "FdTestCounterHead",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "先頭 byte（byte[0]）のカウンタ（1秒ごとに+1、255の次は0）"
+        },
+        {
+          "name": "FdTestCounterTail",
+          "bitPosition": 504,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "末尾 byte（byte[63]）のカウンタ。FdTestCounterHead と同じ値（8 byte を超える位置の信号が届くことの確認）"
+        }
+      ]
+    },
+    {
+      "name": "FdTestRx",
+      "direction": "RX",
+      "canId": "0x320",
+      "dlc": 64,
+      "note": "CAN FD の受信確認用（テスト専用）。can_tool が 64 byte の FD フレーム（BRS あり）を送り、ECU が受信して先頭と末尾の byte をログに出す。E2E/SecOCなし",
+      "fields": [
+        {
+          "name": "FdTestRxHead",
+          "bitPosition": 0,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "先頭 byte（byte[0]）"
+        },
+        {
+          "name": "FdTestRxTail",
+          "bitPosition": 504,
+          "bitSize": 8,
+          "type": "number",
+          "range": {
+            "min": 0,
+            "max": 255
+          },
+          "note": "末尾 byte（byte[63]）"
+        }
+      ]
     }
   ]
 }
