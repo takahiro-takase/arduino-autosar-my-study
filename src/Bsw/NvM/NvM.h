@@ -199,14 +199,13 @@ extern "C" {
  *          設定されているブロックは自動的にその値へ復元し EEPROM へ書き戻す
  *          （結果は NVM_REQ_RESTORED_FROM_ROM）。ROM デフォルト値が未設定の
  *          ブロックは RAM ミラーを全 0 で埋めた上で結果を NVM_REQ_INTEGRITY_FAILED
- *          とする（2026-09 是正。この「未設定なら全 0」という起動時の内部復旧
+ *          とする（この「未設定なら全 0」という起動時の内部復旧
  *          処理は、実行中に明示的に呼ぶ NvM_RestoreBlockDefaults()（ROM
  *          デフォルト値が未設定のブロックには E_NOT_OK を返し何もしない、
  *          [SWS_NvM_00883]）とは挙動が異なる点に注意）。
  *
  * \param[in]  ConfigPtr  未使用。[SWS_NvM_00881]により常に NULL を渡すこと
- *                        （2026-09 是正。以前は実際にこの引数の中身に依存して
- *                        いた。post-build 設定は`NvM_PBCfg.c`の静的テーブル
+ *                        （post-build 設定は`NvM_PBCfg.c`の静的テーブル
  *                        `NvM_Config`を内部で直接参照する、他の8モジュールと
  *                        同じ opaque ConfigType パターン。NvM.c 参照）。
  *
@@ -224,8 +223,7 @@ void NvM_Init(const NvM_ConfigType* ConfigPtr);
  *
  *          NvM_DstPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
  *          全ブロックが該当、NvM_PBCfg.c 参照）を使うという意味であり
- *          エラーではない（[SWS_NvM_00898]、2026-09 是正。以前は無条件で
- *          development error 扱いにしていた）。実データは既に RAM ミラーに
+ *          エラーではない（[SWS_NvM_00898]）。実データは既に RAM ミラーに
  *          保持済みのため、この場合は追加のコピーを行わず E_OK を返す。
  *
  * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
@@ -259,7 +257,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
  *
  *          書き込むデータの CRC が直近の read/write ジョブで確定した CRC と
  *          一致する場合、物理書き込みそのものをスキップしジョブを即座に
- *          NVM_REQ_OK 扱いとする（[SWS_NvM_00852]。2026-09 追加。EEPROM
+ *          NVM_REQ_OK 扱いとする（[SWS_NvM_00852]。EEPROM
  *          エミュレーション（内蔵フラッシュ）の書き込み・消去サイクル摩耗を
  *          抑える目的。冗長ブロック(Redundant=1)は本スキップの対象外
  *          （仕様の「冗長性喪失検出ブロックには適用しない」除外規定に対し、
@@ -268,8 +266,7 @@ Std_ReturnType NvM_ReadBlock(NvM_BlockIdType BlockId, void* NvM_DstPtr);
  *
  *          NvM_SrcPtr が NULL の場合、恒久 RAM ブロック（本プロジェクトの
  *          全ブロックが該当）を使うという意味でありエラーではない
- *          （[SWS_NvM_00900]、2026-09 是正。以前は無条件で development error
- *          扱いにしていた）。この場合 RAM ミラーへの上書きは行わず、現在の
+ *          （[SWS_NvM_00900]）。この場合 RAM ミラーへの上書きは行わず、現在の
  *          RAM ミラー内容をそのまま EEPROM へ（再）書き込むジョブとして扱う。
  *
  * \param[in]  BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
@@ -303,9 +300,7 @@ Std_ReturnType NvM_WriteBlock(NvM_BlockIdType BlockId, const void* NvM_SrcPtr);
  *
  *          ROM デフォルト値が設定されていないブロックに対して呼ばれた場合は
  *          ブロック状態を一切変えず`NVM_E_BLOCK_WITHOUT_DEFAULTS`を DET 報告し
- *          E_NOT_OK を返す（[SWS_NvM_00883]/[SWS_NvM_00885]。2026-09 是正:
- *          以前は全 0 埋め＋非同期書き込みジョブを積み E_OK を返していたが、
- *          存在しないデフォルト値を「復元できた」かのように扱う誤りだった）。
+ *          E_NOT_OK を返す（[SWS_NvM_00883]/[SWS_NvM_00885]）。
  *
  * \param[in]   BlockId      ブロック ID (NVM_BLOCK_ID_* 定数)。
  * \param[out]  NvM_DestPtr  復元したデフォルト値の追加コピー先。NULL の場合は
@@ -342,25 +337,13 @@ Std_ReturnType NvM_RestoreBlockDefaults(NvM_BlockIdType BlockId, void* NvM_DestP
  *          （設定値に関わらず）有効/無効を切り替えられる（[SWS_NvM_00325]
  *          相当の簡略化。[SWS_NvM_00577]/[SWS_NvM_00398] の禁止条件は対象外）。
  *
- *          保護状態は RAM 上の管理情報としてのみ保持し（EEPROM には保存
- *          しない）、`NvM_Init()` で常に「保護なし」へ戻る（実仕様の
- *          「リセット時は NvMWriteBlockOnce ブロックの保護のみクリアされる」
- *          という規定とは異なるが、本プロジェクトは電源断からの復電時に
- *          常にブロックの内容を EEPROM から再展開するため、保護設定も
- *          RAM 状態の一部として同様に初期化し直すのが一貫している）。
- *
  *          保護中のブロックは `NvM_WriteBlock()`/`NvM_RestoreBlockDefaults()`
  *          が `E_NOT_OK` を返して書き込みを拒否する（[SWS_NvM_00217]）。
- *          実仕様が要求する production error `NVM_E_WRITE_PROTECTED`
- *          （Dem 経由）は、本プロジェクトが NvM の production error を
- *          Dem に配線する仕組み自体を持たないため報告しない
- *          （DET ログのみ出力）。
  *
  *          非同期書き込みジョブが処理中(キュー投入済みまたは実行中)の
  *          ブロックに対しては、保護状態を変更せず development error
  *          `NVM_E_BLOCK_PENDING` を報告する（[SWS_NvM_00607]/
- *          [SWS_NvM_00704]。2026-09 追加。以前はこのチェックが無く、
- *          進行中のジョブに関わらず無条件で保護フラグを反転させていた）。
+ *          [SWS_NvM_00704]）。
  *
  * \param[in]  BlockId            ブロック ID (NVM_BLOCK_ID_* 定数)。
  * \param[in]  ProtectionEnabled  TRUE: 保護を有効化。FALSE: 保護を解除。
@@ -380,7 +363,8 @@ Std_ReturnType NvM_SetBlockProtection(NvM_BlockIdType BlockId, boolean Protectio
 /**
  * \brief   ブロックの直近のジョブ結果を取得する。
  *
- * \details NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を
+ * \par 仕様
+ *          NvM_WriteBlock() / NvM_RestoreBlockDefaults() の完了を
  *          明示的に確認したい場合に使う（本プロジェクトの既存呼び出し元は
  *          いずれも fire-and-forget で戻り値を確認しないが、API としては
  *          提供する）。
@@ -414,13 +398,6 @@ Std_ReturnType NvM_GetErrorStatus(NvM_BlockIdType BlockId, NvM_RequestResultType
  *          完了する）まで NvM_MainFunction()/MemIf_MainFunction() を自分で回して
  *          戻る同期処理にしている。リセット直前はスケジューラ（Os）に処理を
  *          委ねられないため。
- *
- *          NVM_WRITEALL_TIMEOUT_MS（Os のカウンタで計測）または
- *          NVM_WRITEALL_MAX_ITERATIONS 回で打ち切る（HW ウォッチドッグ
- *          WDGM_HW_WATCHDOG_TIMEOUT_MS=4000ms 内に収めるため）。打ち切った場合は
- *          未完了のブロックを残したまま戻る（ログに WARN を出す）。
- *          書き込みの失敗（リトライ上限超過）はブロックごとに諦められるため、
- *          このループが無限に回ることはない。
  *
  *          未初期化の場合は DET エラー NVM_E_NOT_INITIALIZED を報告して戻る
  *          （[SWS_NvM_00647]）。

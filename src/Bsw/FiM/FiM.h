@@ -63,9 +63,7 @@ extern "C" {
  * \brief   FiM モジュールを初期化する。
  *
  * \details 全 FID の許可状態を、Dem の現在のイベントステータスから直接評価
- *          して初期化する（[SWS_Fim_00102]/[SWS_Fim_00104]。2026-09 是正、
- *          以前は無条件で「許可」初期化しておりDem復元状態の反映が最初の
- *          FiM_MainFunction() 呼び出しまで遅延していた）。
+ *          して初期化する（[SWS_Fim_00102]/[SWS_Fim_00104]）。
  *          EcuM_Init() から、Dem_Init() の後に呼び出すこと
  *          （Dem 側の状態が確定済みである必要があるため）。
  *
@@ -80,7 +78,8 @@ void FiM_Init(const FiM_ConfigType* ConfigPtr);
 /**
  * \brief   FiM 周期処理。各 FID の許可状態を再評価する。
  *
- * \details FiM_Functions[] の各行（抑止の条件）について、Dem のステータスを確認する。
+ * \par 仕様
+ *          FiM_Functions[] の各行（抑止の条件）について、Dem のステータスを確認する。
  *          条件の種類が FIM_INH_STATUS_MASK なら Dem_GetEventUdsStatus() の UDS ステータス、
  *          仕様の 4 つの条件（FIM_LAST_FAILED など）なら Dem_GetMonitorStatus() の監視ステータスで、
  *          条件が成り立てば該当 FID を「抑止」、1 つも成り立たなければ「許可」にする。

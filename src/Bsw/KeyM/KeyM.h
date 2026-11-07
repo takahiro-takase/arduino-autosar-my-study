@@ -100,12 +100,10 @@ void KeyM_Init(const KeyM_ConfigType* ConfigPtr);
  * \brief   Key Manager モジュールを未初期化状態に戻す。
  *
  * \details [SWS_KeyM_00144]: 未初期化時は KEYM_E_UNINIT を報告し何もしない
- *          （2026-09 追加。以前はローカルなフラグのリセットのみで実害が
- *          無かったためガードが無かったが、実際に鍵材料を書き換えるように
- *          なったため必須化した）。
+ *          （実際に鍵材料を書き換えるため、ガードが必須）。
  *
  *          [SWS_KeyM_00048]: RAM 上の鍵材料（Crypto 層が保持する
- *          `Crypto_KeyStore[]`）を能動的に破棄する（2026-09 是正）。
+ *          `Crypto_KeyStore[]`）を能動的に破棄する。
  *          KeyM 自身は鍵材料を保持しないため、`KeyM_Update()` と同じ
  *          `Csm_KeyElementSet()` 経路へ全ゼロの鍵データを流すことで実消去する
  *          （Crypto 層専用の破棄 API を新設する必要はなかった）。副次的に

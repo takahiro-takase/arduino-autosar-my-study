@@ -182,8 +182,7 @@ Mcu_RawResetType Mcu_GetResetRawValue(void);
  * \details 呼び出し元へ戻らない（Cortex-M4 の NVIC_SystemReset() 発行後、
  *          MCU 全体が再起動するため。実処理は Mcu_Hw_PerformReset() 参照）。
  *          現状唯一の呼び出し元は UDS 0x11 ECUReset
- *          （Dcm_HandleEcuReset()。実車のリセットボタン押下と同等の効果を
- *          UDS 経由で起こしたいという要望から 2026-09 追加。Dcm 側が正応答
+ *          （Dcm_HandleEcuReset()。Dcm 側が正応答
  *          送信後に短い遅延を挟んでから呼ぶことで、応答フレームの物理送信を
  *          先に完了させる）。
  *

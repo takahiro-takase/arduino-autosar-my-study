@@ -97,7 +97,8 @@ void ComM_Init(const ComM_ConfigType* ConfigPtr);
 /**
  * \brief   ComM モジュールを未初期化状態に戻す。
  *
- * \details 初期化済みフラグを未初期化に戻す。未初期化状態で呼ばれた場合は
+ * \par 仕様
+ *          初期化済みフラグを未初期化に戻す。未初期化状態で呼ばれた場合は
  *          COMM_E_UNINIT を報告し何もしない。
  *
  * \ServiceID      {0x02}
@@ -109,7 +110,8 @@ void ComM_DeInit(void);
 /**
  * \brief   ComM モジュールの初期化状態を取得する。
  *
- * \details [SWS_ComM_00612/00858] が明記するとおり、ComM_Init/GetVersionInfo と
+ * \par 仕様
+ *          [SWS_ComM_00612/00858] が明記するとおり、ComM_Init/GetVersionInfo と
  *          並び、本関数だけは未初期化状態で呼ばれても COMM_E_UNINIT を報告
  *          しない例外 API である。そのため初期化状態は確認せず、NULL
  *          ポインタチェックのみ行う。
@@ -139,10 +141,9 @@ Std_ReturnType ComM_GetStatus(ComM_InitStatusType* Status);
  *          ComM_Nm_BusSleepMode() を呼ぶまで遅延する（ComM.c ファイル冒頭
  *          コメント参照）。SILENT_COM 中（CanNm が既に Prepare Bus-Sleep Mode
  *          へ到達済み）に NO_COM が再要求された場合も同様に何もしない
- *          （CanSM へ素通りさせると CanNm 未到達のまま物理スリープしてしまう
- *          回帰があったため、2026-08 に修正。ComM.c 参照）。それ以外の遷移
- *          （NO_COM -> FULL_COM 等）は従来どおり即座に CanSM_RequestComMode()
- *          へ転送する。
+ *          （CanSM へ素通りさせると CanNm 未到達のまま物理スリープしてしまうため。
+ *          ComM.c 参照）。それ以外の遷移（NO_COM -> FULL_COM 等）は即座に
+ *          CanSM_RequestComMode() へ転送する。
  *
  * \param[in]  User     要求するユーザ ID (COMM_USER_0 等)。
  * \param[in]  ComMode  要求する通信モード
@@ -161,7 +162,8 @@ Std_ReturnType ComM_RequestComMode(ComM_UserHandleType User, ComM_ModeType ComMo
 /**
  * \brief   ユーザが現在要求している通信モードを取得する（[SWS_ComM_00079]）。
  *
- * \details `ComM_RequestComMode()` で設定された、集約前のユーザ単位の要求値
+ * \par 仕様
+ *          `ComM_RequestComMode()` で設定された、集約前のユーザ単位の要求値
  *          （`ComM_UserRequest[User]`）をそのまま返す。集約後のチャネル単位の
  *          現在モードを返す `ComM_GetCurrentComMode()` とは異なる点に注意。
  *
@@ -275,12 +277,6 @@ void ComM_GetVersionInfo(Std_VersionInfoType* Versioninfo);
  *
  * \details [SWS_ComM_00884]: ComM はチャネルごとに CommunicationAllowed
  *          フラグを保持し、ComM_Init() 直後の既定値は FALSE（通信禁止）。
- *          本プロジェクトは EcuM/Fixed 相当（単一チャネル、動的な許可制御は
- *          未導入）のため、EcuM_Init() が ComM_Init() 直後に
- *          `ComM_CommunicationAllowed(COMM_CHANNEL_0, TRUE)` を呼び、以降は
- *          常時許可のまま運用する（EcuM.c 参照）。本関数を起動後に FALSE で
- *          動的に呼び直す運用は検証していない（ComM.c 冒頭「本実装の
- *          簡略化」参照）。
  *
  *          [SWS_ComM_00895/00896]: このフラグは、ユーザ要求の集約
  *          （ComM_RequestComMode()/ComM_DCM_ActiveDiagnostic() 経由）が
@@ -312,11 +308,6 @@ void ComM_CommunicationAllowed(NetworkHandleType Channel, boolean Allowed);
  * \details [SWS_ComM_00876]。実ユーザの要求に関わらず、以降
  *          ComM_DCM_InactiveDiagnostic() が呼ばれるまで常に
  *          COMM_FULL_COMMUNICATION を要求する仮想ユーザとして扱う。
- *          潜在的な通信制限（ComM_LimitChannelToNoComMode 等、本プロジェクト
- *          未実装）を一時的に無効化する趣旨だが、本プロジェクトは
- *          ComM_RequestComMode() の集約ロジックへ仮想ユーザとして参加させる
- *          ことで同じ効果（誰か一人でも通信を必要としていればバスは落とさない）
- *          を実現する（ComM.c 参照）。
  *
  * \param[in]  Channel  診断通信が必要になったチャネル (0 固定)。
  *
@@ -355,9 +346,6 @@ void ComM_DCM_InactiveDiagnostic(NetworkHandleType Channel);
  *          通常の起動時と同じ流れ（EcuM の RUN 要求、Dcm への通知など）になる。
  *          チャネルが既に NO_COM でないときは何もしない。
  *
- *          以前は CanIf_RxIndication() が独自 API の CanSM_RxIndication() を呼び、
- *          CanSM が検証成功を自分で判断して同じ確定を行っていた（2026-10 に置き換え）。
- *
  *          CommunicationAllowed ゲート（`ComM_RequestFullComOrPend()`）は通さず、
  *          直接 CanSM を呼ぶ。バス側の事象（ComM_Nm_NetworkMode() /
  *          ComM_Nm_NetworkStartIndication()）と同じ扱いで、起床を取りこぼさない
@@ -390,11 +378,6 @@ void ComM_EcuM_WakeUpIndication(NetworkHandleType Channel);
  *          をこの Mode に同期させる（どのユーザの要求でもない自動的な状態変化を
  *          User0 の要求として扱うことで、次回の集約計算に古い要求が
  *          残らないようにするため。詳細は ComM.c の実装コメントを参照）。
- *
- *          FULL_COM 通知時、`ComM_NmReleasePending[]` が立っていれば
- *          （CanNm 協調スリープ待ちの最中に Bus-Off が発生し、回復して CanSM が
- *          FULL_COM へ戻ってきたケース）CanNm_NetworkRequest() も EcuM_RequestRUN() も
- *          呼ばず、CanNm の協調スリープをそのまま続けさせる（詳細は ComM.c の実装コメント参照）。
  *
  *          呼び出しタイミング:
  *            - CanSM_RequestComMode 成功後 (NO_COM -> FULL_COM 遷移時、および
@@ -440,36 +423,12 @@ void ComM_Nm_PrepareBusSleepMode(NetworkHandleType Network);
  *          示す、レース条件由来のシグナルである（[SWS_ComM_00583] のユース
  *          ケース参照）。
  *
- *          本プロジェクトの同期的な設計では、CanNm が `CANNM_STATE_BUS_SLEEP` へ
- *          到達する時点で通常は `ComM_Nm_BusSleepMode()` 経由の
- *          `CanSM_RequestComMode(NO_COM)` が既に成功しており、物理コントローラ
- *          も `CAN_CS_SLEEP` へ落ちている（＝`Can_MainFunction_Read()` 自体が
- *          停止し `CanNm_RxIndication()` は物理的に呼ばれ得ない）。そのため本関数
- *          が実際に到達しうるのは、Bus-Off 回復待ち中に `CanSM_RequestComMode
- *          (NO_COM)` が拒否されて CanNm だけが独立したタイマで先に Bus-Sleep
- *          Mode へ到達してしまうケース（コントローラは Bus-Off により
- *          Listen-Only のまま受信は継続、`ComM_Nm_BusSleepMode()` の Doxygen
- *          `BusOffDuringNmWinddown_OK_DoesNotResurrectNm` 相当）にほぼ限られる。
- *
  *          [SWS_ComM_00583]: `ComM_ChannelMode[Network]` が既に
  *          COMM_FULL_COMMUNICATION でなければ `CanSM_RequestComMode(Network,
  *          COMM_FULL_COMMUNICATION)` を試みる。ただし `CommunicationAllowed`
  *          フラグ（[SWS_ComM_00871]、`ComM_CommunicationAllowed()` 参照）が
  *          FALSE の間は CanSM へは伝えず遷移を保留する（Allowed=TRUE 通知時に
  *          `ComM_CommunicationAllowed()` 側が改めて発行する）。
- *          **`ComM_Nm_NetworkMode()` とは異なり
- *          `ComM_NmReleasePending[Network]` は呼び出しが実際に成功した場合
- *          のみクリアする**（`ComM_Nm_BusSleepMode()` の NO_COM 分岐と同じ
- *          「まだ解放が完了していない事実を保持し続ける」方針）。上記の
- *          Bus-Off 回復待ちシナリオでは `CanSM_RequestComMode()` は
- *          `CanSM_State==CANSM_STATE_BUS_OFF` により必ず拒否される（モード
- *          変更は Bus-Off 回復ステートマシンに一本化する設計、CanSM.c
- *          参照）ため、ここで無条件にクリアしてしまうと、後の Bus-Off 回復時に
- *          `ComM_BusSM_ModeIndication()` の SILENT_COM 分岐にある既存の
- *          リトライガード（`ComM_NmReleasePending` が立っていれば
- *          `CanSM_RequestComMode(NO_COM)` を再送する）を迂回させ、ユーザーが
- *          望んでいないのに FULL_COM へ「復活」させてしまう
- *          （`BusOffDuringNmWinddown_OK_DoesNotResurrectNm` と同種の回帰）。
  *
  *          [SWS_ComM_00903]: Nm_PassiveStartUp() は、`CanSM_RequestComMode(FULL_COM)` が
  *          成功する経路で、`ComM_BusSM_ModeIndication()` が呼ぶ（誰も通信を要求していなければ。

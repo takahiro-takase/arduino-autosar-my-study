@@ -97,7 +97,8 @@ void Port_Init(const Port_ConfigType* ConfigPtr);
 /**
  * \brief   指定ピンの方向を動的に変更する。
  *
- * \details Port_Init() 後にピン方向を動的変更したい場合に使用する。
+ * \par 仕様
+ *          Port_Init() 後にピン方向を動的変更したい場合に使用する。
  *          通常は Port_Init() 一度で全ピンを設定する。
  *
  * \param[in]  Pin        変更対象のピン番号。
@@ -112,7 +113,8 @@ void Port_SetPinDirection(Port_PinType Pin, Port_PinDirectionType Direction);
 /**
  * \brief   全ピンの方向を設定方向へ再適用する。
  *
- * \details [SWS_Port_00060] の通り、全ピンの方向を Port_Cfg.h の設定方向へ
+ * \par 仕様
+ *          [SWS_Port_00060] の通り、全ピンの方向を Port_Cfg.h の設定方向へ
  *          再適用する。[SWS_Port_00061] は「実行時に変更可能」なピンを
  *          除外対象と定めるが、本プロジェクトにはその概念が存在しないため
  *          （Port_SetPinDirection() はどのピンにも無条件で適用可能な設計）、
@@ -142,14 +144,6 @@ void Port_GetVersionInfo(Std_VersionInfoType* versioninfo);
 
 /**
  * \brief   指定ピンのモードを切り替える。
- *
- * \details [SWS_Port_00125] はランタイム中のピンモード切替（UART/SPI 等の
- *          代替機能への切替）を規定するが、本プロジェクトは Arduino の
- *          デジタルピンしか扱わずモード切替の概念自体を持たない。
- *          [SWS_Port_00223] の通り、"PortPinModeChangeable" が FALSE の
- *          ピンでは PORT_E_MODE_UNCHANGEABLE を報告し他に何もしないことが
- *          要求されており、本プロジェクトは全ピンがこれに該当するため、
- *          常にこのエラーを報告するだけの実装とする（学習用簡略化）。
  *
  * \param[in]  Pin   対象ピン番号。
  * \param[in]  Mode  新しいピンモード（本実装では未使用）。

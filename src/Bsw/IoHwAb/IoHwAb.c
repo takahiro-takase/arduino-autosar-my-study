@@ -73,6 +73,9 @@ static uint16 s_adcMv           = 0U;  /* ADC 変換済み電圧値 [mV] */
  *
  * \pre        Port_Init() が正常完了していること。
  *
+ * \param[in]  ConfigPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                        持たないため）。
+ *
  * \ServiceID      {0x01}（[SWS_IoHwAb_00119] の Service ID[hex] と一致。
  *                 他の I/O 個別関数 (Led_SetLevel 等) は仕様に対応する
  *                 API 定義自体が無いため、0xC1〜0xC6 を本プロジェクト
@@ -160,6 +163,9 @@ Std_ReturnType IoHwAb_Led_SetLevel(uint8 level)
 /**
  * \brief   RUNNING LED (D6) の出力レベルを設定する。
  *
+ * \par 仕様
+ *          ENGINE_STATE_RUNNING 中に点灯する専用 LED を制御する。
+ *          RTE の Client/Server ポート (Rte_Call_LedRunning_SetLevel) から呼び出される。
  * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
  *
  * \retval  E_OK  常に成功。
@@ -181,6 +187,9 @@ Std_ReturnType IoHwAb_LedRunning_SetLevel(uint8 level)
 /**
  * \brief   FAULT LED (D7) の出力レベルを設定する。
  *
+ * \par 仕様
+ *          ENGINE_STATE_FAULT 中に点滅する専用 LED を制御する。
+ *          RTE の Client/Server ポート (Rte_Call_LedFault_SetLevel) から呼び出される。
  * \param[in]  level  出力レベル。0 = 消灯、1 = 点灯。
  *
  * \retval  E_OK  常に成功。

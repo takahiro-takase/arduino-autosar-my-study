@@ -201,7 +201,8 @@ void WdgM_DeInit(void);
 /**
  * \brief   WdgM の現在のモードを設定する。
  *
- * \details 次の 2 つのモードを切り替える（[SWS_WdgM_00154]）。
+ * \par 仕様
+ *          次の 2 つのモードを切り替える（[SWS_WdgM_00154]）。
  *            - WDGM_MODE_DEFAULT: 通常（RUN）。監視の判定を有効にし、WdgIf へ WDGIF_FAST_MODE を要求する
  *              （WdgM_Init() も、これと同じ状態で始まる）。
  *            - WDGM_MODE_POST_RUN: POST_RUN。Rte_Engine などの監視対象タスクが意図的に止まり、Alive Supervision が
@@ -211,13 +212,6 @@ void WdgM_DeInit(void);
  *              ここでの目的は「WdgM が FAILED 判定の結果を無視する」ことなので、戻り値は無視する。
  *          EcuM が、RUN から POST_RUN へ遷移する時に WDGM_MODE_POST_RUN、RUN へ復帰する時に WDGM_MODE_DEFAULT を設定する
  *          （復帰時は WdgM_ResumeSupervision() も併せて呼ぶこと）。
- *
- *          監視対象・許容値セット自体は、モードによらず共通（単一の静的コンフィグ。学習用簡略化）。
- *          そのため、モードごとの監視の入れ替え（[SWS_WdgM_00186]）、WdgIf_SetMode() 失敗時の Global Status の STOPPED への
- *          遷移・Dem WDGM_E_SET_MODE の報告（[SWS_WdgM_00139]/[SWS_WdgM_00142]）、Global Status のガード
- *          （[SWS_WdgM_00145]/[SWS_WdgM_00316]）、SE 単位の activate/deactivate（[SWS_WdgM_00182]/[SWS_WdgM_00315]）、
- *          OFF_MODE 禁止時の WDGM_E_DISABLE_NOT_ALLOWED（[SWS_WdgM_00031]）は未実装
- *          （詳細・調査経緯は docs/modules/WdgM_Notes.md 参照）。
  *
  * \param[in]  Mode  設定するモード（WDGM_MODE_DEFAULT / WDGM_MODE_POST_RUN）。
  * \retval  E_OK      モードを設定した。
@@ -265,9 +259,9 @@ Std_ReturnType WdgM_GetMode(WdgM_ModeType* Mode);
  *
  * \note       AUTOSAR 標準の SWS_WdgM には存在しない本プロジェクト独自の
  *             拡張関数のため、対応する \AUTOSARReq は無い
- *             (WdgM_Cfg.h 冒頭のコメント参照)。ApiId は自己割当だが、
- *             従来の 0x08 は実仕様の WdgM_MainFunction([SWS_WdgM_00159])の
- *             正規 ServiceID と衝突していたため、未使用の 0x0a へ変更した。
+ *             (WdgM_Cfg.h 冒頭のコメント参照)。ApiId は自己割当で、
+ *             実仕様の WdgM_MainFunction([SWS_WdgM_00159])の正規 ServiceID
+ *             （0x08）を避けるため、未使用の 0x0a とした。
  * \ServiceID      {0x0a}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -309,7 +303,7 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
  *          （[SWS_WdgM_00202]/[SWS_WdgM_00206]、WdgM_CheckpointReached() 側で
  *          確定済み）。Alive のみ、連続 FAILED 判定サイクル数が
  *          WDGM_EXPIRED_SUPERVISION_CYCLE_TOL（WdgM_Cfg.h）に達するまでは
- *          FAILED に留まり、達すると EXPIRED になる（2026-09 追加。実仕様の
+ *          FAILED に留まり、達すると EXPIRED になる（実仕様の
  *          per-SE WdgMFailedAliveSupervisionRefCycleTol 増減カウンタの簡易版。
  *          詳細は WdgM.c の WdgM_EntityExpiredCycleCount コメント参照）。
  *
@@ -371,12 +365,8 @@ Std_ReturnType WdgM_GetGlobalStatus(WdgM_GlobalStatusType* Status);
  *          判定をリフレッシュより先に行うため、判定で WdgM_GlobalStopped が
  *          立てば、同じ呼び出しの中でリフレッシュが止まる。
  *
- *          以前は、判定（6000ms 周期、WdgM_MainFunction）と、リフレッシュ
- *          （1000ms 周期、独自 API の WdgM_TriggerHwWatchdog）を別タスクに
- *          分けていた（Renesas RA4M1 の IWDT 最大タイムアウト 約 5592ms が
- *          判定サイクルより短いため）。2026-10 に、呼び出し周期を 1000ms に
- *          揃え、判定だけを基準周期ごとに間引く標準の構成へ統合した
- *          （周期の分離という本来の目的は保たれる）。
+ *          判定の周期（6000ms）は、Renesas RA4M1 の IWDT 最大タイムアウト（約 5592ms）より
+ *          長いため、リフレッシュだけを 1000ms 周期で行い、判定を基準周期ごとに間引く。
  *
  *          WdgM_Init() が完了していなければ、何もしない（HW ウォッチドッグは
  *          WdgM_Init() で有効化されるため、リフレッシュ対象がない）。
@@ -403,10 +393,6 @@ void WdgM_MainFunction(void);
  *          WdgM_ResetRequested フラグを立て、以降 WdgM_MainFunction() は
  *          Global Supervision Status に関わらずリフレッシュを二度と行わなく
  *          なる（次回 WdgM_Init() が呼ばれるまで。[SWS_WdgM_00233]）。
- *          本プロジェクトの HW ウォッチドッグ（Renesas RA の IWDT）は一度
- *          有効化するとソフトウェアから無効化できないため、Wdg が未初期化など
- *          で即時リセットできなかった場合でも、リフレッシュ停止から
- *          WDGM_HW_WATCHDOG_TIMEOUT_MS 以内に実 MCU リセットへ至る。
  *
  * \note    WdgM が未初期化（WDGM_GLOBAL_STATUS_DEACTIVATED）の場合は
  *          WDGM_E_NO_INIT を報告し、何もせず戻る（[SWS_WdgM_00270]）。
@@ -422,7 +408,8 @@ void WdgM_PerformReset(void);
  * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
  *          ID を取得する。
  *
- * \details [SWS_WdgM_00349] 準拠: SEID を実 HW リセットをまたいで保持する
+ * \par 仕様
+ *          [SWS_WdgM_00349] 準拠: SEID を実 HW リセットをまたいで保持する
  *          必要があるため、C ランタイムが起動時にゼロクリアする通常の
  *          静的変数ではなく、リンカが未初期化のまま残す領域
  *          （`.noinit` セクション）に SEID とそのビット反転値を対で格納する。

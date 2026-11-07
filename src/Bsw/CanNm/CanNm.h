@@ -396,10 +396,6 @@ void CanNm_TxConfirmation(PduIdType TxPduId, Std_ReturnType result);
  *          呼び出し元のバッファへ複製し、SduLength を複製した長さへ更新する。バッファが NM フレームの長さ
  *          （CANNM_DLC）より小さいときは、何も複製せず E_NOT_OK を返し、PduInfoPtr を変えない。
  *
- *          簡略化: CanNmComUserDataSupport（NM ユーザデータを Com から PduR_CanNmTriggerTransmit() で集める機能）は
- *          持たないので、NM フレームは、CBV と Source Node ID だけで構成する。本プロジェクトの本番の設定は、
- *          CanNm の TX PDU をトリガ送信に対応させない（CanIf.json の triggerTransmit が無い）ので、本番コードからは呼ばれない。
- *
  * \param[in]     TxPduId     データを要求された CanNm の TX PDU の ID（CanNmConf_CanNmTxPdu_CanNm_Tx）。
  * \param[in,out] PduInfoPtr  SduDataPtr=複製先のバッファ、SduLength=その大きさ。戻るとき、複製した長さ。
  *                            NULL 禁止。SduDataPtr も NULL 禁止。

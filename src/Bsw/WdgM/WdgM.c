@@ -355,6 +355,9 @@ static void WdgM_EvaluateSupervisionCycle(void);
  *          ならないように、初期化の最後に有効化する）。
  *
  * \AUTOSARReq     {SWS_WdgM_00151}
+ *
+ * \param[in]  ConfigPtr  ポストビルドコンフィグへのポインタ。NULL 禁止。
+ *
  * \ServiceID      {0x00}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -433,7 +436,32 @@ void WdgM_GetVersionInfo(Std_VersionInfoType* VersionInfo)
 /**
  * \brief   WdgM の現在のモードを設定する（[SWS_WdgM_00154]）。
  *
+ * \par 仕様
+ *          次の 2 つのモードを切り替える（[SWS_WdgM_00154]）。
+ *            - WDGM_MODE_DEFAULT: 通常（RUN）。監視の判定を有効にし、WdgIf へ WDGIF_FAST_MODE を要求する
+ *              （WdgM_Init() も、これと同じ状態で始まる）。
+ *            - WDGM_MODE_POST_RUN: POST_RUN。Rte_Engine などの監視対象タスクが意図的に止まり、Alive Supervision が
+ *              必ず FAILED になるため、監視の判定を抑制し（FAILED でも HW ウォッチドッグのリフレッシュを続ける）、
+ *              WdgIf へ WDGIF_OFF_MODE を要求する。本プロジェクトの HW（Renesas RA の WDT）は一度有効化すると
+ *              無効化できず、この要求は拒否される（Dem に WDG_DISABLE_REJECTED が記録される）が、
+ *              ここでの目的は「WdgM が FAILED 判定の結果を無視する」ことなので、戻り値は無視する。
+ *          EcuM が、RUN から POST_RUN へ遷移する時に WDGM_MODE_POST_RUN、RUN へ復帰する時に WDGM_MODE_DEFAULT を設定する
+ *          （復帰時は WdgM_ResumeSupervision() も併せて呼ぶこと）。
+ *
+ * \par 実装
+ *          監視対象・許容値セット自体は、モードによらず共通（単一の静的コンフィグ。学習用簡略化）。
+ *          そのため、モードごとの監視の入れ替え（[SWS_WdgM_00186]）、WdgIf_SetMode() 失敗時の Global Status の STOPPED への
+ *          遷移・Dem WDGM_E_SET_MODE の報告（[SWS_WdgM_00139]/[SWS_WdgM_00142]）、Global Status のガード
+ *          （[SWS_WdgM_00145]/[SWS_WdgM_00316]）、SE 単位の activate/deactivate（[SWS_WdgM_00182]/[SWS_WdgM_00315]）、
+ *          OFF_MODE 禁止時の WDGM_E_DISABLE_NOT_ALLOWED（[SWS_WdgM_00031]）は未実装
+ *          （詳細・調査経緯は docs/modules/WdgM_Notes.md 参照）。
+ *
  * \AUTOSARReq     {SWS_WdgM_00154, SWS_WdgM_00020, SWS_WdgM_00021}
+ *
+ * \param[in]  Mode  設定するモード（WDGM_MODE_DEFAULT / WDGM_MODE_POST_RUN）。
+ * \retval  E_OK      モードを設定した。
+ * \retval  E_NOT_OK  WdgM 未初期化、または Mode が範囲外（WDGM_MODE_COUNT 以上）。
+ *
  * \ServiceID      {0x03}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -496,6 +524,12 @@ static void WdgM_ApplyMode(WdgM_ModeType Mode)
  * \brief   WdgM の現在のモードを取得する（[SWS_WdgM_00168]）。
  *
  * \AUTOSARReq     {SWS_WdgM_00168, SWS_WdgM_00170, SWS_WdgM_00253}
+ *
+ * \param[out]  Mode  現在のモードの格納先。NULL 禁止。
+ * \retval  E_OK      モードを正常に返した。
+ * \retval  E_NOT_OK  NULL ポインタ、または WdgM 未初期化
+ *                    (この場合 *Mode は `WDGM_MODE_DEFAULT`)。
+ *
  * \ServiceID      {0x0b}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -624,6 +658,11 @@ void WdgM_ResumeSupervision(void)
  *
  * \AUTOSARReq     {SWS_WdgM_00202, SWS_WdgM_00206, SWS_WdgM_00263, SWS_WdgM_00278,
  *                  SWS_WdgM_00279, SWS_WdgM_00356, SWS_WdgM_00357}
+ *
+ * \param[in]  SEID          エンティティ ID (WdgM_Cfg.h の WDGM_ENTITY_*)。
+ * \param[in]  CheckpointId  チェックポイント ID (WdgM_Cfg.h の WDGM_CP_*)。
+ * \return     E_OK: 正常受付。E_NOT_OK: ID 不正。
+ *
  * \ServiceID      {0x0E}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -711,11 +750,21 @@ Std_ReturnType WdgM_CheckpointReached(WdgM_SupervisedEntityIdType SEID, WdgM_Che
  *          場合は EXPIRED（WdgM_EntityExpiredCycleCount 参照。2026-09 追加）、
  *          今回のサイクルで初めて FAILED になった場合はこれまで通り FAILED。
  *
+ * \AUTOSARReq    {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172,
+ *                  SWS_WdgM_00173, SWS_WdgM_00257, SWS_WdgM_00359}
+ *
+ * \param[in]   SEID    エンティティ ID。
+ * \param[out]  Status  ローカルステータスの格納先。NULL 禁止。
+ * \return      E_OK: 正常取得。E_NOT_OK: NULL ポインタ・未初期化・SEID 不正
+ *              (この場合 *Status は WDGM_LOCAL_STATUS_DEACTIVATED)。
+ *
  * \warning    戻り値 (Std_ReturnType: E_OK=0/E_NOT_OK=1) と *Status
  *             (WdgM_LocalStatusType: OK=0/FAILED=1) は数値がたまたま重なる。
- *             戻り値と *Status の型を混同して比較しないこと。
- * \AUTOSARReq     {SWS_WdgM_00169, SWS_WdgM_00171, SWS_WdgM_00172,
- *                  SWS_WdgM_00173, SWS_WdgM_00257, SWS_WdgM_00359}
+ *             `WdgM_GetLocalStatus(seid, &status) == WDGM_LOCAL_STATUS_FAILED`
+ *             のように戻り値と *Status の型を混同して比較しないこと
+ *             （それは常に false になり、本来検出したい FAILED を
+ *             見逃す）。必ず戻り値で成否を確認した上で *Status を見ること。
+ *
  * \ServiceID      {0x0C}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -854,6 +903,11 @@ static uint8 WdgM_AnyEntityExpired(void)
  *                  SWS_WdgM_00076, SWS_WdgM_00078, SWS_WdgM_00215,
  *                  SWS_WdgM_00216, SWS_WdgM_00217, SWS_WdgM_00218,
  *                  SWS_WdgM_00219, SWS_WdgM_00220, SWS_WdgM_00221}
+ *
+ * \param[out]  Status  グローバルステータスの格納先。NULL 禁止。
+ * \return      E_OK: 正常取得。E_NOT_OK: NULL ポインタまたは未初期化
+ *              (この場合 *Status は WDGM_GLOBAL_STATUS_DEACTIVATED)。
+ *
  * \ServiceID      {0x0D}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -1027,6 +1081,11 @@ void WdgM_MainFunction(void)
  *          しまわないようにするため（[SWS_WdgM_00233]: 呼び出し後は二度と
  *          トリガ条件を更新しない）。
  *
+ *          本プロジェクトの HW ウォッチドッグ（Renesas RA の IWDT）は一度
+ *          有効化するとソフトウェアから無効化できないため、Wdg が未初期化など
+ *          で即時リセットできなかった場合でも、リフレッシュ停止から
+ *          WDGM_HW_WATCHDOG_TIMEOUT_MS 以内に実 MCU リセットへ至る。
+ *
  * \AUTOSARReq     {SWS_WdgM_00264, SWS_WdgM_00232, SWS_WdgM_00233, SWS_WdgM_00270}
  * \ServiceID      {0x0f}
  * \Reentrancy     {Non Reentrant}
@@ -1053,7 +1112,23 @@ void WdgM_PerformReset(void)
  * \brief   直近の HW ウォッチドッグリセットの原因となった Supervised Entity の
  *          ID を取得する。
  *
- * \details [SWS_WdgM_00349]: WdgM_FirstExpiredSEID/Inv（.noinit 領域、宣言
+ * \par 仕様
+ *          [SWS_WdgM_00349] 準拠: SEID を実 HW リセットをまたいで保持する
+ *          必要があるため、C ランタイムが起動時にゼロクリアする通常の
+ *          静的変数ではなく、リンカが未初期化のまま残す領域
+ *          （`.noinit` セクション）に SEID とそのビット反転値を対で格納する。
+ *          両者が一致すれば直前のリセット原因として有効な値、一致しなければ
+ *          （初回起動・電源断からの起動等で RAM 内容が不定なため）無効と
+ *          判断し E_NOT_OK を返す。
+ *
+ *          値の書き込みは WdgM_MainFunction() が
+ *          WDGM_GLOBAL_STATUS_STOPPED（グローバル猶予サイクルを使い切り、
+ *          HW リセットが確実に迫っている状態）へ遷移した瞬間に、その時点で
+ *          FAILED な最初の Supervised Entity（走査順で最初に見つかったもの）
+ *          を記録する形で行う。
+ *
+ * \par 実装
+ *          [SWS_WdgM_00349]: WdgM_FirstExpiredSEID/Inv（.noinit 領域、宣言
  *          コメント参照）の一致を確認し、一致すれば有効な値として *SEID へ
  *          書き込み E_OK を返す。不一致（初回起動・POR 等で不定値のまま）
  *          なら *SEID に 0 を書き込み E_NOT_OK を返す。
@@ -1062,6 +1137,12 @@ void WdgM_PerformReset(void)
  *          WDGM_E_NO_INIT チェックは行わない。
  *
  * \AUTOSARReq     {SWS_WdgM_00346, SWS_WdgM_00347, SWS_WdgM_00348, SWS_WdgM_00349}
+ *
+ * \param[out]  SEID  直前のリセット原因となった SEID の格納先。NULL 禁止。
+ *                    E_NOT_OK 時は 0 を書き込む（[SWS_WdgM_00349]）。
+ * \retval  E_OK      SEID を正常に返した。
+ * \retval  E_NOT_OK  SEID が NULL、または保存値が無効（初回起動・POR 等）。
+ *
  * \ServiceID      {0x10}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

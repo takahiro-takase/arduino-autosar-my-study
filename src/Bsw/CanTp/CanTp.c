@@ -203,6 +203,10 @@ static uint8 CanTp_DecodeStMin(uint8 raw);
  * \details RX/TX チャネルの状態を IDLE にリセットする。
  *
  * \AUTOSARReq     {SWS_CanTp_00208}
+ *
+ * \param[in]  CfgPtr  常に NULL を渡すこと（本プロジェクトは post-build 設定を
+ *                     持たないため）。
+ *
  * \ServiceID      {0x01}
  * \Reentrancy     {Non Reentrant}
  * \Synchronicity  {Synchronous}
@@ -374,7 +378,11 @@ Std_ReturnType CanTp_Transmit(PduIdType TxSduId, const PduInfoType* PduInfoPtr)
 /**
  * \brief   タイムアウト監視と CF 送信を周期的に処理する。
  *
- * \details EcuM_MainFunction から毎ループ呼び出す。
+ * \par 仕様
+ *          EcuM_MainFunction から毎ループ呼び出す。以下を担当する:
+ *          - TX WAIT_FC 状態: N_Bs タイムアウト検出 → TX 中断
+ *          - TX SEND_CF 状態: STmin 経過後に次の CF を送信
+ *          - RX WAIT_CF 状態: N_Cr タイムアウト検出 → RX 中断
  *
  * \AUTOSARReq     {SWS_CanTp_00213}
  * \ServiceID      {0x06}

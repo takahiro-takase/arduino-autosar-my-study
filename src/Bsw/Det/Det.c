@@ -54,7 +54,8 @@
 /**
  * \brief   Det モジュールを初期化する（[SWS_Det_00008]）。
  *
- * \details 実仕様は「内部変数の設定」を初期化の目的として挙げるが、本
+ * \par 実装
+ *          実仕様は「内部変数の設定」を初期化の目的として挙げるが、本
  *          プロジェクトの Det はログ出力の都度その場でフォーマットするだけの
  *          ステートレスな実装であり、初期化を要する内部変数を一切持たない
  *          （`Det_ReportError()`/`Log_Write()` は本関数の呼び出し有無に
@@ -109,12 +110,14 @@ void Log_Write(LogLevel lvl, const char* tag, const char* func, const char* fmt,
 /**
  * \brief   開発エラーを標準化された形式で通知する（AUTOSAR Det_ReportError 準拠）。
  *
- * \details 上記の DET_LOG* マクロ（呼び出し元固有の自由文字列、人間が読むための
+ * \par 仕様
+ *          上記の DET_LOG* マクロ（呼び出し元固有の自由文字列、人間が読むための
  *          詳細情報）とは別のチャネルとして、ModuleId/InstanceId/ApiId/ErrorId
  *          という標準化された 4 つ組を報告する。呼び出し元は通常、詳細を
  *          伝える DET_LOGE(...) と、この Det_ReportError(...) の両方を呼ぶ
  *          （情報を失わずに標準準拠のエラー通知も行うため）。
  *
+ * \par 実装
  *          本実装は実 AUTOSAR の「コールアウトフック登録・実行停止」等の
  *          高度な機能を持たない学習用の簡略実装で、単に
  *          `[<ms>ms] [<ノード名>] ERROR Det: M=<ModuleId> I=<InstanceId> API=0x<ApiId> ERR=0x<ErrorId>`
@@ -160,7 +163,8 @@ Std_ReturnType Det_ReportError(uint16 ModuleId, uint8 InstanceId, uint8 ApiId, u
 /**
  * \brief   Det モジュールを起動する（[SWS_Det_00010]）。
  *
- * \details 実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
+ * \par 実装
+ *          実仕様は「Det の環境（統合者）が Det 自身のセルフテストを
  *          トリガする」用途を想定するが、本プロジェクトはそのようなセルフ
  *          テスト機構を持たないため no-op とする（実仕様自身も「起動時
  *          呼び出しを要しない Det 実装では空でよい」と明記している）。
@@ -182,7 +186,8 @@ void Det_Start(void)
 /**
  * \brief   実行時エラーを標準化された形式で通知する（[SWS_Det_01001]）。
  *
- * \details 実仕様は「コールアウトフックが設定されていれば呼び出す」機構を
+ * \par 実装
+ *          実仕様は「コールアウトフックが設定されていれば呼び出す」機構を
  *          持つが、本プロジェクトはそのようなコールアウト登録機構自体を
  *          持たない学習用の簡略実装（Det_ReportError() と同じ設計方針）
  *          であり、単に Det_ReportError() と同一形式の1行を出力するのみ。
@@ -219,7 +224,8 @@ Std_ReturnType Det_ReportRuntimeError(uint16 ModuleId, uint8 InstanceId, uint8 A
 /**
  * \brief   一過性障害を標準化された形式で通知する（[SWS_Det_01003]）。
  *
- * \details 実仕様は「コールアウトフックが設定されていればその戻り値
+ * \par 実装
+ *          実仕様は「コールアウトフックが設定されていればその戻り値
  *          （複数設定時は論理和）を返し、未設定なら E_OK」と規定するが、
  *          本プロジェクトはコールアウト登録機構自体を持たない学習用の
  *          簡略実装のため常に E_OK を返す（Det_ReportError()/

@@ -56,13 +56,10 @@ Std_ReturnType CanIf_GetControllerErrorState(uint8 ControllerId, Can_ErrorStateT
  * \brief   指定 TX PDU の送信完了通知状態を取得し、読み出した状態をクリアする
  *          （[SWS_CANIF_00202]）。
  *
- * \details `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
+ * \par 仕様
+ *          `CanIf_TxConfirmation()` が呼ばれると当該 TX PDU の状態は
  *          `CANIF_TX_RX_NOTIFICATION` になり、本関数を呼ぶと
  *          `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00393]）。
- *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READTXPDU_NOTIFY_STATUS_API`/
- *          `CANIF_TXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
- *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
- *          持たないため常に読み出し時にリセットする（学習用簡略化）。
  *
  * \param[in]  CanIfTxSduId  対象 TX PDU の ID（`CanIf_ConfigPtr->TxPduConfig[]`
  *                           の添字、`CanIf_Transmit()`/`CanIf_TxConfirmation()`
@@ -83,13 +80,10 @@ CanIf_NotifStatusType CanIf_ReadTxNotifStatus(PduIdType CanIfTxSduId);
  * \brief   指定 RX PDU の受信通知状態を取得し、読み出した状態をクリアする
  *          （[SWS_CANIF_00230]）。
  *
- * \details `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
+ * \par 仕様
+ *          `CanIf_RxIndication()` が対象 RX PDU への振り分けに成功すると
  *          当該 RX PDU の状態は `CANIF_TX_RX_NOTIFICATION` になり、本関数を
  *          呼ぶと `CANIF_NO_NOTIFICATION` へリセットされる（[SWS_CANIF_00394]）。
- *          実仕様はこのリセット動作自体を `CANIF_PUBLIC_READRXPDU_NOTIFY_STATUS_API`/
- *          `CANIF_RXPDU_READ_NOTIFYSTATUS` の2つのビルド時コンフィグで
- *          有効/無効を切り替えられるが、本プロジェクトはそのような切替を
- *          持たないため常に読み出し時にリセットする（学習用簡略化）。
  *
  * \param[in]  CanIfRxSduId  対象 RX PDU の ID（`CanIf_ConfigPtr->RxPduConfig[]`
  *                           の添字、`CanIf_ReadRxPduData()` と同じ名前空間。
@@ -119,12 +113,8 @@ CanIf_NotifStatusType CanIf_ReadRxNotifStatus(PduIdType CanIfRxSduId);
  *          （仕様の <User_ValidateWakeupEvent>。記憶が無ければ呼ばない）。
  *          記憶は、通知後に消す。また、コントローラが `CAN_CS_SLEEP` に
  *          なったとき、前回の起床で記憶した受信を消す（[SWS_CANIF_00756]）。
- *
- *          以前は CanIf_RxIndication() が、実仕様に存在しない独自 API の
- *          `CanSM_RxIndication()` を毎回呼び、CanSM が受信を検証成功の合図として
- *          自分で FULL_COM へ確定していた（2026-10 に置き換え。確定は
- *          EcuM_ValidateWakeupEvent() → ComM_EcuM_WakeUpIndication() →
- *          CanSM_RequestComMode(FULL_COM) の経路で行う）。
+ *          FULL_COM への確定は、EcuM_ValidateWakeupEvent() → ComM_EcuM_WakeUpIndication() →
+ *          CanSM_RequestComMode(FULL_COM) の経路で行う。
  *
  * \note    本プロジェクトの検証は、コントローラが Listen-Only
  *          （`CAN_CS_STOPPED`）の間に行う。実仕様は `CAN_CS_STARTED` のコントローラの
@@ -150,13 +140,11 @@ Std_ReturnType CanIf_CheckValidation(EcuM_WakeupSourceType WakeupSource);
 /**
  * \brief   CAN コントローラが起床を検出したかを調べる（[SWS_CANIF_00219]）。
  *
- * \details EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼ぶ
+ * \par 仕様
+ *          EcuM のコールアウト `EcuM_CheckWakeup()` が、CAN の起床要因について呼ぶ
  *          （[SWS_CANIF_00395]）。起床を検出したコントローラを `Can_CheckWakeup()` で調べ、
  *          検出していれば Can が `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
  *          戻り値は、`Can_CheckWakeup()` の戻り値をそのまま返す（[SWS_CANIF_00720]/[SWS_CANIF_00678]）。
- *          本プロジェクトの CAN コントローラは 1 つだけで、CAN トランシーバのドライバは持たない。
- *          構成項目 `CanIfWakeupSupport`/`CanIfCtrlWakeupSupport` による有効・無効の切り替えは持たない
- *          （[SWS_CANIF_00180]/[SWS_CANIF_00892]）。
  *
  * \param[in]  WakeupSource  確認する起床要因（`ECUM_WKSOURCE_CAN` のビット）。
  *                          ビットが立っていなければ `CANIF_E_PARAM_WAKEUPSOURCE`

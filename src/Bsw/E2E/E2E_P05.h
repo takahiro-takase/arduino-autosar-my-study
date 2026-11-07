@@ -209,9 +209,7 @@ Std_ReturnType E2E_P05CheckInit(E2E_P05CheckStateType *State);
  * \return     E2E_E_OK: チェックを実行した（結果は State->Status 参照）。
  *             E2E_E_INPUTERR_NULL: Config/State のいずれかが NULL。
  *             E2E_E_INPUTERR_WRONG: Data が NULL、または Length が
- *             Config->DataLength と不一致（[SWS_E2E_00411/00412]、
- *             2026-09-06 是正。以前はこのケースでも E2E_E_OK を返し
- *             State->Status のみ ERROR にしていた）。
+ *             Config->DataLength と不一致（[SWS_E2E_00411/00412]）。
  *
  * \AUTOSARReq     {SWS_E2E_00411}
  * \ServiceID      {0x28}

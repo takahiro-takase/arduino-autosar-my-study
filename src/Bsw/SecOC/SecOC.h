@@ -56,8 +56,7 @@ extern "C" {
  *          config->RxPduCount/TxPduCount が本プロジェクトのテーブル上限
  *          （SECOC_RX_PDU_COUNT/SECOC_TX_PDU_COUNT）を超える場合は
  *          `SECOC_E_INIT_FAILED` を報告し初期化を行わない
- *          （[SWS_SecOC_00101]。2026-09 追加。以前はログのみで DET 報告
- *          していなかった）。
+ *          （[SWS_SecOC_00101]）。
  *
  * \param[in]  config  SecOC 設定構造体。NULL 禁止。
  *
@@ -74,9 +73,8 @@ void SecOC_Init(const SecOC_ConfigType* config);
  * \details 設定ポインタを NULL に戻すとともに、全ての内部グローバル変数
  *          (RX 側のフレッシュネス状態・VerifyStatusOverride 設定、TX 側の
  *          保留フラグ・フレッシュネスカウンタ)と Secured I-PDU のバッファ
- *          (TX Authentic I-PDU バッファ)をクリアする（[SWS_SecOC_00157]、
- *          2026-09 追加。以前は設定ポインタの NULL 化のみで内部状態が
- *          残ったままだった）。未初期化状態で呼ばれた場合は
+ *          (TX Authentic I-PDU バッファ)をクリアする（[SWS_SecOC_00157]）。
+ *          未初期化状態で呼ばれた場合は
  *          SECOC_E_UNINIT を報告し何もしない。
  *
  * \AUTOSARReq     {SWS_SecOC_00161, SWS_SecOC_00157}
@@ -105,13 +103,11 @@ void SecOC_DeInit(void);
  *
  *          `Csm_MacVerify()` 自体がサービスを提供できなかった場合（MAC
  *          不一致という正常な検証結果とは別の、下位層自体の異常）は
- *          `SECOC_E_CRYPTO_FAILURE` を報告する（[SWS_SecOC_00166]。
- *          2026-09 追加）。
+ *          `SECOC_E_CRYPTO_FAILURE` を報告する（[SWS_SecOC_00166]）。
  *
  *          検証結果は、`SecOC_RxPduConfigType.VerificationStatusCallout` が
  *          設定されていれば `VerificationStatusPropagationMode` に従って
- *          都度通知する（[SWS_SecOC_00048]/[SWS_SecOC_00119]、2026-09-20
- *          追加）。報告する種別は `SecOC_VerifyStatusOverride()` 適用後の
+ *          都度通知する（[SWS_SecOC_00048]/[SWS_SecOC_00119]）。報告する種別は `SecOC_VerifyStatusOverride()` 適用後の
  *          最終判定に基づく（詳細は `SecOC_VerificationResultType` 参照）。
  *
  * \param[in]  RxPduId     検証対象の SecOC RX Secured I-PDU ID
@@ -133,14 +129,6 @@ void SecOC_RxIndication(PduIdType RxPduId, const PduInfoType* PduInfoPtr);
  *          検証は本関数の呼び出し有無に関わらず常に行われる（本実装は
  *          `SecOC_RxIndication()` 内で実際の検証結果を求めたのち、本関数が
  *          設定したオーバーライド状態を適用して最終判定とする）。
- *
- *          実仕様は個別の Freshness Value を識別する `freshnessValueId`
- *          という専用の設定要素（Freshness Value Manager 相当）を持つが、
- *          本プロジェクトはそのような機構自体を持たず、Freshness Value は
- *          RX Secured I-PDU ごとに 1 対 1 で紐づく（`SecOC_RxPduConfigType`
- *          参照）。そのため本実装では `freshnessValueID` を対象の
- *          `SecOCRxPduId`（`SecOC_RxIndication()` の `RxPduId` と同じ値）と
- *          みなして扱う（学習用簡略化）。
  *
  *          `overrideStatus=41`（VerifyStatus を Pass に強制）は、実仕様
  *          自身が既定 FALSE の `SecOCEnableForcedPassOverride`
@@ -203,20 +191,13 @@ Std_ReturnType SecOC_IfTransmit(PduIdType TxPduId, const PduInfoType* PduInfoPtr
 /**
  * \brief   下位層（CanIf 等）からの TX 完了通知エントリポイント。
  *
- * \details `PduR_TxRoutingPathType.ConfFct` へ直接登録できる（[7.4.1]
+ * \par 仕様
+ *          `PduR_TxRoutingPathType.ConfFct` へ直接登録できる（[7.4.1]
  *          "Authentication during direct transmission" の ad-hoc
  *          transmission フロー相当。[SWS_SecOC_00063]/[SWS_SecOC_00064]）。
  *          `TxPduId` に一致する TX エントリが見つかれば、結果を
  *          `PduR_SecOCTxConfirmation()` 経由で元の送信元（Com 等）へ中継する
  *          （[SWS_SecOC_00063]）。
- *
- *          [SWS_SecOC_00064] が要求する「Secured I-PDU を保持するバッファの
- *          解放」について: 本実装の TX バッファ（`SecOC_TxAuthenticBuffer`）は
- *          `SecOC_MainFunctionTx()` が `PduR_SecOCTransmit()` へコピーした
- *          時点で既に解放済み扱い（次の `SecOC_IfTransmit()` 呼び出しで
- *          上書きしてよい）であり、送信完了通知を待って別途ロック解除する
- *          仕組みは持たない。実運用への影響は無い（現状 TX 方向で SecOC を
- *          使う PDU が無いため。`SECOC_TX_PDU_COUNT` 参照）。
  *
  * \param[in]  TxPduId  送信完了が通知された SecOC TX Secured I-PDU ID
  *                      （SecOC_TxPduConfigType.SecOCTxPduId と照合する）。
@@ -295,13 +276,6 @@ void SecOC_MainFunctionTx(void);
 
 /**
  * \brief   周期実行関数。RX 方向の認証・検証処理を行う（[SWS_SecOC_00171]）。
- *
- * \details 実仕様は RX 方向の認証・検証処理を非同期の検証キュー越しに周期
- *          処理する構成も許容するが、本プロジェクトの `SecOC_RxIndication()`
- *          は受信の都度 `Csm_MacVerify()` を SINGLECALL で同期実行し検証を
- *          完結させる設計のため、本関数が処理すべき保留中の RX ジョブは
- *          存在しない。そのため未初期化チェックのみを行う薄い実装とする
- *          （[SWS_SecOC_00172] 「未初期化なら何もせず戻る」は満たす）。
  *
  * \pre        SecOC_Init() が正常に完了していること。
  *

@@ -120,9 +120,7 @@ void Fee_GetVersionInfo(Std_VersionInfoType* versioninfo);
  *
  *          未初期化時は`FEE_E_UNINIT`（[SWS_Fee_00121]）、ジョブ処理中は
  *          `FEE_E_BUSY`（[SWS_Fee_00170]）をそれぞれ報告しモード切替を
- *          実行せず戻る（2026-09 追加。以前は`Fee_Read`/`Fee_Write`/
- *          `Fee_Cancel`が律儀にチェックしている2条件が本関数だけ抜けていた
- *          非対称な実装だった）。
+ *          実行せず戻る（`Fee_Read`/`Fee_Write`/`Fee_Cancel` と同じ 2 条件）。
  *
  * \param[in]  Mode  MEMIF_MODE_SLOW / MEMIF_MODE_FAST。
  *
@@ -139,8 +137,7 @@ void Fee_SetMode(MemIf_ModeType Mode);
  * \details Os スケジューラ開始前（Fee_MainFunction() を誰も呼べない期間）の
  *          利用のみを想定した同期 API。ブロッキングする。
  *          ジョブ処理中（MEMIF_BUSY）の呼び出しは拒否する（[SWS_Fee_00133]/
- *          [SWS_Fee_00172]。2026-09 追加。Fee_Write() には既にあった
- *          チェックが Fee_Read() には欠けていた非対称を是正）。
+ *          [SWS_Fee_00172]。Fee_Write() と同じチェック）。
  *
  * \param[in]   Address        読み込み開始アドレス。
  * \param[out]  DataBufferPtr  読み込み先バッファ。NULL 禁止。
@@ -197,8 +194,7 @@ Std_ReturnType Fee_Write(uint16 Address, const uint8* DataBufferPtr, uint16 Leng
  *          （[SWS_Fee_00124]）。ジョブが無い状態（MEMIF_BUSY でない）で
  *          呼んだ場合も module status/job result を一切変更せず、実行時
  *          エラー FEE_E_INVALID_CANCEL のみ報告する（[SWS_Fee_00164]/
- *          [SWS_Fee_00184]。2026-09 是正: 以前は毎回無条件で
- *          Fee_GetJobResult() の結果を MEMIF_JOB_CANCELED へ上書きしていた）。
+ *          [SWS_Fee_00184]）。
  *
  * \AUTOSARReq     {SWS_Fee_00089, SWS_Fee_00080, SWS_Fee_00081,
  *                  SWS_Fee_00124, SWS_Fee_00164, SWS_Fee_00184}
@@ -225,9 +221,7 @@ MemIf_StatusType Fee_GetStatus(void);
  * \brief   直近のジョブ結果を取得する。
  *
  * \details 未初期化時は FEE_E_UNINIT を報告し MEMIF_JOB_FAILED を返す
- *          （[SWS_Fee_00125]。2026-09 追加。Fee_GetStatus() の
- *          MEMIF_UNINIT 分岐と対称。以前はチェックが無く Fee_Init() 前でも
- *          初期値 MEMIF_JOB_OK をそのまま返していた）。
+ *          （[SWS_Fee_00125]。Fee_GetStatus() の MEMIF_UNINIT 分岐と対称）。
  *
  * \retval  MEMIF_JOB_OK       直近のジョブが正常完了した。
  * \retval  MEMIF_JOB_PENDING  ジョブが処理中。

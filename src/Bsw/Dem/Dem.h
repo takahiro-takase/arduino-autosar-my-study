@@ -377,7 +377,8 @@ Std_ReturnType Dem_GetOperationCycleState(uint8 OperationCycleId, Dem_OperationC
 /**
  * \brief   DTC ステータス availability mask（サポートするステータスビット）を取得する。
  *
- * \details DCM SID 0x19 の各種応答([SWS_Dem_00060]: statusAvailabilityMask
+ * \par 仕様
+ *          DCM SID 0x19 の各種応答([SWS_Dem_00060]: statusAvailabilityMask
  *          フィールド)が使う値を返す。本 ECU は ISO 14229-1 Annex B の
  *          bit0(testFailed)/bit2(pendingDTC)/bit3(confirmedDTC)/
  *          bit4(testNotCompletedSinceLastClear)/bit5(testFailedSinceLastClear)
@@ -404,13 +405,6 @@ Std_ReturnType Dem_GetDTCStatusAvailabilityMask(uint8 ClientId, Dem_UdsStatusByt
 
 /**
  * \brief   指定イベントの UDS DTC ステータスバイトを取得する（[SWS_Dem_91008]）。
- *
- * \details 実仕様は本関数を SW-C や FiM 等の BSW モジュールがイベント単位で
- *          使うためのものと位置づけ、Dcm は DTC 単位の `Dem_GetStatusOfDTC`
- *          を使うと規定する（同関数の Note 参照）。本プロジェクトは
- *          `Dem_GetStatusOfDTC`（DTC→EventId 変換を内蔵する別 API）を持たず、
- *          Dcm 側は既に解決済みの EventId で直接本関数を呼ぶ既存の簡略化を
- *          そのまま踏襲する（本関数の改名以前から変わらない設計）。
  *
  * \param[in]   EventId        イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[out]  UDSStatusByte  取得したステータスバイト（statusAvailabilityMask
@@ -453,12 +447,6 @@ Std_ReturnType Dem_GetMonitorStatus(Dem_EventIdType EventId, Dem_MonitorStatusTy
 /**
  * \brief   イベント ID から DTC コードを取得する（[SWS_Dem_00198]/[SWS_Dem_00269]）。
  *
- * \details 本プロジェクトの `Dem_DtcTable[]`（Dem_PBCfg.c）は UDS 3-byte 形式の
- *          DTC 値のみを構成しており、OBD/J1939 形式は一切保持しないため、
- *          `DTCFormat` に `DEM_DTC_FORMAT_UDS` 以外を渡された場合は
- *          `DEM_E_NO_DTC_AVAILABLE`（要求フォーマットの DTC が構成されていない）
- *          を返す。
- *
  * \param[in]   EventId     イベント ID (DemConf_DemEventParameter_* 定数)。
  * \param[in]   DTCFormat   取得する DTC 値のフォーマット。本プロジェクトは
  *                          `DEM_DTC_FORMAT_UDS` のみ対応。
@@ -482,15 +470,13 @@ Std_ReturnType Dem_GetDTCOfEvent(Dem_EventIdType EventId, Dem_DTCFormatType DTCF
  * \brief   Dem_SelectDTC() で選んだ DTC（または DTC グループ）をクリアし、NvM (EEPROM) を初期状態へ戻す
  *          （[SWS_Dem_00665]）。DCM SID 0x14 (ClearDiagnosticInformation) から呼び出す。
  *
- * \details 実仕様どおりの 2 段階: 先に `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)` で対象を選び、
+ * \par 仕様
+ *          実仕様どおりの 2 段階: 先に `Dem_SelectDTC(ClientId, DTC, DTCFormat, DTCOrigin)` で対象を選び、
  *          （任意で `Dem_GetDTCSelectionResultForClearDTC()` で選択の結果を確かめ、）本関数を呼ぶ。
  *          選択は、次に `Dem_SelectDTC()` を呼ぶまで、クライアントごとに残る（[SWS_Dem_01253]）。
  *
  *          選んだのが `DEM_GROUP_ALL_DTCS`（0xFFFFFF）なら、[SWS_Dem_01203] のとおり、選んだ DTCOrigin の
  *          全イベントをクリアする。それ以外は、一致するイベント 1 件だけをクリアする。
- *
- *          実仕様は、非同期（`DEM_PENDING`）・複数クライアント（`DEM_CLEAR_BUSY`、`DEM_BUSY`）を前提とするが、
- *          本プロジェクトは常に同期的に完了するため、`DEM_PENDING`・`DEM_BUSY` は返さない。
  *
  * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
  *
@@ -531,7 +517,8 @@ Std_ReturnType Dem_GetDTCSelectionResult(uint8 ClientId);
  * \brief   Dem_GetDTCSelectionResult() と同じだが、DTC 消去（Dem_ClearDTC()）の設定を考慮した結果を返す
  *          （[SWS_Dem_91020]）。Dcm が、0x14 の否定応答コードを決めるために、消去の前に呼ぶ。
  *
- * \details 単一の DTC の消去だけを許す設定（DemClearDTCLimitation）は持たないため、結果は
+ * \par 仕様
+ *          単一の DTC の消去だけを許す設定（DemClearDTCLimitation）は持たないため、結果は
  *          Dem_GetDTCSelectionResult() と同じ。ただし、Dem_SelectDTC() が呼ばれていないときは、
  *          E_NOT_OK ではなく DEM_WRONG_DTC を返す（本関数の戻り値表に E_NOT_OK が無いため。[SWS_Dem_01261]）。
  *
@@ -553,10 +540,10 @@ Std_ReturnType Dem_GetDTCSelectionResultForClearDTC(uint8 ClientId);
 /**
  * \brief   以降の Dem_ClearDTC() などの対象にする、DTC（または DTC グループ）を選ぶ（[SWS_Dem_91016]）。
  *
- * \details 選択は、クライアントごとに、次に本関数を呼ぶまで残る（[SWS_Dem_01253]）。選択が有効かどうかは、
+ * \par 仕様
+ *          選択は、クライアントごとに、次に本関数を呼ぶまで残る（[SWS_Dem_01253]）。選択が有効かどうかは、
  *          本関数の戻り値ではなく、Dem_GetDTCSelectionResult() など、選択に続く API の戻り値で分かる
  *          （[SWS_Dem_01254]）。`DTC` に `DEM_GROUP_ALL_DTCS`（0xFFFFFF）を渡すと、全 DTC のグループを選ぶ。
- *          本プロジェクトは、DTC グループを、これ 1 つだけ持つ。
  *
  * \param[in]  ClientId   呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
  * \param[in]  DTC        選ぶ DTC（24-bit UDS 形式）、または `DEM_GROUP_ALL_DTCS`。
@@ -577,7 +564,8 @@ Std_ReturnType Dem_SelectDTC(uint8 ClientId, uint32 DTC, Dem_DTCFormatType DTCFo
 /**
  * \brief   Dem_SelectDTC() で選んだ DTC のステータスバイトを取得する（[SWS_Dem_00212]）。
  *
- * \details Dcm は、イベント ID ではなく、本関数で DTC のステータスを取得する（`Dem_GetEventUdsStatus()` は、
+ * \par 仕様
+ *          Dcm は、イベント ID ではなく、本関数で DTC のステータスを取得する（`Dem_GetEventUdsStatus()` は、
  *          SW-C や BSW モジュールが、イベント単位で使う）。ステータスは、`DemStatusAvailabilityMask` で
  *          マスクして返す。DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
  *
@@ -601,7 +589,8 @@ Std_ReturnType Dem_GetStatusOfDTC(uint8 ClientId, Dem_UdsStatusByteType* DTCStat
 /**
  * \brief   選んだ DTC のレコード（FreezeFrame・ExtendedData）の更新と削除を止める（[SWS_Dem_00233]）。
  *
- * \details Dcm が、Dem_SelectFreezeFrameData() / Dem_SelectExtendedDataRecord() で読む前に呼び、読み終えてから
+ * \par 仕様
+ *          Dcm が、Dem_SelectFreezeFrameData() / Dem_SelectExtendedDataRecord() で読む前に呼び、読み終えてから
  *          Dem_EnableDTCRecordUpdate() で戻す（[SWS_Dem_00270]）。止めている間、その DTC のイベントが
  *          確定 FAILED になっても、FreezeFrame の取り直しと故障確定回数の加算は、止めている間は行わず、
  *          Dem_EnableDTCRecordUpdate() が戻したときに行う（捨てない）。Dem_ClearDTC() が消去しても、そのレコードは
@@ -627,7 +616,8 @@ Std_ReturnType Dem_DisableDTCRecordUpdate(uint8 ClientId);
 /**
  * \brief   Dem_DisableDTCRecordUpdate() で止めたレコードの更新と削除を、元に戻す（[SWS_Dem_00234]）。
  *
- * \details 止めている間に Dem_ClearDTC() が消去していたレコードは消し、止めている間に確定 FAILED になっていたときは、
+ * \par 仕様
+ *          止めている間に Dem_ClearDTC() が消去していたレコードは消し、止めている間に確定 FAILED になっていたときは、
  *          FreezeFrame と故障確定回数を更新する（消去と更新は、保留した順に、NvM への書き込みを積む）。
  *
  * \param[in]  ClientId  呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
@@ -646,13 +636,12 @@ Std_ReturnType Dem_EnableDTCRecordUpdate(uint8 ClientId);
 /**
  * \brief   ExtendedData のレコードを選ぶ（[SWS_Dem_91017]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
  *
- * \details 以降の Dem_GetSizeOfExtendedDataRecordSelection() と Dem_GetNextExtendedDataRecord() が、この選択を使う
+ * \par 仕様
+ *          以降の Dem_GetSizeOfExtendedDataRecordSelection() と Dem_GetNextExtendedDataRecord() が、この選択を使う
  *          （[SWS_Dem_01272]）。Dem_SelectDTC() を呼ぶと、この選択は破棄される。Dem_SelectDTC() が呼ばれていない
  *          ときは、DEM_E_WRONG_CONDITION を報告する（[SWS_Dem_01274]）。
  *          選ぶ DTC が有効かどうか（DEM_WRONG_DTC / DEM_WRONG_DTCORIGIN）は、本関数が返す。レコード番号が
  *          構成に無いことは、本関数ではなく、Get 系が DEM_NO_SUCH_ELEMENT で返す（本関数の戻り値表に無いため）。
- *          本プロジェクトのレコードは、DEM_EXTENDED_DATA_RECORD_NUMBER（0x01）の 1 件だけ。0xFF は、全レコード
- *          （= この 1 件）。
  *
  * \param[in]  ClientId            呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
  * \param[in]  ExtendedDataNumber  レコード番号。0xFF は全レコード、0xFE は OBD のレコード全て（本プロジェクトは持たない）。
@@ -672,7 +661,8 @@ Std_ReturnType Dem_SelectExtendedDataRecord(uint8 ClientId, uint8 ExtendedDataNu
 /**
  * \brief   Dem_SelectExtendedDataRecord() で選んだレコードの大きさを取得する（[SWS_Dem_00240]）。
  *
- * \details 大きさは、レコード番号を含む（形式は {レコード番号, データ...}、[SWS_Dem_00076]）。レコードが
+ * \par 仕様
+ *          大きさは、レコード番号を含む（形式は {レコード番号, データ...}、[SWS_Dem_00076]）。レコードが
  *          記録されていない（一度も確定 FAILED していない）ときは、E_OK で 0 を返す（[SWS_Dem_00631]）。
  *          DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
  *
@@ -696,7 +686,8 @@ Std_ReturnType Dem_GetSizeOfExtendedDataRecordSelection(uint8 ClientId, uint16* 
 /**
  * \brief   Dem_SelectExtendedDataRecord() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00239]）。
  *
- * \details 書き出す形式は {レコード番号, データ...}（[SWS_Dem_00075]）。要求したレコード番号が 0xFF でも、
+ * \par 仕様
+ *          書き出す形式は {レコード番号, データ...}（[SWS_Dem_00075]）。要求したレコード番号が 0xFF でも、
  *          先頭の 1 バイトは、実際のレコード番号（0x01）になる。レコードが記録されていないときは、E_OK で
  *          BufSize を 0 にする（[SWS_Dem_00631]）。1 回の選択で得られるレコードは、1 回の呼び出しで全て
  *          渡すため、続けて呼ぶと DEM_NO_SUCH_ELEMENT（これ以上無い）を返す。
@@ -722,11 +713,10 @@ Std_ReturnType Dem_GetNextExtendedDataRecord(uint8 ClientId, uint8* DestBuffer, 
 /**
  * \brief   FreezeFrame のレコードを選ぶ（[SWS_Dem_91015]）。Dem_SelectDTC() で選んだ DTC が、対象になる。
  *
- * \details 以降の Dem_GetSizeOfFreezeFrameSelection() と Dem_GetNextFreezeFrameData() が、この選択を使う
+ * \par 仕様
+ *          以降の Dem_GetSizeOfFreezeFrameSelection() と Dem_GetNextFreezeFrameData() が、この選択を使う
  *          （[SWS_Dem_01268]）。Dem_SelectDTC() を呼ぶと、この選択は破棄される。Dem_SelectDTC() が呼ばれていない
  *          ときは、DEM_E_WRONG_CONDITION を報告する（[SWS_Dem_01271]）。
- *          本プロジェクトのレコードは、DEM_FREEZE_FRAME_RECORD_NUMBER（0x01）の 1 件だけ。0xFF は、全レコード
- *          （= この 1 件）。0x00（WWH-OBD のレコード）は持たない。
  *
  * \param[in]  ClientId      呼び出し元のクライアント識別子（`DEM_CLIENT_COUNT` 未満）。
  * \param[in]  RecordNumber  レコード番号。
@@ -746,7 +736,8 @@ Std_ReturnType Dem_SelectFreezeFrameData(uint8 ClientId, uint8 RecordNumber);
 /**
  * \brief   Dem_SelectFreezeFrameData() で選んだレコードの大きさを取得する（[SWS_Dem_00238]）。
  *
- * \details 大きさは、レコード番号と DID の数を含む（形式は {レコード番号, DID 数, DID, データ, ...}、
+ * \par 仕様
+ *          大きさは、レコード番号と DID の数を含む（形式は {レコード番号, DID 数, DID, データ, ...}、
  *          [SWS_Dem_00074]）。レコードが記録されていないときは、E_OK で 0 を返す（[SWS_Dem_00630]）。
  *          DTC グループを選んでいるときは、DTC が 1 件に決まらないため、DEM_WRONG_DTC を返す。
  *
@@ -770,7 +761,8 @@ Std_ReturnType Dem_GetSizeOfFreezeFrameSelection(uint8 ClientId, uint16* SizeOfF
 /**
  * \brief   Dem_SelectFreezeFrameData() で選んだレコードを、バッファへ書き出す（[SWS_Dem_00236]）。
  *
- * \details 書き出す形式は {レコード番号, DID 数, DID, データ, ...}（[SWS_Dem_00071]）。要求したレコード番号が
+ * \par 仕様
+ *          書き出す形式は {レコード番号, DID 数, DID, データ, ...}（[SWS_Dem_00071]）。要求したレコード番号が
  *          0xFF でも、先頭の 1 バイトは、実際のレコード番号（0x01）になる。DID の構成と、データ要素の読み出しは
  *          Dem_PBCfg.c の `Dem_DidClassTable[]` による（データは、確定 FAILED の瞬間に取り、RAM に保持する）。
  *          レコードが記録されていないときは、E_OK で BufSize を 0 にする（[SWS_Dem_00630]）。
@@ -798,7 +790,8 @@ Std_ReturnType Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uin
 /**
  * \brief   DTC フィルタ条件を設定する（[SWS_Dem_00208]）。
  *
- * \details 以降の Dem_GetNumberOfFilteredDTC() / Dem_GetNextFilteredDTC() /
+ * \par 仕様
+ *          以降の Dem_GetNumberOfFilteredDTC() / Dem_GetNextFilteredDTC() /
  *          Dem_GetNextFilteredDTCAndFDC() が、この条件に一致する DTC だけを
  *          対象にする（[SWS_Dem_00057]）。条件は次回の本関数呼び出しまで有効で、
  *          呼び出すたびに「次に返す DTC」の位置が先頭へ戻る。
@@ -809,10 +802,6 @@ Std_ReturnType Dem_GetNextFreezeFrameData(uint8 ClientId, uint8* DestBuffer, uin
  *          `FilterForFaultDetectionCounter` が TRUE のときは、Fault Detection
  *          Counter が 1〜0x7E（prefailed）の DTC のみを対象にする
  *          （UDS 0x19/0x14 用。値は Dem_GetFaultDetectionCounter() と同じ写像）。
- *
- *          本プロジェクトは単一ECU・単一診断クライアント構成のため、フィルタ条件は
- *          1 組だけ保持し、`ClientId` は区別に使わない。また Severity を持たない
- *          ため `FilterWithSeverity` に TRUE を渡された場合は拒否する。
  *
  * \param[in]  ClientId                       クライアント識別子。本実装では未使用。
  * \param[in]  DTCStatusMask                  ステータスバイトのマスク（0x00=絞り込みなし）。
@@ -839,7 +828,8 @@ Std_ReturnType Dem_SetDTCFilter(uint8 ClientId, uint8 DTCStatusMask, Dem_DTCForm
 /**
  * \brief   現在のフィルタ条件に一致する DTC の件数を取得する（[SWS_Dem_00214]）。
  *
- * \details 「次に返す DTC」の位置は進めない（件数を数えるだけ）。常に同期的に
+ * \par 仕様
+ *          「次に返す DTC」の位置は進めない（件数を数えるだけ）。常に同期的に
  *          完了する（DEM_PENDING は返さない）。
  *
  * \param[in]   ClientId             クライアント識別子。本実装では未使用。
@@ -859,7 +849,8 @@ Std_ReturnType Dem_GetNumberOfFilteredDTC(uint8 ClientId, uint16* NumberOfFilter
 /**
  * \brief   フィルタ条件に一致する次の DTC とそのステータスを取得する（[SWS_Dem_00215]）。
  *
- * \details 呼ぶたびに一致する DTC を 1 件ずつ返し、全件返し終えたら
+ * \par 仕様
+ *          呼ぶたびに一致する DTC を 1 件ずつ返し、全件返し終えたら
  *          DEM_NO_SUCH_ELEMENT を返す。常に同期的に完了する（DEM_PENDING は返さない）。
  *
  * \param[in]   ClientId   クライアント識別子。本実装では未使用。
@@ -881,7 +872,8 @@ Std_ReturnType Dem_GetNextFilteredDTC(uint8 ClientId, uint32* DTC, uint8* DTCSta
  * \brief   フィルタ条件に一致する次の DTC と Fault Detection Counter を取得する
  *          （[SWS_Dem_00227]）。
  *
- * \details Dem_GetNextFilteredDTC() と同じ要領で 1 件ずつ返す。FDC は
+ * \par 仕様
+ *          Dem_GetNextFilteredDTC() と同じ要領で 1 件ずつ返す。FDC は
  *          Dem_GetFaultDetectionCounter() と同じ写像（-128〜127）。
  *          UDS 0x19/0x14 では Dem_SetDTCFilter() に
  *          FilterForFaultDetectionCounter=TRUE を渡して prefailed のみに絞る。
@@ -927,7 +919,8 @@ Dem_DTCTranslationFormatType Dem_GetTranslationType(uint8 ClientId);
 /**
  * \brief   指定イベントの Fault Detection Counter を取得する。
  *
- * \details DCM SID 0x19 subFunc 0x14 (reportDTCFaultDetectionCounter) から
+ * \par 仕様
+ *          DCM SID 0x19 subFunc 0x14 (reportDTCFaultDetectionCounter) から
  *          呼び出す。内部の `Dem_DebounceCounter[]`（-limit〜+limit、limit は
  *          イベントごとの `Dem_DebounceLimitTable[]`）を、ISO 14229-1 に従い
  *          -128(PASSED 側に最も振れた状態)〜127(FAILED 側に最も振れた状態)の
@@ -958,8 +951,7 @@ Std_ReturnType Dem_GetFaultDetectionCounter(Dem_EventIdType EventId, sint8* Faul
  *
  * \note    シグネチャは実 AUTOSAR の `ClientId` 引数・`Std_ReturnType` 戻り値を
  *          含めて仕様準拠とする（方針: IF は仕様準拠、内部動作は Arduino で
- *          実現可能な範囲に簡略化。以前は `void Dem_EnableDTCSetting(void)`
- *          という独自簡略シグネチャだったが、シグネチャ準拠方針のもと修正）。
+ *          実現可能な範囲に簡略化）。
  *          本プロジェクトは単一 ECU・単一診断クライアント構成のため
  *          `ClientId` は内部で無視し、非同期ジョブキューを持たないため
  *          常に同期的に完了する（`DEM_PENDING` を返すことはない）。

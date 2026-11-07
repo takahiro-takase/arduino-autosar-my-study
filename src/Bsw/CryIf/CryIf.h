@@ -72,7 +72,7 @@ void CryIf_GetVersionInfo(Std_VersionInfoType* versioninfo);
  * \brief   CryIf モジュールが初期化済みかを返す。
  *
  * \details AUTOSAR 標準の SWS_CryptoInterface には存在しない本プロジェクト
- *          独自の拡張関数（2026-09 追加）。上位層 Csm が [SWS_Csm_91010]
+ *          独自の拡張関数。上位層 Csm が [SWS_Csm_91010]
  *          （「CSM API が未初期化の CryIf を呼ぶ場合、操作を実行せず
  *          CSM_E_SERVICE_NOT_STARTED を DET 報告しなければならない」）を
  *          満たすために、CryIf_ProcessJob() 等を実際に呼ぶ前に状態を
@@ -114,7 +114,7 @@ Std_ReturnType CryIf_ProcessJob(uint32 channelId, Crypto_JobType* job);
  * \details 単一 Crypto Driver Object のみのため `Crypto_KeyElementSet()` への
  *          実質パススルー（[SWS_CryIf_00055]）。ただし cryIfKeyId の範囲
  *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00050]。
- *          2026-09 追加。CryIf は独自の鍵 ID 空間を持たず Crypto と共有
+ *          CryIf は独自の鍵 ID 空間を持たず Crypto と共有
  *          しているため CRYPTO_KEY_COUNT を直接参照する）。
  *
  * \param[in]  cryIfKeyId    鍵 ID。Crypto Driver 側の cryptoKeyId へそのまま渡す。
@@ -139,8 +139,7 @@ Std_ReturnType CryIf_KeyElementSet(uint32 cryIfKeyId, uint32 keyElementId,
  *
  * \details 単一 Crypto Driver Object のみのため `Crypto_KeySetValid()` への
  *          実質パススルー（[SWS_CryIf_00058]）。ただし cryIfKeyId の範囲
- *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00057]。
- *          2026-09 追加）。
+ *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00057]）。
  *
  * \param[in]  cryIfKeyId  有効化する鍵の ID。
  *
@@ -160,8 +159,7 @@ Std_ReturnType CryIf_KeySetValid(uint32 cryIfKeyId);
  *
  * \details 単一 Crypto Driver Object のみのため `Crypto_KeyElementGet()` への
  *          実質パススルー（[SWS_CryIf_00065]）。ただし cryIfKeyId の範囲
- *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00060]。
- *          2026-09 追加）。
+ *          チェックは下位層に委ねず CryIf 自身が行う（[SWS_CryIf_00060]）。
  *
  * \param[in]     cryIfKeyId       鍵 ID。Crypto Driver 側の cryptoKeyId へそのまま渡す。
  * \param[in]     keyElementId     鍵要素 ID。

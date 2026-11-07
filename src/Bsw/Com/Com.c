@@ -968,6 +968,10 @@ void Com_DisableReceptionDM(Com_IpduGroupIdType IpduGroupId)
  *          行わない）。
  *
  * \AUTOSARReq     {SWS_Com_00194}
+ *
+ * \retval  COM_INIT    COM は初期化済みで使用可能。
+ * \retval  COM_UNINIT  COM は未初期化（Com_Init 前、または Com_DeInit 後）。
+ *
  * \ServiceID      {0x07}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}

@@ -135,9 +135,9 @@ void EcuM_MainFunction(void);
  *
  * \note       AUTOSAR 標準の SWS_EcuM には存在しない本プロジェクト独自の
  *             拡張関数（EcuM_StateType 自体が実仕様 4.2.2 以降で廃止された
- *             概念）のため、対応する \AUTOSARReq は無い。ApiId は自己割当だが、
- *             従来の 0x06 は実仕様の EcuM_SelectShutdownTarget([SWS_EcuM_02822])
- *             の正規 ServiceID と衝突していたため、未使用の 0x05 へ変更した。
+ *             概念）のため、対応する \AUTOSARReq は無い。ApiId は自己割当で、
+ *             実仕様の EcuM_SelectShutdownTarget([SWS_EcuM_02822]) の正規 ServiceID
+ *             （0x06）を避けるため、未使用の 0x05 とした。
  * \ServiceID      {0x05}
  * \Reentrancy     {Reentrant}
  * \Synchronicity  {Synchronous}
@@ -249,23 +249,11 @@ Std_ReturnType EcuM_ReleasePOST_RUN(EcuM_UserType user);
 /**
  * \brief   ウェイクアップ要因を確認する（[SWS_Can_00271]、CAN ドライバの
  *          ウェイクアップ割り込み/ポーリング文脈からの直接通知先）。
- *          旧 `CanIf_ControllerWakeup`（実仕様に存在しない独自 API だった、
- *          2026-09-05 是正）の役割を引き継ぐ。
- *
- * \details 実仕様の `EcuM_CheckWakeup()` は EcuM 本体ではなく ECU 統合側が
- *          実装する「コールアウト」（EcuM 自身がポーリング時に、CAN
- *          ドライバの ISR/Can_MainFunction_Wakeup が割り込み時にそれぞれ
- *          呼ぶ）と位置づけられる。本プロジェクトは単一 ECU 構成なので、EcuM.c 内の
- *          通常関数として実装する。
  *
  *          CAN の要因については、`CanIf_CheckWakeup()` を呼ぶ（[SWS_CANIF_00395]）。
  *          CanIf は `Can_CheckWakeup()` でコントローラが起床を検出したか調べ、
  *          検出していれば Can が `EcuM_SetWakeupEvent()` を呼ぶ（[SWS_Can_00361]）。
- *          検証待ち（PENDING）にして、検証を始めるのは、その `EcuM_SetWakeupEvent()` である
- *          （以前は、本関数が兼ねていた。2026-11 に仕様の経路へ分けた）。
- *
- *          本プロジェクトで実際にサポートするウェイクアップ要因は CAN バス
- *          起床（`ECUM_WKSOURCE_CAN`）のみである。
+ *          検証待ち（PENDING）にして、検証を始めるのは、その `EcuM_SetWakeupEvent()` である。
  *
  * \param[in]  wakeupSource  確認するウェイクアップ要因のビットマスク。
  *                           `ECUM_WKSOURCE_CAN` ビットが立っていない場合は
@@ -313,9 +301,7 @@ void EcuM_SetWakeupEvent(EcuM_WakeupSourceType sources);
  *          検証待ち（保留中）の起床要因から、検証された要因を外し、
  *          起床したチャネルを ComM へ通知する（`ComM_EcuM_WakeUpIndication()`、
  *          [SWS_EcuM_02645]）。ComM は、チャネルが NO_COM のときに FULL_COM を
- *          CanSM へ要求し、CanSM がコントローラを起動して FULL_COM へ確定する
- *          （以前は CanIf_RxIndication() が独自 API の CanSM_RxIndication() を
- *          呼び、CanSM が自分で確定していた。2026-10 に置き換え）。
+ *          CanSM へ要求し、CanSM がコントローラを起動して FULL_COM へ確定する。
  *
  *          検証待ち（PENDING）から、検証済み（VALIDATED）へ移し、期限切れ（EXPIRED）に
  *          なっていた要因は、そこから外す（遅れて検証された場合）。検証のタイムアウトの
