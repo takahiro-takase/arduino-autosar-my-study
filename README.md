@@ -90,9 +90,9 @@ CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）から�
 <a id="wiring-diagram"></a>
 #### 配線図
 
-![Arduino UNO R4 WiFi + MCP2515+TJA1050 + USB-CAN 配線図](docs/images/wiring_diagram.svg)
+![Arduino UNO R4 WiFi + MCP2518FD+MCP2562FD + USB-CAN 配線図](docs/images/wiring_diagram.svg)
 
-> この配線図は、従来の MCP2515 の構成の例です。MCP2518FD の基板も、同じ 5 本の信号線（CS、INT、SCK、MOSI、MISO）を、同じ UNO のピンにつなぎます（次の表）。
+> 従来の MCP2515 + TJA1050 の構成でも、同じ 5 本の信号線（CS、INT、SCK、MOSI、MISO）を、同じ UNO のピンにつなぎます（[MCP2515 接続](#mcp2515-connection)）。
 
 <a id="mcp2518fd-connection"></a>
 #### MCP2518FD 接続（CAN FD 基板、Arduino UNO）
