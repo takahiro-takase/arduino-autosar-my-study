@@ -845,7 +845,7 @@ void Com_IpduGroupStop(Com_IpduGroupIdType IpduGroupId)
  *
  * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
  *
- * \AUTOSARReq     {SWS_Com_91001の対、SRS_Com_00192, SWS_Com_00534, SWS_Com_00224,
+ * \AUTOSARReq     {SWS_Com_91004, SRS_Com_00192, SWS_Com_00534, SWS_Com_00224,
  *                  SWS_Com_00486}
  * \ServiceID      {0x06}
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
@@ -917,7 +917,7 @@ void Com_EnableReceptionDM(Com_IpduGroupIdType IpduGroupId)
  *
  * \param[in]  IpduGroupId  対象の I-PDU Group の ID。
  *
- * \AUTOSARReq     {SWS_Com_91003の対、SRS_Com_00192, SWS_Com_00534, SWS_Com_00225}
+ * \AUTOSARReq     {SWS_Com_91003, SRS_Com_00192, SWS_Com_00534, SWS_Com_00225}
  * \ServiceID      {0x05}
  * \Reentrancy     {Reentrant for different I-PDU groups. Non reentrant for the same I-PDU group.}
  * \Synchronicity  {Synchronous}
