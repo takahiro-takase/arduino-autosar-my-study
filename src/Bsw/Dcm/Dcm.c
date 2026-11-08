@@ -211,6 +211,13 @@ static uint8 Dcm_ActiveDiagnostic = 1U;
  *  1 = 許可（FULL_COM、Dcm_Init() 直後の既定値）、0 = 禁止（NO_COM / SILENT_COM）。 */
 static uint8 Dcm_TxEnabled = 1U;
 
+/** FULL_COM になるのを待っている要求（[SWS_Dcm_01142]）。Dcm_PendingLen が 0 のときは、待っている要求は無い。
+ *  Dcm_RxBuf は、次の受信で上書きされるため、要求の中身をここへコピーして保つ。新しい要求が届くと、取り消す（Dcm_ProcessRequest() の先頭）。 */
+static uint8         Dcm_PendingReq[DCM_RX_BUF_SIZE];
+static uint8         Dcm_PendingLen = 0U;
+/** Dcm_PendingReq の要求を受信した時刻（ms）。DCM_FULLCOM_WAIT_MS の基準 */
+static unsigned long Dcm_PendingMs;
+
 /** 現在の診断セッション (DCM_SESSION_DEFAULT / DCM_SESSION_EXTENDED) */
 static uint8 Dcm_CurrentSession;
 
@@ -359,6 +366,7 @@ typedef char Dcm_TransferBlock_Must_Fit_RxBuf[(DCM_TRANSFER_MAX_BLOCK_LENGTH <= 
 
 /** 手書きの読み出し関数が書き込む長さを、生成した応答バッファ長が超えないことの静的アサート（Dcm.json の length と関数の食い違い防止） */
 /* cppcheck-suppress misra-c2012-2.3 */
+typedef char Dcm_RxBuf_Must_Fit_Uint8[(DCM_RX_BUF_SIZE <= 255U) ? 1 : -1];   /* 要求の長さ（Dcm_PendingLen など）が uint8 のため */
 typedef char Dcm_ReadBuf_Must_Fit_Vin[(DCM_DID_READ_MAX_LENGTH >= DCM_VIN_LENGTH) ? 1 : -1];
 /* cppcheck-suppress misra-c2012-2.3 */
 typedef char Dcm_ReadBuf_Must_Fit_TestPattern[(DCM_DID_READ_MAX_LENGTH >= DCM_DID_TEST_PATTERN_LENGTH) ? 1 : -1];
@@ -480,6 +488,7 @@ void Dcm_Init(const Dcm_ConfigType* ConfigPtr)
 
     Dcm_ActiveDiagnostic = 1U;  /* [SWS_Dcm_01069] */
     Dcm_TxEnabled        = 1U;  /* ComM からの通知（Dcm_ComM_*ModeEntered）があるまで送信を許可する */
+    Dcm_PendingLen       = 0U;
 
     (void)Dcm_GetVin(Dcm_Vin);  /* [SWS_Dcm_01174]: 起動時に一度だけ取得しキャッシュする */
 
@@ -1247,6 +1256,34 @@ void Dcm_MainFunction(void)
         return;
     }
 
+    /* [SWS_Dcm_01142]: FULL_COM を待っていた要求を、FULL_COM になったら処理する。ComM の通知の中では処理せずに、
+     * ここで処理する（通知は ComM_BusSM_ModeIndication() の途中で呼ばれ、要求の処理が ComM を呼び返すため）。
+     * 待ち時間（DCM_FULLCOM_WAIT_MS）を超えたら、実行せずに捨てる。 */
+    if (Dcm_PendingLen != 0U)
+    {
+        if (Dcm_TxEnabled != 0U)
+        {
+            /* FULL_COM になっている。別の応答を送信中、または別の要求を受信中は、まだ処理しない（応答のバッファが
+             * 重なるため）。それらが終わった周期で処理する（待ち時間の判定は、FULL_COM を待つ間だけ）。 */
+            if ((Dcm_TxInProgress == 0U) && (Dcm_RxActive == 0U))
+            {
+                const uint8 len = Dcm_PendingLen;
+                Dcm_PendingLen = 0U;
+                Dcm_ProcessRequest(Dcm_PendingReq, len);
+            }
+        }
+        else if ((Dcm_GetNowMs() - Dcm_PendingMs) >= DCM_FULLCOM_WAIT_MS)
+        {
+            DET_LOGW(TAG, "request SID=0x%02X discarded (ComM channel did not reach FULL_COM within %lu ms)",
+                     (unsigned)Dcm_PendingReq[0], (unsigned long)DCM_FULLCOM_WAIT_MS);
+            Dcm_PendingLen = 0U;
+        }
+        else
+        {
+            /* まだ待てる */
+        }
+    }
+
     /* RoutineControl (EngineHealthCheck): RUNNING 中は経過時間を監視し、
      * DCM_ROUTINE_DURATION_MS 経過したら合否を判定して COMPLETED へ遷移する。
      * RUNNING になれるのは extendedSession 限定のため、defaultSession 中に
@@ -1409,7 +1446,7 @@ static void Dcm_Transmit(void)
     {
         /* [SWS_Dcm_00148]/[SWS_Dcm_00153]: NO_COM / SILENT_COM の間は応答を送信しない
          * （PduR_DcmTransmit() を呼ばない）。通常は到達しない
-         * （Dcm_ProcessRequest() が、FULL_COM でないときは要求ごと破棄する）。到達するのは、要求の処理中に
+         * （Dcm_ProcessRequest() が、FULL_COM でないときは要求ごと保留する）。到達するのは、要求の処理中に
          * ComM が NO_COM / SILENT_COM へ移ったときだけで、そのときは要求の処理は済んでおり、応答だけが破棄される。 */
         DET_LOGW(TAG, "response dropped (ComM channel is not in FULL_COM)");
         return;
@@ -3949,6 +3986,11 @@ static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen)
 {
     uint8 sid = uds[0];
 
+    /* 新しい要求が届いたら、FULL_COM を待っていた古い要求は、取り消す（保留中に、テスターが再送した、または
+     * 別の要求を送ったとき、古い要求が後から実行されて、二重に実行されないように）。
+     * FULL_COM を待つ要求も、この関数が、保留し直す。 */
+    Dcm_PendingLen = 0U;
+
     /* [SWS_Dcm_00202]: suppressPosRspMsgIndicationBit の状態はリクエストごとに
      * 独立して評価する（前回リクエストの抑制状態を持ち越さない）。サブ機能を
      * 持つ各 SID のハンドラのみが後で立て直す。 */
@@ -3969,13 +4011,19 @@ static void Dcm_ProcessRequest(const uint8* uds, uint8 udsLen)
 
     if (Dcm_TxEnabled == 0U)
     {
-        /* 通知しても、通信が FULL_COM へ戻らなかった（Dcm_SetActiveDiagnostic(FALSE) の間、または CanSM が Bus-Off の
-         * 回復中で FULL_COM の要求を断ったとき）。応答を送れないまま要求を実行すると、セッションの変更や DTC の消去、
-         * ECU のリセットだけが済んで、テスターは応答を受け取れない。テスターの再送で、二重に実行もされる
-         * （ECU Reset の二重リセットなど）。実行せずに破棄すれば、テスターは、タイムアウトして、通信が戻ってから
-         * 再送できる。簡略化: 仕様は、SILENT_COM でも要求は受け付ける（[SWS_Dcm_00153]は送信だけを止める）。 */
-        DET_LOGW(TAG, "request SID=0x%02X discarded (response cannot be sent: ComM channel is not in FULL_COM)",
-                 (unsigned)sid);
+        /* 通知しても、まだ FULL_COM ではない（起床の検証中や、協調スリープからの復帰中など）。
+         * [SWS_Dcm_01142]: FULL_COM になるまで、応答の送信を待つ。応答を送れないまま要求を実行すると、セッションの
+         * 変更や DTC の消去、ECU のリセットだけが済んで、テスターは応答を受け取れず、再送で二重に実行もされる
+         * （ECU Reset の二重リセットなど）ため、要求ごと保留する（実行は、FULL_COM になってから、1 回だけ）。
+         * 待ち時間（DCM_FULLCOM_WAIT_MS）を超えたら、Dcm_MainFunction() が、実行せずに捨てる
+         * （Dcm_SetActiveDiagnostic(FALSE) の間や、CanSM が Bus-Off の回復中で FULL_COM の要求を断ったとき）。 */
+        for (uint8 i = 0U; i < udsLen; i++)
+        {
+            Dcm_PendingReq[i] = uds[i];
+        }
+        Dcm_PendingLen = udsLen;
+        Dcm_PendingMs  = Dcm_GetNowMs();
+        DET_LOGI(TAG, "request SID=0x%02X deferred (waiting for ComM FULL_COM)", (unsigned)sid);
         return;
     }
 

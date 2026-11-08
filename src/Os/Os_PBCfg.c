@@ -141,7 +141,7 @@ static const Os_TaskType Os_TaskTable[OS_TASK_COUNT] =
     /* Task 7  */ { Com_MainFunctionTx,            100U },  /* 100 ms : TX送信スケジューリング・送信確認監視 */
     /* Task 8  */ { IoHwAb_MainFunction,            10U },  /* 10 ms : ボタンデバウンスサンプリング */
     /* Task 9  */ { WdgM_MainFunction,            1000U },  /* 1000 ms : HW ウォッチドッグのリフレッシュ + Alive/Logical/Deadline 判定（6 回に 1 回） */
-    /* Task 10 */ { Dcm_MainFunction,             1000U },  /* 1000 ms : S3 セッションタイムアウト監視 */
+    /* Task 10 */ { Dcm_MainFunction,               10U },  /* 10 ms : FULL_COM 待ちの要求の処理（[SWS_Dcm_01142]）、S3 セッションタイムアウト監視 */
     /* Task 11 */ { FiM_MainFunction,              100U },  /* 100 ms : 機能抑止状態の再評価 */
     /* Task 12 */ { CanNm_MainFunction,           1000U },  /* 1000 ms : NM フレーム送信 */
     /* Task 13 */ { NvM_MainFunction,               10U },  /* 10 ms : 保留中 EEPROM ジョブ処理 */

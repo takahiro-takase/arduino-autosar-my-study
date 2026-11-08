@@ -80,7 +80,7 @@ true が続く間の重複実行や true→false への遷移では実行しま�
 | 7 | `BSWM_OS_TASK_COM_MAIN_TX` | `Com_MainFunctionTx` | 100 ms |
 | 8 | `BSWM_OS_TASK_IOHWAB_MAIN` | `IoHwAb_MainFunction` | 10 ms |
 | 9 | `BSWM_OS_TASK_WDGM_MAIN` | `WdgM_MainFunction` | 1000 ms（毎回 HW ウォッチドッグをリフレッシュ、判定は 6 回に 1 回） |
-| 10 | `BSWM_OS_TASK_DCM_MAIN` | `Dcm_MainFunction` | 1000 ms |
+| 10 | `BSWM_OS_TASK_DCM_MAIN` | `Dcm_MainFunction` | 10 ms |
 | 11 | `BSWM_OS_TASK_FIM_MAIN` | `FiM_MainFunction` | 100 ms |
 | 12 | `BSWM_OS_TASK_CANNM_MAIN` | `CanNm_MainFunction` | 1000 ms |
 | 13 | `BSWM_OS_TASK_NVM_MAIN` | `NvM_MainFunction` | 10 ms |
