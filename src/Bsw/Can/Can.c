@@ -473,6 +473,14 @@ Std_ReturnType Can_SetControllerMode(uint8 Controller, Can_ControllerStateType T
             (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
             return E_NOT_OK;
         }
+        /* Listen-Only（STOPPED）の間は、ACK を返さないため、送信側が同じフレームを再送し続け、受信バッファがあふれる。
+         * バスに参加する前（Listen-Only）のあふれは、データの欠落ではないので、STARTED へ変える時点で、記録を捨てる
+         * （捨てないと、起床のたびに、STARTED になった後の Can_MainFunction_Read() が、CAN_E_DATALOST を報告してしまう）。
+         * すでに STARTED のときは、通常動作中のあふれ（本当の欠落）が記録されている可能性があるので、捨てない。 */
+        if (CanState != CAN_CS_STARTED)
+        {
+            (void)Can_Hw_TakeRxOverflow();
+        }
         (void)Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
         //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
