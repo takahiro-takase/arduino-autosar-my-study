@@ -115,6 +115,48 @@ TEST_F(Can_SetControllerMode_Test, Can_SetControllerMode_OK_StartedToStartedKeep
     EXPECT_EQ(FakeCanHw_TakeRxOverflowCount, 0U);   // すでに STARTED なら、本当の欠落の記録を捨てない
 }
 
+TEST_F(Can_SetControllerMode_Test, Can_SetControllerMode_OK_StartedDiscardsBacklogFromListenOnly)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STOPPED), E_OK);   // Listen-Only
+    FakeCanHw_RxPendingCount = 10U;                               // 再送された複製が溜まっている
+    CallCount_CanIf_RxIndication = 0U;
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_RxPendingCount, 0U);              // 溜まった分を、すべて取り出した
+    EXPECT_EQ(CallCount_CanIf_RxIndication, 1U);          // 上位層（CanIf）へ渡すのは、最後の 1 件だけ
+}
+
+TEST_F(Can_SetControllerMode_Test, Can_SetControllerMode_OK_StartedToStartedKeepsBacklog)
+{
+    /* ----------------------- */
+    /* ---- 準備 (Arrange) --- */
+    /* ----------------------- */
+    Can_Init(&config);
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    FakeCanHw_RxPendingCount = 10U;                               // 通常動作中の、まだ渡していない受信
+
+    /* ----------------------- */
+    /* ---- 実行 (Act) ------- */
+    /* ----------------------- */
+    ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+
+    /* ----------------------- */
+    /* ---- 評価 (Assert) ---- */
+    /* ----------------------- */
+    EXPECT_EQ(FakeCanHw_RxPendingCount, 10U);             // すでに STARTED なら、捨てない
+}
+
 TEST_F(Can_SetControllerMode_Test, Can_SetControllerMode_NG_NullConfig)
 {
     /* ----------------------- */
