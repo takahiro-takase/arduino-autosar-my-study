@@ -208,6 +208,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_RxOverflowReportsDat
     Can_Init(&config);
     ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
     FakeCanHw_TakeRxOverflowReturn = CAN_HW_OK;   // 受信バッファのオーバーフローを検出
+    FakeCanHw_TakeRxOverflowCount  = 0U;          // STARTED への変更で数えた分を除く
     FakeDetHw_Reset();
 
     /* ----------------------- */
@@ -237,6 +238,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_RxOverflowStillDrain
     FakeCanHw_RxId = 0x123U;
     FakeCanHw_RxDlc = 1U;
     FakeCanHw_RxData[0] = 0x5AU;
+    FakeCanHw_TakeRxOverflowCount = 0U;   // STARTED への変更で数えた分を除く
     WrapCanIf_Reset();
     FakeDetHw_Reset();
 
@@ -260,6 +262,7 @@ TEST_F(Can_MainFunction_Read_Test, Can_MainFunction_Read_OK_NoRxOverflowReportsN
     /* ----------------------- */
     Can_Init(&config);
     ASSERT_EQ(Can_SetControllerMode(0U, CAN_CS_STARTED), E_OK);
+    FakeCanHw_TakeRxOverflowCount = 0U;   // STARTED への変更で数えた分を除く
     FakeDetHw_Reset();
 
     /* ----------------------- */

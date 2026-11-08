@@ -143,6 +143,13 @@
 #define DCM_S3_TIMEOUT_MS  60000UL
 /* @@GEN-END dcm-s3-timeout */
 
+/** ComM のチャネルが FULL_COM になるのを待つ、最長の時間（ms）。
+ *  [SWS_Dcm_01142]: Dcm は、FULL_COM の通知（Dcm_ComM_FullComModeEntered）を待ってから応答を送る。
+ *  待つ時間は、要求の受信から P2ServerMax（本プロジェクトは 25 ms）以内。
+ *  簡略化: ログ出力で 1 周期が数十 ms 延びうる協調スケジューラのため、余裕を持たせて 100 ms にしている。
+ *  この時間を超えても FULL_COM にならない要求は、実行せずに捨てる（応答を送れないまま実行しないため）。 */
+#define DCM_FULLCOM_WAIT_MS  100UL
+
 /** UDS 0x11 ECUReset: 正応答 [0x51, subFunc] 送信後、実際に Mcu_PerformReset()
  *  を呼ぶまでの遅延（Dcm_HandleEcuReset() 参照）。CAN コントローラの物理送信
  *  自体は Can_Write() が返った時点で完了しているため大きな値は不要だが、

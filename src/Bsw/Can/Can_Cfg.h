@@ -65,6 +65,14 @@
  *  上限は、再送の嵐のときだけ効く。1 ms あたり 255 件以下にすること（ループの数え方が uint8 のため）。 */
 #define CAN_RX_DRAIN_MAX        16U
 
+/** Can_SetControllerMode(STARTED) が、Listen-Only の間に溜まった受信フレームを捨てるときの、最大件数。
+ *  Listen-Only は ACK を返さないため、送信側が同じフレームを再送し続け、受信バッファが複製で埋まる。
+ *  ACK を返していないフレームは、送信側から見て届いていない（再送される）ので、捨ててよい。
+ *  捨てずに STARTED にすると、複製の 1 件ごとに上位層が応答を作り、送信キューが詰まる。
+ *  値の根拠: 受信バッファの容量（MCP2518FD: ライブラリ 32 件 + チップの FIFO 27 件 = 59 件）以上にする。
+ *  再送の嵐が続いていても、ループが終わるように、上限を設ける。 */
+#define CAN_RX_DISCARD_MAX      64U
+
 /** CAN FD で、フレームの長さに満たない部分を埋める値（AUTOSAR の CanFdPaddingValue 相当）。
  *  CAN FD の長さは 0〜8 と 12/16/20/24/32/48/64 byte のみ有効なので、これ以外の長さは上へ切り上げて埋める。 */
 #define CAN_FD_PADDING_VALUE    0xCCU

@@ -119,6 +119,7 @@ typedef char Can_RxDrainMax_Must_Fit_Uint8[(CAN_RX_DRAIN_MAX <= 255U) ? 1 : -1];
 static void Can_Isr(void);
 
 static void Can_ResetQueues(void);
+static void Can_DeliverRxFrame(uint32 rxId, uint8 len, uint8* data);
 
 static const Can_ConfigType*    Can_ConfigPtr  = NULL;
 /** Can_Isr()（真の割り込みコンテキスト）と Can_MainFunction_xxx()（メインループ）
@@ -473,7 +474,50 @@ Std_ReturnType Can_SetControllerMode(uint8 Controller, Can_ControllerStateType T
             (void)Det_ReportError(CAN_MODULE_ID, 0U, CAN_API_ID_SET_CONTROLLER_MODE, CAN_E_TRANSITION);
             return E_NOT_OK;
         }
-        (void)Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
+        {
+            const boolean fromListenOnly = (CanState != CAN_CS_STARTED);
+
+            /* 先に Normal へ変える。Normal になると ACK を返すので、送信側の再送が止まる（Listen-Only のままでは、
+             * 再送がバスの速度で続き、捨てても捨てても溜まる）。
+             * 状態も、すぐ STARTED にする（最後の 1 件を上位層へ渡すと、その応答が Can_Write() で送られるため。
+             * STARTED でないと、Can_Write() は拒否する）。 */
+            (void)Can_Hw_SetMode(CAN_HW_MODE_NORMAL);
+            CanState = CAN_CS_STARTED;
+
+            /* Listen-Only（STOPPED）の間に溜まった受信は、ACK を返していない（送信側から見て届いていない）複製なので、
+             * 上位層へは渡さずに捨てる（渡すと、複製の 1 件ごとに応答が作られ、送信キューが詰まる）。
+             * ただし、最後の 1 件だけは渡す（Normal へ変えた直後に ACK を返した、本物の要求かもしれない）。
+             * あふれの記録も、データの欠落ではないので捨てる（捨てないと、STARTED の後の Can_MainFunction_Read() が
+             * CAN_E_DATALOST を報告する）。すでに STARTED のときは、本当の受信やあふれがありうるので、何もしない。 */
+            if (fromListenOnly)
+            {
+                uint8   rxBuf[CAN_FD_FRAME_MAX_DLC];
+                uint8   rxLen   = 0U;
+                uint32  rxId    = 0U;
+                uint8   dropped = 0U;
+                boolean pending = (Can_Hw_CheckReceive() == CAN_HW_OK);
+
+                /* 後ろにまだ受信がある間は、捨てる。後ろに無い最後の 1 件だけを、渡す。
+                 * 上限（CAN_RX_DISCARD_MAX）に達したときは、読んだ 1 件も捨て、残りは、Can_MainFunction_Read() が扱う。 */
+                while (pending && (dropped < CAN_RX_DISCARD_MAX) && (Can_Hw_Read(&rxId, &rxLen, rxBuf) == CAN_HW_OK))
+                {
+                    pending = (Can_Hw_CheckReceive() == CAN_HW_OK);
+                    if (pending)
+                    {
+                        dropped++;
+                    }
+                    else
+                    {
+                        Can_DeliverRxFrame(rxId, rxLen, rxBuf);
+                    }
+                }
+                if (dropped > 0U)
+                {
+                    DET_LOGI(TAG, "SetControllerMode: dropped %u stale RX frame(s) received before STARTED", (unsigned)dropped);
+                }
+                (void)Can_Hw_TakeRxOverflow();
+            }
+        }
         //Can_Hw_SetMode(CAN_HW_MODE_LOOPBACK);  // ← 単体テスト用（通常はコメントアウト）
         CanState = CAN_CS_STARTED;
         break;
@@ -970,9 +1014,7 @@ void Can_MainFunction_Read(void)
             break;
         }
 
-        Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
-        PduInfoType pduInfo = { .SduDataPtr = buf, .SduLength = (PduLengthType)len };
-        CanIf_RxIndication(&mailbox, &pduInfo);
+        Can_DeliverRxFrame(rxId, len, buf);
     }
 }
 
@@ -1276,6 +1318,14 @@ Std_ReturnType Can_GetControllerMode(uint8 Controller, Can_ControllerStateType* 
 
     *ControllerModePtr = CanState;
     return E_OK;
+}
+
+/** 受信したフレームを、CanIf へ渡す（Can_MainFunction_Read() と、Can_SetControllerMode(STARTED) の共通部分）。 */
+static void Can_DeliverRxFrame(uint32 rxId, uint8 len, uint8* data)
+{
+    Can_HwType  mailbox = { .CanId = rxId, .Hoh = 0U, .ControllerId = 0U };
+    PduInfoType pduInfo = { .SduDataPtr = data, .SduLength = (PduLengthType)len };
+    CanIf_RxIndication(&mailbox, &pduInfo);
 }
 
 /** TX 確認・モード変更通知の保留キューと、割り込み禁止のネストカウンタを初期状態へ戻す

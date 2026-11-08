@@ -4,8 +4,10 @@
  *
  * \details [SWS_Dcm_00153]/[SWS_Dcm_00156]/[SWS_Dcm_00157]: SILENT_COM の間、Dcm は応答を送信しない
  *          （CanTp_Transmit() を呼ばない）。通知（ComM_DCM_ActiveDiagnostic）しても FULL_COM へ戻らないときは、
- *          応答を送れないまま実行しないよう、要求も実行せずに破棄する（セッションの変更などが起きない）。
+ *          応答を送れないまま実行しないよう、要求は実行せずに保留する（セッションの変更などが起きない）。
  *          FULL_COM の通知で送信が再開し、次の要求の応答が Can_Hw まで届く。
+ *          保留した要求の実行と、待ち時間を過ぎた要求の破棄は、DcmStack_ComMModeEntered_Deferred /
+ *          DcmStack_ComMModeEntered_DeferredTimeout で確かめる。
  */
 
 /* ======================================================================
