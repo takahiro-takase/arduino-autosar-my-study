@@ -103,6 +103,9 @@
 
 #define TAG "Can"
 
+/** CAN_RX_DRAIN_MAX が uint8 の数え方で表せることの静的アサート（超えると、Can_MainFunction_Read() のループの上限が効かなくなる）。 */
+typedef char Can_RxDrainMax_Must_Fit_Uint8[(CAN_RX_DRAIN_MAX <= 255U) ? 1 : -1];
+
 /* ======================================================================
  * Type Definitions
  * ====================================================================== */
@@ -915,6 +918,9 @@ void Can_MainFunction_Write(void)
  *          正しく動作する。割り込みが発火した場合は Can_RxIrqPending が
  *          セットされるが、本関数の動作はそれに左右されない。
  *
+ *          1 回の呼び出しで取り出すフレームは、CAN_RX_DRAIN_MAX 件まで（残りは、次の呼び出しで取り出す。
+ *          根拠は Can_Cfg.h の CAN_RX_DRAIN_MAX を参照）。
+ *
  *          CAN_CS_SLEEP 中は処理しない（ウェイクアップ検証前のフレームは
  *          CAN_CS_STOPPED = Listen-Only 状態で届くため、対象外なのは
  *          SLEEP のみでよい）。
@@ -953,7 +959,7 @@ void Can_MainFunction_Read(void)
         (void)Det_ReportRuntimeError(CAN_MODULE_ID, 0U, CAN_API_ID_MAIN_FUNCTION_READ, CAN_E_DATALOST);
     }
 
-    while (Can_Hw_CheckReceive() == CAN_HW_OK)
+    for (uint8 drained = 0U; (drained < CAN_RX_DRAIN_MAX) && (Can_Hw_CheckReceive() == CAN_HW_OK); drained++)
     {
         uint32 rxId;
         uint8  len;

@@ -686,14 +686,14 @@ Dcm は、CanTp との間で、仕様の TP の関数（`Dcm_Cbk.h` で宣言）
 
 | 関数 | 役割 |
 |------|------|
-| `Dcm_StartOfReception` | SF/FF の受信を受け入れるかを判定する。送信が進行中なら `BUFREQ_E_NOT_OK`（[SWS_Dcm_00557]）、要求が `DCM_RX_BUF_SIZE`（32 バイト）を超えるなら `BUFREQ_E_OVFL`。`TpSduLength` が 0 なら、受信バッファの大きさを返すだけ |
+| `Dcm_StartOfReception` | SF/FF の受信を受け入れるかを判定する。送信が進行中なら `BUFREQ_E_NOT_OK`（[SWS_Dcm_00557]）、要求が `DCM_RX_BUF_SIZE`（128 バイト）を超えるなら `BUFREQ_E_OVFL`。`TpSduLength` が 0 なら、受信バッファの大きさを返すだけ |
 | `Dcm_CopyRxData` | 受信したデータを、Dcm の受信バッファ（`Dcm_RxBuf`）の続きへコピーする。通知された長さを超えるデータは拒否する |
 | `Dcm_TpRxIndication` | 受信の終了。`E_OK` で、通知された長さのデータが揃っていれば、要求を処理する（`Dcm_ProcessRequest()`）。それ以外は、受信したデータを捨てる |
 | `Dcm_CopyTxData` | 応答（`Dcm_TxBuf`）の次の部分を、CanTp のフレームバッファへコピーする。`retry->TpDataState` が `TP_DATARETRY` なら、`TxTpDataCnt` バイト戻してからコピーする。要求した長さが残りより大きければ、何もコピーせず `BUFREQ_E_BUSY` |
 | `Dcm_TpTxConfirmation` | 送信の終了。「送信が進行中」の状態を解除する（以降、新しい要求を受け付け、S3 タイマも進む） |
 
 - 応答の送信（`Dcm_Transmit()`）は、`PduR_DcmTransmit()`（→ `CanTp_Transmit()`）に応答の長さだけを渡します。「送信が進行中」の印は、`CanTp_Transmit()` の中で `Dcm_TpTxConfirmation()` が呼ばれる場合（SF）に備えて、呼ぶ前に立てます。受け付けられなければ、すぐ解除します。
-- 要求の受信バッファ `DCM_RX_BUF_SIZE` は `Dcm_Cfg.h` に手書きしています（現在の最大の要求は 0x2E の鍵更新の 20 バイト）。
+- 要求の受信バッファ `DCM_RX_BUF_SIZE` は `Dcm_Cfg.h` に手書きしています（128 バイトは、CAN FD の SF（最大 62 バイト）と複数フレームの要求のため。現在の最大の要求は 0x2E の鍵更新の 20 バイト）。
 - CanTp と Dcm の受け渡しは、仕様どおり PduR を経由します（`PduR_CanTpStartOfReception` など。PduR の TP のルーティングが、Dcm の PDU ID へ変換して転送する）。
 - 応答の送信の確認（`Dcm_TpTxConfirmation`）が届くまで ComM の `InactiveDiagnostic` を待つのが仕様の趣旨ですが、既存の動作を変えないため、通知は、従来どおり応答の送信を始めた時点で行っています。
 - 未実装: `Dcm_TxConfirmation`（TP でない I-PDU の送信確認）。

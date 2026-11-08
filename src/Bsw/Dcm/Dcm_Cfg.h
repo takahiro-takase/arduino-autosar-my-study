@@ -381,7 +381,7 @@
 /** RequestDownload の応答 maxNumberOfBlockLength [bytes]。以降の
  *  TransferData 要求（SID+blockSequenceCounter+data を含む総バイト数）が
  *  これを超えないようテスタ側が調整する。Dcm の受信バッファ
- *  (DCM_RX_BUF_SIZE、既定 32 バイト) に TransferData の要求が収まる値にすること
+ *  (DCM_RX_BUF_SIZE、既定 128 バイト) に TransferData の要求が収まる値にすること
  *  （超える要求は BUFREQ_E_OVFL で拒否される。Dcm.c の静的アサートが検査する）。 */
 #define DCM_TRANSFER_MAX_BLOCK_LENGTH  16U
 

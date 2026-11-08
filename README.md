@@ -1,7 +1,8 @@
 # arduino-autosar-my-study
 
-Arduino UNO R4 WiFi + MCP2515 + TJA1050 を用いて 
+Arduino UNO R4 WiFi + MCP2518FD + MCP2562FD（CAN FD 対応）を用いて 
 AUTOSAR CP の BSW CAN スタックを学習目的で実装したプロジェクトです。
+CAN FD（最大 64 バイトのフレーム）で動かします。従来の MCP2515 + TJA1050（クラシック CAN、8 バイトまで）の構成でも、動かせます。
 ARXML や設定ツールは使用せず、コードで階層構造・型定義・設定テーブルを再現しています。
 
 ## 目次
@@ -11,7 +12,9 @@ ARXML や設定ツールは使用せず、コードで階層構造・型定義�
 - [ハードウェア](#hardware)
   - [ハードウェア構成](#hw-configuration)
     - [配線図](#wiring-diagram)
-    - [MCP2515 接続（Arduino UNO）](#mcp2515-connection)
+    - [MCP2518FD 接続（CAN FD 基板、Arduino UNO）](#mcp2518fd-connection)
+    - [MCP2515 接続（従来の構成、Arduino UNO）](#mcp2515-connection)
+    - [共通の配線（LED・ボタン・終端）](#common-wiring)
   - [ビルド環境・設定](#build-environment)
   - [ビルドと書き込み](#build-and-flash)
 - [アーキテクチャ（何を学べるか）](#architecture)
@@ -76,10 +79,11 @@ CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）から�
 | 機器 | 用途 |
 |------|------|
 | Arduino UNO R4 WiFi | マイコン本体 |
-| MCP2515 + TJA1050 | CAN コントローラ + トランシーバ |
+| MCP2518FD + MCP2562FD | CAN FD 対応の CAN コントローラ + トランシーバ（「MCP2518 + MCP2562FD CAN FD Bus モジュール」、水晶 20 MHz） |
+| MCP2515 + TJA1050 | 従来の構成のコントローラ + トランシーバ（クラシック CAN 用。MCP2518FD の代わりに使う） |
 | LED + 抵抗（220〜470 Ω）× 3 | RUNNING 灯（D6）/ FAULT 灯（D7）/ ABS 灯（D8）各 1 本 |
 | プッシュボタン | 警告確認ボタン（D9 と GND を接続・内部プルアップ使用） |
-| USB-CAN アダプタ | PC との CAN バス接続（解析用） |
+| USB-CAN アダプタ | PC との CAN バス接続（解析用）。CAN FD を使うときは、FD 対応のもの（SH-C31A など）が必要（クラシック専用の gs_usb 系では、FD のフレームでバスエラーになる） |
 | Cangaroo 等 | CAN フレーム送受信ツール |
 | tools/can_tool（本リポジトリ同梱） | UDS コマンドのボタン送信・FC 自動応答（[詳細](tools/can_tool/README.md)） |
 
@@ -88,8 +92,27 @@ CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）から�
 
 ![Arduino UNO R4 WiFi + MCP2515+TJA1050 + USB-CAN 配線図](docs/images/wiring_diagram.svg)
 
+> この配線図は、従来の MCP2515 の構成の例です。MCP2518FD の基板も、同じ 5 本の信号線（CS、INT、SCK、MOSI、MISO）を、同じ UNO のピンにつなぎます（次の表）。
+
+<a id="mcp2518fd-connection"></a>
+#### MCP2518FD 接続（CAN FD 基板、Arduino UNO）
+
+| Arduino ピン | 基板（J3） | 備考 |
+|-------------|-----------|------|
+| D10 | CS | SPI チップセレクト |
+| D2 | INT | 割り込み（ライブラリには渡さず、`Can_Hw_AttachRxIsr` で使う） |
+| D13 | SCK | SPI クロック |
+| D11 | SI (MOSI) | SPI データ出力 |
+| D12 | SO (MISO) | SPI データ入力 |
+| 5V | 5V | 電源。J1 のジャンパは 5V 側のまま使う |
+| GND | GND | **USB-CAN アダプタの GND とも共通にする**（未接続だと、受信は通るのに送信だけ ACK されない） |
+
+> UNO の 5V ピンが USB 給電で約 4.2V まで下がることがあります。MCP2562FD は 4.5V 以上を求めるため、通信が不安定なときは、ケーブルや電源を見直してください。
+
 <a id="mcp2515-connection"></a>
-#### MCP2515 接続（Arduino UNO）
+#### MCP2515 接続（従来の構成、Arduino UNO）
+
+MCP2518FD と同じピンを使います（どちらか一方だけをつなぎます。同じ SPI の線を共有するため）。
 
 | Arduino ピン | MCP2515 ピン | 備考 |
 |-------------|-------------|------|
@@ -99,14 +122,18 @@ CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）から�
 | D11 | SI (MOSI) | SPI データ出力 |
 | D12 | SO (MISO) | SPI データ入力 |
 
-> **D13 は MCP2515 の SCK と共用されるため LED には使用できません。**
+> **D13 は SPI の SCK と共用されるため LED には使用できません**（MCP2518FD でも同じです）。
+
+<a id="common-wiring"></a>
+#### 共通の配線（LED・ボタン・終端）
+
 > LED は D6（RUNNING）・D7（FAULT）・D8（ABS）それぞれに 220〜470 Ω の抵抗を直列に挿入して接続してください。
 
 > **警告確認ボタン（D9）** は D9 と GND の間にプッシュボタンを接続するだけです。
 > Port が `INPUT_PULLUP` で初期化するため、外部プルアップ抵抗は不要です。
 > ボタン押下時に D9 が GND と接続され `DIO_LOW` となり、`IoHwAb_Button_GetLevel()` 内で論理反転して「押下=1」に変換されます。
 
-> CAN バスには両端に終端抵抗（120 Ω）が必要です。
+> CAN バスには両端に終端抵抗（120 Ω）が必要です。MCP2518FD の基板には、終端抵抗（120 Ω）のスイッチ（SW1）があります。
 
 <a id="build-environment"></a>
 ### ビルド環境・設定
@@ -116,20 +143,37 @@ CAN 経由で受信するエンジン ECU（0x100）・ABS ECU（0x110）から�
 | プラットフォーム | PlatformIO + Renesas RA (`platform = renesas-ra`) |
 | ボード | Arduino UNO R4 WiFi (`board = uno_r4_wifi`) |
 | フレームワーク | Arduino |
-| 外部ライブラリ | coryjfowler/mcp_can @ ^1.5.1 |
-| CAN ボーレート | 500 kbps |
-| MCP2515 クリスタル | 8 MHz（`Can_CrystalFreqType` で変更可） |
+| 外部ライブラリ | MCP2518FD: ACAN2517FD / MCP2515: coryjfowler/mcp_can @ ^1.5.1 |
+| CAN ボーレート | 500 kbps（CAN FD のデータ部は、既定 2 Mbps。`Can.json` の `fd.dataBitrate`。通常のビットレートの整数倍） |
+| クリスタル | MCP2518FD: 20 MHz / MCP2515: 8 MHz（実装した基板の値。`Can.json` の `crystalMhz` と `Can_CrystalFreqType` で変更可） |
 | シリアルモニタ | 115200 bps |
+
+PlatformIO の環境は、コントローラごとに分かれています。
+
+| 環境 | コントローラ | 備考 |
+|------|-------------|------|
+| `uno_r4_fd` | MCP2518FD | CAN FD（64 バイトまで）。クラシックのフレームも使える。既定 |
+| `uno_r4` | MCP2515 | 従来の構成。クラシック CAN（8 バイトまで） |
+
+**リポジトリの既定の設定（`config/data/Can.json`）は、MCP2518FD（`controller`: `MCP2518FD`、`crystalMhz`: 20、`fd.enabled`: `true`）です。**
+従来の MCP2515 の環境（`uno_r4`）でビルドするときは、先に、`Can.json` を MCP2515 の設定へ戻してください（戻さないと、MCP2515 は CAN FD に対応しないため、`Can_Init()` が失敗します）。
+
+環境を切り替えるときは、`config/data/Can.json` の `controller`（`MCP2515` / `MCP2518FD`）、`crystalMhz`（8 / 20）、`fd.enabled`（`false` / `true`）を合わせて、`python tools/configurator/gen_cfg.py` を実行してください。
+`tools/can_tool` は、`config.json` の `can.interface`（`candle` / `gs_usb`）と `can.fd` を合わせます（[詳細](tools/can_tool/README.md)）。
+
+このほか、基板の動作確認用の環境が 2 つあります（通信スタックは載せない、単体のスケッチ）。
+`mcp2518fd_loopback`（MCP2518FD の内部ループバックで、SPI・水晶・ライブラリを確かめる）と、`mcp2518fd_spi_diag`（SPI の応答を、生の値で確かめる）です（`tools/hw_check/`）。
 
 <a id="build-and-flash"></a>
 ### ビルドと書き込み
 
 ```bash
-# ビルド
-pio run
+# ビルド（MCP2518FD。リポジトリの既定の Can.json に合う）
+pio run -e uno_r4_fd
+# 従来の MCP2515 のとき: Can.json を MCP2515 の設定へ戻し、gen_cfg.py を実行してから pio run -e uno_r4
 
 # 書き込み
-pio run --target upload
+pio run -e uno_r4_fd --target upload
 
 # シリアルモニタ
 pio device monitor
@@ -185,7 +229,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 │   ├── images/             # README 用の図
 │   └── archive/            # 分割前の README（全文）
 ├── dbc/                    # CAN の DBC ファイル
-├── platformio.ini          # 実機ビルド（env: uno_r4）
+├── platformio.ini          # 実機ビルド（env: uno_r4 = MCP2515、uno_r4_fd = MCP2518FD）
 ├── CMakeLists.txt          # ホスト上のテスト・静的解析（プリセットは CMakePresets.json）
 └── CMakePresets.json
 ```
@@ -203,11 +247,11 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 | OS | Os | — | SWS_Os<br>API 数は対象外<br>(協調スケジューラ。OSEK の API は未実装で、カウンタ API のみ実装) | タイムトリガスケジューラ・カウンタ API (`GetCounterValue` / `GetElapsedValue`、BSW の時刻取得窓口)<br>（[詳細](docs/modules/Os_Notes.md)） |
 | BSW | Adc | 123 | SWS_Adc<br>API実装: 7 / 18<br>(一部意図的に簡略化) | アナログ入力ドライバ<br>（[詳細](docs/modules/Adc_Notes.md)） |
 |  | BswM | 42 | SWS_BswM<br>API実装: 7 / 32<br>(一部意図的に簡略化) | BSW モード管理・状態遷移の一元制御<br>（[詳細](docs/modules/BswM_Notes.md)） |
-|  | Can | 80 | SWS_Can<br>API実装: 15 / 19 | CAN コントローラドライバ (MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
+|  | Can | 80 | SWS_Can<br>API実装: 15 / 19 | CAN コントローラドライバ (MCP2518FD（CAN FD 対応）/ 従来の MCP2515)<br>（[詳細](docs/modules/Can_Notes.md)） |
 |  | CanIf | 60 | SWS_CanIf<br>API実装: 21 / 35 | CAN コントローラ抽象化層<br>（[詳細](docs/modules/CanIf_Notes.md)） |
 |  | CanNm | 31 | SWS_CanNM<br>API実装: 16 / 24 | ネットワークマネジメント (CAN NM)<br>（[詳細](docs/modules/CanNm_Notes.md)） |
 |  | CanSM | 140 | SWS_CanSM<br>API実装: 10 / 19 | CAN ネットワーク状態管理 (Bus-Off 回復・CanNm 連携)<br>（[詳細](docs/modules/CanSM_Notes.md)） |
-|  | CanTp | 35 | SWS_CanTp<br>API実装: 4 / 9<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル<br>（[詳細](docs/modules/CanTp_Notes.md)） |
+|  | CanTp | 35 | SWS_CanTp<br>API実装: 4 / 9<br>(一部意図的に簡略化) | ISO 15765-2 トランスポートプロトコル（CAN FD 対応）<br>（[詳細](docs/modules/CanTp_Notes.md)） |
 |  | CanTSyn | 161 | SWS_CanTSyn<br>API実装: 6 / 6<br>(OFS/OFNS・CAN FD は対象外) | CAN 時刻同期 (SYNC/FUP の送信・受信)<br>（[詳細](docs/modules/CanTSyn_Notes.md)） |
 |  | Com | 50 | SWS_Com<br>API実装: 24 / 32 | シグナルベース通信管理<br>（[詳細](docs/modules/Com_Notes.md)） |
 |  | ComM | 12 | SWS_ComM<br>API実装: 18 / 28 | 通信マネージャ (チャネル状態集約)<br>（[詳細](docs/modules/ComM_Notes.md)） |
@@ -239,7 +283,7 @@ HAL ─── MCU 依存の最下層（Can_Hw / Dio_Hw ほか、src/Hal/ に集�
 |  | Wdg | 102 | SWS_Wdg<br>API実装: 4 / 4<br>(一部意図的に簡略化) | ウォッチドッグドライバ<br>（[詳細](docs/modules/Wdg_Notes.md)） |
 |  | WdgIf | 43 | SWS_WdgIf<br>API実装: 3 / 3<br>パススルー<br>(下位が1個のため) | ウォッチドッグ抽象化層<br>（[詳細](docs/modules/WdgIf_Notes.md)） |
 |  | WdgM | 13 | SWS_WdgM<br>API実装: 11 / 11 | ウォッチドッグマネージャ (生存監視)<br>（[詳細](docs/modules/WdgM_Notes.md)） |
-| HAL | Can_Hw | — | — | MCP2515 SPI ドライバ<br>（[詳細](docs/modules/Can_Notes.md)） |
+| HAL | Can_Hw | — | — | MCP2518FD / 従来の MCP2515 の SPI ドライバ（ビルドスイッチで切り替え）<br>（[詳細](docs/modules/Can_Notes.md)） |
 |  | Dio_Hw | — | — | Arduino `digitalWrite`/`digitalRead` ラッパー |
 |  | Port_Hw | — | — | Arduino `pinMode` ラッパー |
 |  | Adc_Hw | — | — | Arduino `analogRead` ラッパー |
@@ -422,10 +466,10 @@ CAN ドライバ（Can / Can_Hw）から CanIf・PduR を経由して COM モジ
 
 ```
 TX（Arduino → 外部、下り）
-  Rte → (E2EXf/E2E) → Com → PduR → CanIf → Can → Can_Hw → MCP2515
+  Rte → (E2EXf/E2E) → Com → PduR → CanIf → Can → Can_Hw → MCP2518FD / MCP2515
 
 RX（外部 → Arduino、上り）
-  MCP2515 → Can_Hw → Can → CanIf → PduR → Com → (E2EXf/E2E/E2EMon) → Rte
+  MCP2518FD / MCP2515 → Can_Hw → Can → CanIf → PduR → Com → (E2EXf/E2E/E2EMon) → Rte
 ```
 
 このスタックを構成する各モジュール（Rte/E2EMon/E2EXf/E2E/Com/PduR/CanIf/Can/Can_Hw）の
